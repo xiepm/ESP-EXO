@@ -1,0 +1,42 @@
+﻿# Keil Clean
+*.rar
+*.o
+*.d
+*.crf
+*.htm
+*.dep
+*.map
+*.bak
+*.lnp
+*.lst
+*.ini
+*.iex
+*.sct
+*.scvd
+*.uvguix
+*.dbg*
+*.uvguix.*
+.mxproject
+MDK-ARM/CtrBoard-H7_RS485.uvguix.fantasy
+RTE/
+Templates/
+Examples/
+ 
+!*.uvprojx
+!*.h
+!*.c
+!*.ioc
+!*.axf
+!*.bin
+!*.hex
+
+#JLINK file
+JLinkLog.txt
+*.dbgconf
+
+
+# GCC compile-check build artifacts
+tools/gcc/build/
+
+# GCC Makefile build artifacts
+build/
