@@ -11,6 +11,27 @@ static const char *TAG = "robstride";
 /* ---- Global motor feedback ---- */
 motor_feedback_t g_motor_feedback;
 
+/* ---- Per-motor state tracking ---- */
+motor_state_simple_t g_motor_states[MAX_MOTOR_ID + 1];
+
+void robstride_update_motor_state(uint8_t motor_id, float position,
+                                  float velocity, float torque,
+                                  float temperature)
+{
+    if (motor_id <= MAX_MOTOR_ID) {
+        g_motor_states[motor_id].valid       = true;
+        g_motor_states[motor_id].position    = position;
+        g_motor_states[motor_id].velocity    = velocity;
+        g_motor_states[motor_id].torque      = torque;
+        g_motor_states[motor_id].temperature = temperature;
+    }
+}
+
+void robstride_clear_motor_states(void)
+{
+    memset(g_motor_states, 0, sizeof(g_motor_states));
+}
+
 /* ---- Global TX/RX data buffers ---- */
 uint8_t g_tx_data[8];
 uint8_t g_rx_data[8];
@@ -176,6 +197,26 @@ void RobStrideMotor_move_control(uint8_t motor_id, float torque, float MechPosit
     s_ext_id = make_ext_id(motor_id,
         (uint16_t)float_to_uint(torque, T_MIN, T_MAX, 16), MOTOR_CTRL);
 
+    g_tx_data[0] = float_to_uint(MechPosition, P_MIN, P_MAX, 16) >> 8;
+    g_tx_data[1] = float_to_uint(MechPosition, P_MIN, P_MAX, 16) & 0xFF;
+    g_tx_data[2] = float_to_uint(speed, V_MIN, V_MAX, 16) >> 8;
+    g_tx_data[3] = float_to_uint(speed, V_MIN, V_MAX, 16) & 0xFF;
+    g_tx_data[4] = float_to_uint(kp, KP_MIN, KP_MAX, 16) >> 8;
+    g_tx_data[5] = float_to_uint(kp, KP_MIN, KP_MAX, 16) & 0xFF;
+    g_tx_data[6] = float_to_uint(kd, KD_MIN, KD_MAX, 16) >> 8;
+    g_tx_data[7] = float_to_uint(kd, KD_MIN, KD_MAX, 16) & 0xFF;
+    twai_send_ext();
+    TX_UNLOCK();
+}
+
+/* Lean impedance control frame — only sends the MOTOR_CTRL extended frame.
+ * No mode-set / reset / enable overhead.  Safe to call at 100+ Hz. */
+void RobStride_Impedance_SendFrame(uint8_t motor_id, float MechPosition,
+                                   float speed, float kp, float kd, float torque)
+{
+    TX_LOCK();
+    s_ext_id = make_ext_id(motor_id,
+        (uint16_t)float_to_uint(torque, T_MIN, T_MAX, 16), MOTOR_CTRL);
     g_tx_data[0] = float_to_uint(MechPosition, P_MIN, P_MAX, 16) >> 8;
     g_tx_data[1] = float_to_uint(MechPosition, P_MIN, P_MAX, 16) & 0xFF;
     g_tx_data[2] = float_to_uint(speed, V_MIN, V_MAX, 16) >> 8;

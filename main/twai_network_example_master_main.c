@@ -75,9 +75,9 @@ static void twai_rx_task(void *arg)
             uint8_t frame_mode = is_extended ? ext_id_get_mode(ext_id) : 0;
 
             bool log_frame = true;
-            if (frame_mode == MOTOR_Proactive) {
+            if (frame_mode == MOTOR_Proactive || frame_mode == MOTOR_FEEDBACK) {
                 TickType_t now = xTaskGetTickCount();
-                if ((now - last_proactive_log) < pdMS_TO_TICKS(100)) {
+                if ((now - last_proactive_log) < pdMS_TO_TICKS(200)) {
                     log_frame = false;
                 } else {
                     last_proactive_log = now;
@@ -108,6 +108,11 @@ static void twai_rx_task(void *arg)
                 uint8_t source_id = is_extended
                     ? (uint8_t)(ext_id_get_data(ext_id) & 0xFF)
                     : rx_msg.data[0];
+
+                /* Update per-motor state for dual-motor control */
+                robstride_update_motor_state(source_id,
+                    feedback.angle, feedback.speed,
+                    feedback.torque, feedback.temperature);
                 if (log_frame) {
                     ESP_LOGI(TAG, "FB: id=%d mode=%d status=%d ang=%.3f spd=%.3f tq=%.3f tmp=%.1f",
                              (int)source_id,

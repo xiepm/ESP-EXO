@@ -3,6 +3,7 @@ idf_component_register(
         "twai_network_example_master_main.c"
         "robstride_control.c"
         "ble_console.c"
+        "impedance_control.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES bt nvs_flash driver
 )

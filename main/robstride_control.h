@@ -132,6 +132,24 @@ extern motor_feedback_t g_motor_feedback;
 extern uint8_t g_tx_data[8];
 extern uint8_t g_rx_data[8];
 
+/* ---- Per-motor state for dual-motor control ---- */
+#define MAX_MOTOR_ID    0x7F
+
+typedef struct {
+    bool  valid;         /* true after at least one feedback received */
+    float position;      /* rad */
+    float velocity;      /* rad/s */
+    float torque;        /* N·m */
+    float temperature;   /* ℃ */
+} motor_state_simple_t;
+
+extern motor_state_simple_t g_motor_states[MAX_MOTOR_ID + 1];
+
+void robstride_update_motor_state(uint8_t motor_id, float position,
+                                  float velocity, float torque,
+                                  float temperature);
+void robstride_clear_motor_states(void);
+
 esp_err_t robstride_control_init(void);
 void robstride_get_feedback_snapshot(motor_feedback_t *feedback);
 
@@ -157,6 +175,7 @@ void RobStride_motor_reset(uint8_t motor_id);
 void Set_RobStride_Motor_parameter(uint8_t motor_id, uint16_t Index, float Value, char Value_mode);
 void Get_RobStride_Motor_parameter(uint8_t motor_id, uint16_t Index);
 void RobStrideMotor_move_control(uint8_t motor_id, float torque, float MechPosition, float speed, float kp, float kd);
+void RobStride_Impedance_SendFrame(uint8_t motor_id, float MechPosition, float speed, float kp, float kd, float torque);
 void RobStride_Motor_Speed_control(uint8_t motor_id, float limit_cur, float Speed_acc, float Speed);
 void RobStride_Motor_Pos_PP_control(uint8_t motor_id, float Speed, float Speed_acc, float Angle);
 void RobStride_Motor_Pos_CSP_control(uint8_t motor_id, float Speed, float Angle);

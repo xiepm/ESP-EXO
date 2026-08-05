@@ -1,5 +1,6 @@
 #include "ble_console.h"
 #include "robstride_control.h"
+#include "impedance_control.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -114,6 +115,8 @@ static void cmd_mit_error(int argc, char *argv[]);
 static void cmd_motor_type(int argc, char *argv[]);
 static void cmd_status(int argc, char *argv[]);
 static void cmd_can_status(int argc, char *argv[]);
+static void cmd_impedance_start(int argc, char *argv[]);
+static void cmd_impedance_stop(int argc, char *argv[]);
 static void cmd_help(int argc, char *argv[]);
 
 /* ---- Command table ---- */
@@ -150,6 +153,8 @@ static const console_cmd_t s_cmd_table[] = {
     {"motor_type",   "Show compile-time motor type settings",       0, cmd_motor_type},
     {"status",       "Show motor feedback status",                  0, cmd_status},
     {"can_status",   "Show TWAI controller and error counters",     0, cmd_can_status},
+    {"imp_start",   "Start dual-motor impedance control",            0, cmd_impedance_start},
+    {"imp_stop",    "Stop dual-motor impedance control",             0, cmd_impedance_stop},
     {"help",         "Show this help",                              0, cmd_help},
     {NULL, NULL, 0, NULL},
 };
@@ -918,6 +923,36 @@ static void cmd_can_status(int argc, char *argv[])
                 (unsigned long)status.arb_lost_count);
     ble_vprintf("  RX missed:         %lu\r\n",
                 (unsigned long)status.rx_missed_count);
+}
+
+static void cmd_impedance_start(int argc, char *argv[])
+{
+    if (impedance_control_is_running()) {
+        ble_vprintf("ERROR: impedance control already running. Use imp_stop first.\r\n");
+        return;
+    }
+    esp_err_t err = impedance_control_start();
+    if (err == ESP_OK) {
+        ble_vprintf("OK: dual-motor impedance control started\r\n");
+    } else {
+        ble_vprintf("ERROR: failed to start impedance control: %s\r\n",
+                    esp_err_to_name(err));
+    }
+}
+
+static void cmd_impedance_stop(int argc, char *argv[])
+{
+    if (!impedance_control_is_running()) {
+        ble_vprintf("ERROR: impedance control not running.\r\n");
+        return;
+    }
+    esp_err_t err = impedance_control_stop();
+    if (err == ESP_OK) {
+        ble_vprintf("OK: impedance control stopped, motors disabled\r\n");
+    } else {
+        ble_vprintf("ERROR: failed to stop impedance control: %s\r\n",
+                    esp_err_to_name(err));
+    }
 }
 
 static void cmd_help(int argc, char *argv[])
