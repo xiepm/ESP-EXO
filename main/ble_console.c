@@ -1,4 +1,5 @@
 #include "ble_console.h"
+#include "exo_config.h"
 #include "robstride_control.h"
 #include "impedance_control.h"
 #include "freertos/FreeRTOS.h"
@@ -7,7 +8,6 @@
 #include "freertos/stream_buffer.h"
 #include "driver/gpio.h"
 #include "driver/twai.h"
-#include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "nvs_flash.h"
@@ -59,7 +59,7 @@ static SemaphoreHandle_t s_cmd_mutex;
 static StreamBufferHandle_t s_rx_streambuf;
 
 /* ---- Current target motor CAN ID ---- */
-static uint8_t g_motor_id = DEFAULT_CAN_ID;
+static exo_can_node_id_t g_motor_id;
 
 /* ---- Forward declarations ---- */
 static int  ble_gap_event_handler(struct ble_gap_event *event, void *arg);
@@ -452,8 +452,8 @@ static void ble_start_advertising(void)
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
     fields.tx_pwr_lvl_is_present = 1;
     fields.tx_pwr_lvl = 0;
-    fields.name = (uint8_t *)"RobStride-CAN";
-    fields.name_len = strlen("RobStride-CAN");
+    fields.name = (const uint8_t *)g_exo_hardware_config.ble_device_name;
+    fields.name_len = strlen(g_exo_hardware_config.ble_device_name);
     fields.name_is_complete = 1;
 
     rc = ble_gap_adv_set_fields(&fields);
@@ -470,7 +470,8 @@ static void ble_start_advertising(void)
     if (rc != 0) {
         ESP_LOGE(TAG, "Failed to start advertising: %d", rc);
     } else {
-        ESP_LOGI(TAG, "Advertising started as 'RobStride-CAN'");
+        ESP_LOGI(TAG, "Advertising started as '%s'",
+                 g_exo_hardware_config.ble_device_name);
     }
 }
 
@@ -903,10 +904,11 @@ static void cmd_can_status(int argc, char *argv[])
     ble_vprintf("===== TWAI Status =====\r\n");
     ble_vprintf("  State:             %s\r\n", state);
     ble_vprintf("  RX GPIO%d level:   %d (%s)\r\n",
-                CONFIG_EXAMPLE_RX_GPIO_NUM,
-                gpio_get_level(CONFIG_EXAMPLE_RX_GPIO_NUM),
-                gpio_get_level(CONFIG_EXAMPLE_RX_GPIO_NUM) ? "recessive/idle"
-                                                           : "dominant/busy");
+                g_exo_hardware_config.twai.rx_gpio,
+                gpio_get_level(g_exo_hardware_config.twai.rx_gpio),
+                gpio_get_level(g_exo_hardware_config.twai.rx_gpio)
+                    ? "recessive/idle"
+                    : "dominant/busy");
     ble_vprintf("  TX queued:         %lu\r\n",
                 (unsigned long)status.msgs_to_tx);
     ble_vprintf("  RX queued:         %lu\r\n",
@@ -1116,6 +1118,10 @@ static void uart_console_task(void *arg)
  * ================================================================ */
 esp_err_t ble_console_init(void)
 {
+    g_motor_id = g_exo_hardware_config
+                     .actuator[g_exo_hardware_config.default_actuator]
+                     .can_id;
+
     /* Create stream buffer for RX data from BLE */
     s_rx_streambuf = xStreamBufferCreate(1024, 1);
     if (s_rx_streambuf == NULL) {
@@ -1168,7 +1174,8 @@ esp_err_t ble_console_init(void)
     }
 
     /* Set device name before advertising */
-    int rc = ble_svc_gap_device_name_set("RobStride-CAN");
+    int rc = ble_svc_gap_device_name_set(
+        g_exo_hardware_config.ble_device_name);
     if (rc != 0) {
         ESP_LOGE(TAG, "Failed to set BLE device name: %d", rc);
         return ESP_FAIL;

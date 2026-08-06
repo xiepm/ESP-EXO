@@ -5,10 +5,6 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
-/* ---- Default IDs (commissioned motor uses CAN ID 0x10) ---- */
-#define DEFAULT_CAN_ID    0x10
-#define MASTER_ID         0xFD
-
 /* ---- Private Protocol Command Codes (mode field in ExtId) ---- */
 #define ANNOUNCE_DEVID        0
 #define MOTOR_CTRL            0x01

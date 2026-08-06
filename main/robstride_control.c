@@ -1,4 +1,5 @@
 #include "robstride_control.h"
+#include "exo_config.h"
 #include "driver/twai.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -132,7 +133,8 @@ static void twai_send_std(void)
 void RobStride_motor_enable(uint8_t motor_id)
 {
     TX_LOCK();
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_IN);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_IN);
     memset(g_tx_data, 0, 8);
     twai_send_ext();
     TX_UNLOCK();
@@ -141,7 +143,8 @@ void RobStride_motor_enable(uint8_t motor_id)
 void RobStride_motor_reset(uint8_t motor_id)
 {
     TX_LOCK();
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_RESET);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_RESET);
     memset(g_tx_data, 0, 8);
     twai_send_ext();
     TX_UNLOCK();
@@ -150,7 +153,8 @@ void RobStride_motor_reset(uint8_t motor_id)
 void Set_RobStride_Motor_parameter(uint8_t motor_id, uint16_t Index, float Value, char Value_mode)
 {
     TX_LOCK();
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_PARAWRITE);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_PARAWRITE);
     memset(g_tx_data, 0, 8);
     g_tx_data[0] = Index & 0xFF;
     g_tx_data[1] = (Index >> 8) & 0xFF;
@@ -175,7 +179,8 @@ void Set_RobStride_Motor_parameter(uint8_t motor_id, uint16_t Index, float Value
 void Get_RobStride_Motor_parameter(uint8_t motor_id, uint16_t Index)
 {
     TX_LOCK();
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_PARAREAD);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_PARAREAD);
     memset(g_tx_data, 0, 8);
     g_tx_data[0] = Index & 0xFF;
     g_tx_data[1] = (Index >> 8) & 0xFF;
@@ -298,7 +303,8 @@ void RobStride_Set_ZreoPos(uint8_t motor_id)
 {
     TX_LOCK();
     RobStride_motor_reset(motor_id);
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_ZERO);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_ZERO);
     memset(g_tx_data, 0, 8);
     g_tx_data[0] = 1;
     twai_send_ext();
@@ -309,7 +315,10 @@ void RobStride_Set_CAN_ID(uint8_t motor_id, uint8_t new_id)
 {
     TX_LOCK();
     RobStride_motor_reset(motor_id);
-    s_ext_id = make_ext_id(motor_id, (uint16_t)(new_id << 8) | MASTER_ID, MOTOR_ID);
+    s_ext_id = make_ext_id(
+        motor_id,
+        (uint16_t)(new_id << 8) | g_exo_hardware_config.twai.master_id,
+        MOTOR_ID);
     memset(g_tx_data, 0, 8);
     twai_send_ext();
     TX_UNLOCK();
@@ -318,7 +327,8 @@ void RobStride_Set_CAN_ID(uint8_t motor_id, uint8_t new_id)
 void RobStride_Motor_MotorDataSave(uint8_t motor_id)
 {
     TX_LOCK();
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_DataSave);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_DataSave);
     g_tx_data[0] = 0x01;
     g_tx_data[1] = 0x02;
     g_tx_data[2] = 0x03;
@@ -334,7 +344,8 @@ void RobStride_Motor_MotorDataSave(uint8_t motor_id)
 void RobStride_Motor_BaudRateChange(uint8_t motor_id, uint8_t F_CMD)
 {
     TX_LOCK();
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_BAUD);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_BAUD);
     g_tx_data[0] = 0x01;
     g_tx_data[1] = 0x02;
     g_tx_data[2] = 0x03;
@@ -350,7 +361,8 @@ void RobStride_Motor_BaudRateChange(uint8_t motor_id, uint8_t F_CMD)
 void RobStride_Motor_ProtactiveEscalationSet(uint8_t motor_id, uint8_t F_CMD)
 {
     TX_LOCK();
-    s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_Proactive);
+    s_ext_id = make_ext_id(motor_id, g_exo_hardware_config.twai.master_id,
+                           MOTOR_Proactive);
     g_tx_data[0] = 0x01;
     g_tx_data[1] = 0x02;
     g_tx_data[2] = 0x03;
@@ -375,7 +387,9 @@ void RobStride_Motor_MIT_ModeSet(uint8_t motor_id, uint8_t F_CMD)
         twai_send_std();
     } else if (F_CMD == 2) {
         /* Proprietary → MIT: send extended frame mode MOTOR_MODESTE */
-        s_ext_id = make_ext_id(motor_id, MASTER_ID, MOTOR_MODESTE);
+        s_ext_id = make_ext_id(motor_id,
+                               g_exo_hardware_config.twai.master_id,
+                               MOTOR_MODESTE);
         g_tx_data[0] = 0x01;
         g_tx_data[1] = 0x02;
         g_tx_data[2] = 0x03;

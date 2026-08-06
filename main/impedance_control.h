@@ -11,8 +11,8 @@ extern "C" {
 /**
  * @brief Start dual-motor compliant sinusoidal impedance control.
  *
- * Enables both motors (0x10 anti-phase, 0x20 in-phase) in MOVE_CONTROL_MODE
- * and begins sending MIT-style control frames at 100 Hz.
+ * Enables logical actuators A (anti-phase) and B (in-phase) in
+ * MOVE_CONTROL_MODE and sends MIT-style frames at the configured rate.
  *
  * Parameters (from demo2 reference):
  *   KP = 0.2 N·m/rad, KD = 0.10 N·m/(rad/s)

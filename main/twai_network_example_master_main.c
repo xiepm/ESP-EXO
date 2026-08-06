@@ -19,13 +19,9 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "driver/twai.h"
-#include "driver/gpio.h"
+#include "exo_config.h"
 #include "robstride_control.h"
 #include "ble_console.h"
-
-/* ---- TWAI Config ---- */
-#define TWAI_TX_GPIO  CONFIG_EXAMPLE_TX_GPIO_NUM
-#define TWAI_RX_GPIO  CONFIG_EXAMPLE_RX_GPIO_NUM
 
 static const char *TAG = "main";
 
@@ -92,9 +88,11 @@ static void twai_rx_task(void *arg)
                          rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
             }
 
-            bool is_motor_feedback = (!is_extended && std_id == MASTER_ID) ||
-                                     frame_mode == MOTOR_FEEDBACK ||
-                                     frame_mode == MOTOR_Proactive;
+            bool is_motor_feedback =
+                (!is_extended &&
+                 std_id == g_exo_hardware_config.twai.master_id) ||
+                frame_mode == MOTOR_FEEDBACK ||
+                frame_mode == MOTOR_Proactive;
 
             if (is_motor_feedback) {
                 parse_motor_feedback(is_extended, rx_msg.identifier, rx_msg.data);
@@ -159,16 +157,20 @@ static void twai_rx_task(void *arg)
 static void twai_init(void)
 {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
-        TWAI_TX_GPIO, TWAI_RX_GPIO, TWAI_MODE_NORMAL);
+        g_exo_hardware_config.twai.tx_gpio,
+        g_exo_hardware_config.twai.rx_gpio,
+        TWAI_MODE_NORMAL);
     /* Compound control commands generate several immediate replies while
      * proactive reporting can add 100 Hz feedback. The default five-frame
      * queue can overflow during that short burst. */
-    g_config.rx_queue_len = 32;
-    twai_timing_config_t t_config  = TWAI_TIMING_CONFIG_1MBITS();
+    g_config.rx_queue_len = g_exo_hardware_config.twai.rx_queue_length;
+    twai_timing_config_t t_config  = g_exo_hardware_config.twai.timing;
     twai_filter_config_t f_config  = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
-    ESP_LOGI(TAG, "TWAI driver installed (1Mbps)");
+    ESP_LOGI(TAG, "TWAI driver installed (%luMbps)",
+             (unsigned long)(g_exo_hardware_config.twai.bitrate_bps /
+                             1000000U));
 
     ESP_ERROR_CHECK(twai_start());
     ESP_LOGI(TAG, "TWAI driver started");
@@ -180,8 +182,11 @@ static void twai_init(void)
 void app_main(void)
 {
     ESP_LOGI(TAG, "RobStride Motor Control - TWAI Master");
-    ESP_LOGI(TAG, "TX: GPIO%d, RX: GPIO%d, Baud: 1Mbps",
-             TWAI_TX_GPIO, TWAI_RX_GPIO);
+    ESP_LOGI(TAG, "TX: GPIO%d, RX: GPIO%d, Baud: %luMbps",
+             g_exo_hardware_config.twai.tx_gpio,
+             g_exo_hardware_config.twai.rx_gpio,
+             (unsigned long)(g_exo_hardware_config.twai.bitrate_bps /
+                             1000000U));
 
     ESP_ERROR_CHECK(robstride_control_init());
 
