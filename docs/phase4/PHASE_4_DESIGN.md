@@ -47,8 +47,11 @@ START/STOP 只能改变请求和输出许可，不得创建、删除或重启周
 - 优先级 9；
 - 频率读取 `g_exo_hardware_config.control_frequency_hz`。
 
-初始化拒绝不能被 FreeRTOS tick 整除的频率。当前 `CONFIG_FREERTOS_HZ=100`，
-控制频率为 100 Hz，因此周期是一个 tick，即 10 ms。
+初始化拒绝不能被 FreeRTOS tick 整除的频率。初版沿用
+`CONFIG_FREERTOS_HZ=100`，100 Hz 控制周期只有一个 tick；实机在双核调度和 BLE
+活动下出现约 5 ms 的相位误差，无法满足既定的 2 ms 上限。因此阶段 4 将 RTOS tick
+改为 1 kHz，控制频率仍为 100 Hz，每周期为 10 ticks，即 10 ms。该调整只提高任务
+唤醒分辨率，不改变控制律或 CAN 输出频率。
 
 TWAI RX 任务不是周期控制源；它阻塞等待到帧后立即解析。为避免 Core 0 上的
 NimBLE 主机在连接和通知期间延迟反馈队列，该任务固定在 Core 1、优先级 8，由
@@ -176,9 +179,10 @@ README.md
 CONSOLE_COMMANDS.md
 ```
 
-不修改 `hip_joint`、RS01 协议解析、普通发送语义、LEFT/RIGHT 映射、软件零位和
-`sdkconfig`。RS01 只增加上述零等待、无日志的周期发送入口；理由和边界由静态
-最坏路径审计记录，不改变帧编码或反馈解析。
+不修改 `hip_joint`、RS01 协议解析、普通发送语义、LEFT/RIGHT 映射和软件零位。
+RS01 只增加上述零等待、无日志的周期发送入口；`sdkconfig` 只把 RTOS tick 从
+100 Hz 调为 1 kHz。两项调整都有静态最坏路径或实机时序证据，不改变帧编码、反馈
+解析、控制频率或关节语义。
 
 ## 完成标准
 
