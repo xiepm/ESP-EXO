@@ -3,12 +3,12 @@
  *
  * SPDX-License-Identifier: CC0-1.0
  *
- * RobStride Motor Control via TWAI (CAN bus)
- * Ported from STM32F1 RobStrideSPC project.
+ * ESP-EXO application entry point.
  *
  * Features:
  *  - Dual protocol: Lingzu private protocol + MIT protocol
- *  - Interactive BLE console for motor control commands
+ *  - One application-wide 100 Hz control loop
+ *  - Interactive BLE/UART console for development commands
  *  - CAN bus feedback parsing (angle, speed, torque, temperature, faults)
  */
 
@@ -18,6 +18,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "driver/twai.h"
+#include "exo_control_loop.h"
 #include "exo_config.h"
 #include "hip_joint.h"
 #include "rs01_driver.h"
@@ -171,15 +172,10 @@ void app_main(void)
         }
     }
 
-    /* Initialize BLE console (creates its own task) */
+    /* The control task is permanent and must exist before command transports
+     * can request the legacy control demo. */
+    ESP_ERROR_CHECK(exo_control_loop_init());
+
+    /* Initialize BLE/UART consoles (creates their own tasks). */
     ESP_ERROR_CHECK(ble_console_init());
-
-    /* Wait forever */
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-
-    /* Unreachable, but for completeness */
-    twai_stop();
-    twai_driver_uninstall();
 }

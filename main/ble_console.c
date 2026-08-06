@@ -1,4 +1,5 @@
 #include "ble_console.h"
+#include "exo_control_loop.h"
 #include "exo_config.h"
 #include "hip_joint.h"
 #include "rs01_driver.h"
@@ -123,6 +124,7 @@ static void cmd_status(int argc, char *argv[]);
 static void cmd_joint_status(int argc, char *argv[]);
 static void cmd_joint_zero(int argc, char *argv[]);
 static void cmd_joint_zero_clear(int argc, char *argv[]);
+static void cmd_control_status(int argc, char *argv[]);
 static void cmd_can_status(int argc, char *argv[]);
 static void cmd_impedance_start(int argc, char *argv[]);
 static void cmd_impedance_stop(int argc, char *argv[]);
@@ -164,6 +166,7 @@ static const console_cmd_t s_cmd_table[] = {
     {"joint_status", "Show hip joint: <left|right>",                1, cmd_joint_status},
     {"joint_zero",   "Capture RAM software zero: <left|right>",    1, cmd_joint_zero},
     {"joint_zero_clear", "Clear RAM software zero: <left|right>", 1, cmd_joint_zero_clear},
+    {"control_status", "Show the permanent 100 Hz control loop",  0, cmd_control_status},
     {"can_status",   "Show TWAI controller and error counters",     0, cmd_can_status},
     {"imp_start",   "Start dual-motor impedance control",            0, cmd_impedance_start},
     {"imp_stop",    "Stop dual-motor impedance control",             0, cmd_impedance_stop},
@@ -1168,6 +1171,69 @@ static void cmd_joint_zero_clear(int argc, char *argv[])
     }
     ble_vprintf("OK: %s hip RAM software zero cleared; motor zero unchanged\r\n",
                 joint_name(joint));
+}
+
+static void cmd_control_status(int argc, char *argv[])
+{
+    exo_control_loop_snapshot_t snapshot;
+    if (!exo_control_loop_get_snapshot(&snapshot)) {
+        ble_vprintf("ERROR: control loop is not initialized\r\n");
+        return;
+    }
+
+    const double measured_hz = snapshot.mean_period_us > 0U
+        ? 1000000.0 / (double)snapshot.mean_period_us
+        : 0.0;
+
+    ble_vprintf("===== 100 Hz Control Loop =====\r\n");
+    ble_vprintf("  Initialized:       %s\r\n",
+                snapshot.initialized ? "YES" : "no");
+    ble_vprintf("  Task alive:        %s\r\n",
+                snapshot.task_alive ? "YES" : "no");
+    ble_vprintf("  Task identity:     %p\r\n",
+                (void *)snapshot.task_handle_identity);
+    ble_vprintf("  Configured rate:   %lu Hz (%lu us)\r\n",
+                (unsigned long)snapshot.configured_frequency_hz,
+                (unsigned long)snapshot.target_period_us);
+    ble_vprintf("  Cycle count:       %llu\r\n",
+                (unsigned long long)snapshot.cycle_count);
+    ble_vprintf("  Period samples:    %llu; outside +/- %lu us: %llu\r\n",
+                (unsigned long long)snapshot.period_sample_count,
+                (unsigned long)snapshot.period_tolerance_us,
+                (unsigned long long)snapshot.period_out_of_tolerance_count);
+    ble_vprintf("  Last cycle:        %llu us\r\n",
+                (unsigned long long)snapshot.last_cycle_start_us);
+    ble_vprintf("  Period us:         last=%lu min=%lu max=%lu mean=%lu (%.3f Hz)\r\n",
+                (unsigned long)snapshot.last_period_us,
+                (unsigned long)snapshot.min_period_us,
+                (unsigned long)snapshot.max_period_us,
+                (unsigned long)snapshot.mean_period_us,
+                measured_hz);
+    ble_vprintf("  Period error us:   last=%ld max_abs=%lu\r\n",
+                (long)snapshot.last_period_error_us,
+                (unsigned long)snapshot.max_abs_period_error_us);
+    ble_vprintf("  Execution us:      last=%lu max=%lu\r\n",
+                (unsigned long)snapshot.last_execution_us,
+                (unsigned long)snapshot.max_execution_us);
+    ble_vprintf("  Deadline misses:   %llu\r\n",
+                (unsigned long long)snapshot.deadline_miss_count);
+    ble_vprintf("  Skipped cycles:    %llu\r\n",
+                (unsigned long long)snapshot.skipped_cycle_count);
+    ble_vprintf("  Output errors:     %llu (last=%s)\r\n",
+                (unsigned long long)snapshot.output_error_count,
+                esp_err_to_name(snapshot.last_output_error));
+    ble_vprintf("  Stack free min:    %lu bytes\r\n",
+                (unsigned long)snapshot.stack_high_water_mark_bytes);
+    ble_vprintf("  LEFT input:        valid=%s count=%lu timestamp=%llu us\r\n",
+                snapshot.left.joint_valid ? "YES" : "no",
+                (unsigned long)snapshot.left.feedback_count,
+                (unsigned long long)snapshot.left.feedback_timestamp_us);
+    ble_vprintf("  RIGHT input:       valid=%s count=%lu timestamp=%llu us\r\n",
+                snapshot.right.joint_valid ? "YES" : "no",
+                (unsigned long)snapshot.right.feedback_count,
+                (unsigned long long)snapshot.right.feedback_timestamp_us);
+    ble_vprintf("  Legacy impedance: %s\r\n",
+                impedance_control_is_running() ? "RUNNING" : "inactive");
 }
 
 static void cmd_can_status(int argc, char *argv[])

@@ -110,12 +110,17 @@ esp_err_t rs01_disable(exo_actuator_id_t actuator);
 esp_err_t rs01_clear_faults(exo_actuator_id_t actuator);
 
 /* Sends one private-protocol type-1 frame without changing mode or enable. */
-esp_err_t rs01_send_motion(exo_actuator_id_t actuator,
-                           float position_rad,
-                           float velocity_rad_s,
-                           float torque_nm,
-                           float kp,
-                           float kd);
+esp_err_t rs01_send_motion(exo_actuator_id_t actuator, float position_rad,
+						   float velocity_rad_s, float torque_nm, float kp,
+						   float kd);
+
+/*
+ * Periodic-control variant: both the TX mutex and TWAI enqueue are attempted
+ * with zero wait. Busy/full failures are returned without logging.
+ */
+esp_err_t rs01_try_send_motion(exo_actuator_id_t actuator, float position_rad,
+							   float velocity_rad_s, float torque_nm, float kp,
+							   float kd);
 
 /* Preserves the legacy console's disable/mode/enable/motion compound action. */
 esp_err_t rs01_move(exo_actuator_id_t actuator,

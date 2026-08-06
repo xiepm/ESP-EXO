@@ -215,6 +215,14 @@ static esp_err_t take_tx_lock(void)
                : ESP_ERR_TIMEOUT;
 }
 
+static esp_err_t try_take_tx_lock(void) {
+	if (s_tx_mutex == NULL) {
+		return ESP_ERR_INVALID_STATE;
+	}
+	return xSemaphoreTakeRecursive(s_tx_mutex, 0) == pdTRUE ? ESP_OK
+															: ESP_ERR_TIMEOUT;
+}
+
 static void give_tx_lock(void)
 {
     xSemaphoreGiveRecursive(s_tx_mutex);
@@ -245,6 +253,37 @@ static esp_err_t transmit_frame(bool extended,
                  esp_err_to_name(err));
     }
     return err;
+}
+
+static esp_err_t
+try_transmit_frame(bool extended, uint32_t identifier,
+				   const uint8_t payload[RS01_FRAME_DATA_LENGTH]) {
+	esp_err_t err = try_take_tx_lock();
+	if (err != ESP_OK) {
+		return err;
+	}
+
+	twai_message_t message = {0};
+	message.identifier = identifier;
+	message.data_length_code = RS01_FRAME_DATA_LENGTH;
+	message.flags = extended ? TWAI_MSG_FLAG_EXTD : TWAI_MSG_FLAG_NONE;
+	memcpy(message.data, payload, RS01_FRAME_DATA_LENGTH);
+
+	err = twai_transmit(&message, 0);
+	give_tx_lock();
+	return err;
+}
+
+static esp_err_t
+try_transmit_private(exo_actuator_id_t actuator, uint8_t type,
+					 uint16_t data_field,
+					 const uint8_t payload[RS01_FRAME_DATA_LENGTH]) {
+	if (!actuator_is_valid(actuator)) {
+		return ESP_ERR_INVALID_ARG;
+	}
+	return try_transmit_frame(
+		true, make_extended_id(current_can_id(actuator), data_field, type),
+		payload);
 }
 
 static esp_err_t transmit_private(exo_actuator_id_t actuator,
@@ -545,40 +584,62 @@ esp_err_t rs01_clear_faults(exo_actuator_id_t actuator)
     return send_stop(actuator, true);
 }
 
-esp_err_t rs01_send_motion(exo_actuator_id_t actuator,
-                           float position_rad,
-                           float velocity_rad_s,
-                           float torque_nm,
-                           float kp,
-                           float kd)
-{
-    if (!actuator_is_valid(actuator) ||
-        !motion_values_are_finite(position_rad, velocity_rad_s,
-                                  torque_nm, kp, kd)) {
-        return ESP_ERR_INVALID_ARG;
-    }
+static esp_err_t encode_motion_command(exo_actuator_id_t actuator,
+									   float position_rad, float velocity_rad_s,
+									   float torque_nm, float kp, float kd,
+									   uint8_t payload[RS01_FRAME_DATA_LENGTH],
+									   uint16_t *torque_raw) {
+	if (!actuator_is_valid(actuator) ||
+		!motion_values_are_finite(position_rad, velocity_rad_s, torque_nm, kp,
+								  kd)) {
+		return ESP_ERR_INVALID_ARG;
+	}
 
-    uint8_t payload[RS01_FRAME_DATA_LENGTH] = {0};
-    write_u16_be(&payload[0],
-                 (uint16_t)float_to_raw(position_rad,
-                                        s_limits.position_min_rad,
-                                        s_limits.position_max_rad, 16));
-    write_u16_be(&payload[2],
-                 (uint16_t)float_to_raw(velocity_rad_s,
-                                        s_limits.velocity_min_rad_s,
-                                        s_limits.velocity_max_rad_s, 16));
-    write_u16_be(&payload[4],
-                 (uint16_t)float_to_raw(kp, s_limits.kp_min,
-                                        s_limits.kp_max, 16));
-    write_u16_be(&payload[6],
-                 (uint16_t)float_to_raw(kd, s_limits.kd_min,
-                                        s_limits.kd_max, 16));
-    const uint16_t torque_raw =
-        (uint16_t)float_to_raw(torque_nm,
-                               s_limits.torque_min_nm,
-                               s_limits.torque_max_nm, 16);
-    return transmit_private(actuator, RS01_PRIVATE_TYPE_CONTROL,
-                            torque_raw, payload);
+	write_u16_be(&payload[0],
+				 (uint16_t)float_to_raw(position_rad, s_limits.position_min_rad,
+										s_limits.position_max_rad, 16));
+	write_u16_be(&payload[2], (uint16_t)float_to_raw(
+								  velocity_rad_s, s_limits.velocity_min_rad_s,
+								  s_limits.velocity_max_rad_s, 16));
+	write_u16_be(&payload[4], (uint16_t)float_to_raw(kp, s_limits.kp_min,
+													 s_limits.kp_max, 16));
+	write_u16_be(&payload[6], (uint16_t)float_to_raw(kd, s_limits.kd_min,
+													 s_limits.kd_max, 16));
+	*torque_raw = (uint16_t)float_to_raw(torque_nm, s_limits.torque_min_nm,
+										 s_limits.torque_max_nm, 16);
+	return ESP_OK;
+}
+
+esp_err_t rs01_send_motion(exo_actuator_id_t actuator, float position_rad,
+						   float velocity_rad_s, float torque_nm, float kp,
+						   float kd) {
+	uint8_t payload[RS01_FRAME_DATA_LENGTH] = {0};
+	uint16_t torque_raw = 0;
+	esp_err_t err =
+		encode_motion_command(actuator, position_rad, velocity_rad_s, torque_nm,
+							  kp, kd, payload, &torque_raw);
+	if (err != ESP_OK) {
+		return err;
+	}
+
+	return transmit_private(actuator, RS01_PRIVATE_TYPE_CONTROL, torque_raw,
+							payload);
+}
+
+esp_err_t rs01_try_send_motion(exo_actuator_id_t actuator, float position_rad,
+							   float velocity_rad_s, float torque_nm, float kp,
+							   float kd) {
+	uint8_t payload[RS01_FRAME_DATA_LENGTH] = {0};
+	uint16_t torque_raw = 0;
+	esp_err_t err =
+		encode_motion_command(actuator, position_rad, velocity_rad_s, torque_nm,
+							  kp, kd, payload, &torque_raw);
+	if (err != ESP_OK) {
+		return err;
+	}
+
+	return try_transmit_private(actuator, RS01_PRIVATE_TYPE_CONTROL, torque_raw,
+								payload);
 }
 
 static esp_err_t send_parameter(exo_actuator_id_t actuator,
