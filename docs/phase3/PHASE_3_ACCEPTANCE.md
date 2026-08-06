@@ -12,7 +12,7 @@
 | 软件零位 API 和调试命令 | PASS | 真实左右配置下完成双髋中立位归零，原始角度未改变 |
 | ESP-IDF 增量构建 | PASS | 当前工作区执行增量 `idf.py build` 成功 |
 | ESP-IDF `fullclean` 构建 | PASS | ESP-IDF v5.5；ESP32-S3；应用分区剩余 41% |
-| 当前候选固件 SHA-256 | PASS | `.bin`：`EC975A84496178FCBBEC875E1F8D78BCCD9B6841EEE3D0436A0E3E558BD1DB2F` |
+| 当前候选固件 SHA-256 | PASS | `.bin`：`F2D0629F7A2912E7C2AC608765ABAC61EC9E703CFB08F984200D46770A463F62` |
 | 左髋物理映射与方向 | PASS | LEFT → B（CAN `0x20`）；屈曲使原始角度增加，方向 `+1` |
 | 右髋物理映射与方向 | PASS | RIGHT → A（CAN `0x10`）；屈曲使原始角度减小，方向 `-1` |
 | 两个独立对象的软件零位 | PASS | 最终配置下归零与隔离通过；离线拒绝、清除和重启失效此前也已实机验证 |
@@ -63,13 +63,13 @@ RIGHT -> A (CAN 0x10), direction -1, zero INVALID at boot
 
 ## 构建与静态审计
 
-2026-08-06 对写入实测映射 `LEFT→B,+1 / RIGHT→A,-1` 的当前源代码执行了 ESP-IDF v5.5 `fullclean -> build -> size`，结果为 **PASS**。编译和链接过程没有 warning 或 error 诊断。
+2026-08-06 对写入实测映射 `LEFT→B,+1 / RIGHT→A,-1` 的阶段代码提交 `0a577c263b02f29149c2311d4146a98968bd0a0a` 执行了 ESP-IDF v5.5 `fullclean -> build -> size -> flash`，结果为 **PASS**。编译和链接过程没有 warning 或 error 诊断，烧录前跟踪文件无未提交修改。
 
 | 产物 | 字节数 | SHA-256 |
 |---|---:|---|
-| `build/twai_network_master.bin` | 617,376 | `EC975A84496178FCBBEC875E1F8D78BCCD9B6841EEE3D0436A0E3E558BD1DB2F` |
-| `build/twai_network_master.elf` | 7,435,520 | `A4FBAF51738156A23C3E2E3A63A0FD3B6641AC0F2BC51BAD802BB007145E2451` |
-| `build/bootloader/bootloader.bin` | 21,088 | `FF55AF1983E71ED41E8C81E2241025415BB0D21F527DF08D5D74904B7EA9B40F` |
+| `build/twai_network_master.bin` | 617,376 | `F2D0629F7A2912E7C2AC608765ABAC61EC9E703CFB08F984200D46770A463F62` |
+| `build/twai_network_master.elf` | 7,435,520 | `C65323C2FB416E08D8EEFCB7E7F13F2764551CDAABACA4E8E9455500155CDD28` |
+| `build/bootloader/bootloader.bin` | 21,088 | `F6C27AFEECD5492841CF1ABC77FE79F5F9D25F67868586F79875AFC95CD4B622` |
 | `build/partition_table/partition-table.bin` | 3,072 | `7F00B6C042A89B15B0CAC534F82ED988CAF29278FF5700B0C511EB1B5BB7C820` |
 
 应用固件占用 `0x96ba0` 字节，1 MiB 应用分区剩余 `0x69460` 字节（41%）。内存摘要为 Flash Code 381,742 字节、Flash Data 127,932 字节、DIRAM 99,719 字节。
@@ -88,16 +88,16 @@ RIGHT -> A (CAN 0x10), direction -1, zero INVALID at boot
 
 `hip_joint.c.obj` 的未解析外部符号只有公共配置、`memcpy/memset`、`rs01_get_feedback` 和临界区原语；没有 TWAI 发送、RS01 控制、任务、定时器、队列或堆分配符号。
 
-以上哈希对应完成实物验收时使用的阶段 3 实测映射固件；中立位软件归零、BLE、最终运动回归和阶段 Git 身份均已记录在本文档中。
+以上哈希对应从提交 `0a577c263b02f29149c2311d4146a98968bd0a0a` 构建并完成最终实物验收的阶段 3 固件；随后仅更新本文档以记录最终 BLE 归零证据。中立位软件归零、BLE、最终运动回归和阶段 Git 身份均记录在本文档中。
 
 同一 `.bin` 已成功烧录至 COM5 上的 ESP32-S3，esptool 对 bootloader、应用固件和分区表的写入后哈希校验全部通过。烧录后的映射验收结果为：
 
 - LEFT 显示执行器 B、方向 `+1`，RIGHT 显示执行器 A、方向 `-1`，两者映射和方向均为 valid；
-- 两侧反馈均为 valid/online，LEFT 原始位置约 `5.508 rad`，RIGHT 原始位置约 `-6.693 rad`；
+- 两侧反馈均为 valid/online，最终 BLE 归零前 LEFT 原始位置为 `5.292 rad`，RIGHT 原始位置为 `-6.310 rad`；
 - 两侧启动时软件零位均为 `N/A/INVALID`，关节量为 `N/A`、`joint_valid=no`，证明初始化不会自动捕获零位；
 - 执行器 A（CAN `0x10`）与 B（CAN `0x20`）均为 `Valid=YES`、`Online=YES`、`Reporting=ON`、`Enabled=no`；
 - A 的主动反馈实测 `99.92 Hz`，B 实测 `99.97 Hz`，两者无效帧均为 0；
-- TWAI 为 RUNNING，TX/RX error counter、TX failed、bus error、arbitration lost 和 RX missed 均为 0。
+- TWAI 为 RUNNING，TX/RX error counter、TX failed、bus error 和 RX missed 均为 0；记录到 1 次仲裁丢失，连续两次查询保持为 1，没有继续增长。
 
 ## 首次左髋映射采集
 
@@ -238,16 +238,16 @@ RIGHT direction -> EXO_DIRECTION_NEGATIVE (-1)
 
 LEFT 零位建立后、RIGHT 零位建立前，RIGHT 仍为 `zero_valid=false`、`joint_valid=false`，证明一侧操作没有改变另一侧。LEFT 和 RIGHT 的零位来源时间戳分别为 `1186562 us` 和 `2648521 us`。两侧最终关节角均满足 `|q_joint| <= 0.01 rad`，反馈均 valid/online；TWAI 保持 RUNNING，所有错误计数为 0。
 
-清除、离线拒绝和重启失效已经在临时逻辑映射机制测试中覆盖。随后为执行运动回归重新打开 COM5，USB 串口控制线使 ESP32 重启，LEFT/RIGHT 零位均恢复为无效；静态审计确认阻抗模块没有访问髋关节零位。这再次验证了 RAM-only 重启失效语义，不属于阻抗控制清除零位。所有回归完成后已经通过 BLE 执行下述最终中立位归零，并避免再次复位设备。
+清除、离线拒绝和重启失效已经在临时逻辑映射机制测试中覆盖。随后为执行运动回归重新打开 COM5，USB 串口控制线使 ESP32 重启，LEFT/RIGHT 零位均恢复为无效；静态审计确认阻抗模块没有访问髋关节零位。这再次验证了 RAM-only 重启失效语义，不属于阻抗控制清除零位。完成阶段代码提交后，又从该提交执行最终 `fullclean`、构建和烧录，因此此前通过 BLE 建立的运行零位按设计再次失效。双髋重新回到中立位后，执行了下述最终 BLE 归零，此后没有再打开 COM5 或复位设备。
 
 所有烧录、串口和运动测试结束后，设备重新回到双髋中立位，并通过 BLE 执行最终运行归零：
 
 | 关节 | 最终 raw | 最终 RAM 软件零位 | 关节角 | `joint_valid` | 零位来源反馈计数 | 零位来源时间戳 |
 |---|---:|---:|---:|---|---:|---:|
-| LEFT | `5.292 rad` | `5.292 rad` | `0.000 rad` | true | 53,571 | `505002846 us` |
-| RIGHT | `-6.310 rad` | `-6.310 rad` | `-0.000 rad` | true | 53,822 | `507646483 us` |
+| LEFT | `5.292 rad` | `5.292 rad` | `0.000 rad` | true | 14,839 | `148546749 us` |
+| RIGHT | `-6.310 rad` | `-6.310 rad` | `-0.000 rad` | true | 15,054 | `150701538 us` |
 
-归零前后两侧 raw 变化均为 `0.000 rad`。BLE 主动断开后重新发现并连接设备，两侧零位数值、来源计数和来源时间戳均保持不变，关节角仍满足 `|q_joint| <= 0.01 rad`；TWAI 为 RUNNING、`RX missed=0`。Windows 第一次立即重连曾返回一次 GATT `Unreachable`，第二次自动重试成功，设备没有复位且零位没有丢失。
+归零前后两侧 raw 变化均为 `0.000 rad`。LEFT 归零后、RIGHT 归零前，RIGHT 仍为 `zero_valid=false`、`joint_valid=false`，因此最终固件上的左右隔离再次通过。BLE 主动断开后重新发现并连接设备，两侧零位数值、来源计数和来源时间戳均保持不变，关节角仍满足 `|q_joint| <= 0.01 rad`。TWAI 为 RUNNING，TX/RX error counter、TX failed、bus error 和 RX missed 均为 0；仲裁丢失计数连续两次为 1。Windows 第一次立即重连返回一次 GATT `Unreachable`，第二次自动重试成功，设备没有复位且零位没有丢失。
 
 当前实机保留上述 RAM 零位；后续若复位、断电、烧录或通过会触发复位的串口方式重新连接，必须在中立位再次执行软件归零。
 
@@ -271,7 +271,7 @@ LEFT 零位建立后、RIGHT 零位建立前，RIGHT 仍为 `zero_valid=false`�
 5. A/B 均保持约 100 Hz 主动反馈且无效帧为 0；
 6. 原有 3×10 秒双电机正弦阻抗启停；
 7. 三轮结束后 A/B 均为失能状态；
-8. TWAI 保持 RUNNING，TX/RX error、TX failed、bus error、arbitration lost 和 RX missed 均为 0。
+8. 3×10 秒运动回归结束快照中，TWAI 保持 RUNNING，TX/RX error、TX failed、bus error、arbitration lost 和 RX missed 均为 0；最终提交固件重新烧录后的 BLE 归零会话中，关键错误和 RX missed 仍为 0，仲裁丢失为 1 且连续查询不增长。
 
 最终实测映射固件的 3×10 秒回归日志角度范围如下：
 
@@ -286,10 +286,11 @@ LEFT 零位建立后、RIGHT 零位建立前，RIGHT 仍为 `zero_valid=false`�
 BLE NUS 最终回归结果：
 
 - 扫描发现 `RobStride-CAN`，成功连接并发现 NUS 服务；
-- 通过 RX 特征发送 `joint_status left`、`joint_status right` 和 `can_status`，TX Notify 返回完整响应；
+- 通过 RX 特征发送左右 `joint_status`、左右 `joint_zero` 和 `can_status`，TX Notify 返回完整响应；
 - LEFT 映射 B / `+1`、RIGHT 映射 A / `-1` 均读回正确；
-- TWAI 为 RUNNING，`RX missed=0`；
-- 主动断开后重新扫描、连接并再次执行 `joint_status left` 成功，随后正常断开。
+- LEFT 归零没有改变 RIGHT 的零位状态；两侧捕获后均为 `joint_valid=true`、`|q_joint| <= 0.01 rad`；
+- TWAI 为 RUNNING，收发错误、发送失败、总线错误和 `RX missed` 均为 0，仲裁丢失计数 1 且不增长；
+- 主动断开后重新扫描并重连；第一次 Windows GATT 服务发现返回 `Unreachable`，第二次成功，两侧零位值及来源完全保持，随后正常断开。
 
 阶段 3 收口时已完成最终差异检查、明确范围的 Git 提交、阶段标签和推送；未把独立的 `web-bluetooth-console/` 工作区纳入 ESP32 阶段提交。
 
