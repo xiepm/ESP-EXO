@@ -2,7 +2,7 @@
 
 ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 ESP-IDF 开发。
 
-当前仓库保存改造前的原型基线，主要包括：
+当前仓库已完成阶段 1“公共类型和配置”，并保留阶段 0 原型的运行行为，主要包括：
 
 - ESP32-S3；
 - 1 Mbps TWAI/CAN 总线；
@@ -10,7 +10,7 @@ ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 E
 - NimBLE BLE 串口控制台；
 - 100 Hz 双电机正弦参考与阻抗控制示例。
 
-> 当前代码仍属于 `esp_can` 原型基线，不代表最终产品架构。后续将按照公共类型、RS01 驱动、髋关节对象、单一 100 Hz 控制任务、状态机、BLE 产品协议和步态控制等阶段逐步重构。
+> 当前代码仍处于分阶段重构期，不代表最终产品架构。公共类型和硬件配置已经集中，RS01 驱动、髋关节对象、单一 100 Hz 控制任务、状态机、BLE 产品协议和步态控制仍将按后续阶段实现。
 
 阶段 0 的软件基线、构建证据和硬件验收边界见
 [阶段 0 基线](docs/baseline/PHASE_0_BASELINE.md)。连接开发板后的逐项验证见
@@ -18,12 +18,17 @@ ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 E
 
 阶段 0 已于 2026-08-06 完成，正式基线标签为 `baseline-esp-can-v0`。
 
+阶段 1 已于 2026-08-06 完成，正式标签为 `phase1-common-types-config`。设计边界见
+[阶段 1 设计](docs/phase1/PHASE_1_DESIGN.md)，构建、烧录和实机结果见
+[阶段 1 验收](docs/phase1/PHASE_1_ACCEPTANCE.md)。
+
 ## 目录
 
 ```text
 ESP-EXO/
 ├── main/                 # ESP-IDF 主组件及当前固件源码
 ├── docs/baseline/        # 阶段 0 合同、报告和硬件证据
+├── docs/phase1/          # 阶段 1 公共类型、配置设计和验收记录
 ├── tools/                # 阶段 0 构建验证脚本
 ├── CMakeLists.txt        # 工程构建入口
 ├── sdkconfig             # 当前 ESP32-S3 工程配置
@@ -45,7 +50,7 @@ GPIO、电机左右安装关系和软件零位应以实际设备标定结果为�
 
 ## 构建
 
-本基线锁定 ESP-IDF v5.5（内部版本 5.5.0）。在 PowerShell 中激活环境后构建：
+当前工程锁定 ESP-IDF v5.5（内部版本 5.5.0）。在 PowerShell 中激活环境后构建：
 
 ```powershell
 . 'C:\Espressif\tools\Microsoft.v5.5.PowerShell_profile.ps1'
@@ -70,7 +75,7 @@ idf.py -p COMx flash monitor
 ## 重构顺序
 
 0. 固化现有基线（已完成：`baseline-esp-can-v0`）；
-1. 建立公共类型和配置；
+1. 建立公共类型和配置（已完成）；
 2. 重构 RS01 驱动及主动反馈；
 3. 建立髋关节对象和软件零位；
 4. 建立唯一 100 Hz 控制任务；
