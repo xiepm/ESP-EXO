@@ -1,42 +1,30 @@
-﻿# Keil Clean
-*.rar
-*.o
-*.d
-*.crf
-*.htm
-*.dep
-*.map
-*.bak
-*.lnp
-*.lst
-*.ini
-*.iex
-*.sct
-*.scvd
-*.uvguix
-*.dbg*
-*.uvguix.*
-.mxproject
-MDK-ARM/CtrBoard-H7_RS485.uvguix.fantasy
-RTE/
-Templates/
-Examples/
- 
-!*.uvprojx
-!*.h
-!*.c
-!*.ioc
-!*.axf
-!*.bin
-!*.hex
-
-#JLINK file
-JLinkLog.txt
-*.dbgconf
-
-
-# GCC compile-check build artifacts
-tools/gcc/build/
-
-# GCC Makefile build artifacts
+# ESP-IDF build output
 build/
+sdkconfig.old
+managed_components/
+
+# Editor and IDE metadata
+.vscode/
+.idea/
+.settings/
+.project
+.cproject
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local logs, document renders, and scratch work
+*.log
+tmp/
+temp/
+.render_*/
+.lo_profile_*/
+.patent_template_rework/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
