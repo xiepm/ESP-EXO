@@ -5,6 +5,7 @@ idf_component_register(
         "rs01_driver.c"
         "hip_joint.c"
         "exo_control_loop.c"
+        "exo_system.c"
         "ble_console.c"
         "impedance_control.c"
     INCLUDE_DIRS "." "include"

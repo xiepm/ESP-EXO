@@ -10,22 +10,12 @@
 extern "C" {
 #endif
 
-/**
- * @brief Prepare and start dual-motor sinusoidal impedance control.
- *
- * Disables, configures, and enables logical actuators A (anti-phase) and B
- * (in-phase), captures their center positions, and then makes the controller
- * ready for calls to impedance_control_process_tick(). This function does not
- * create a task or timer.
- *
- * Parameters retained from the demo2 reference:
- *   KP = 0.2 N*m/rad, KD = 0.10 N*m/(rad/s)
- *   Amplitude = 90 degrees (+/-pi/2 rad), Frequency = 0.5 Hz
- *   Startup ramp = 3.0 s (quintic)
- *
- * @return ESP_OK on success; ESP_ERR_INVALID_STATE if start or stop is active
+/*
+ * Arms only the retained sinusoidal controller state. Motor lifecycle and
+ * feedback validation belong to exo_system, not this algorithm module.
  */
-esp_err_t impedance_control_start(void);
+esp_err_t impedance_control_arm(float center_a_rad, float center_b_rad,
+								int64_t start_us);
 
 /**
  * @brief Execute one externally scheduled control step.
@@ -39,15 +29,8 @@ esp_err_t impedance_control_start(void);
  */
 esp_err_t impedance_control_process_tick(int64_t now_us);
 
-/**
- * @brief Stop periodic output, release torque, and disable both motors.
- */
-esp_err_t impedance_control_stop(void);
-
-/**
- * @return true only after preparation succeeds and before stopping begins
- */
-bool impedance_control_is_running(void);
+/* Prevents new ticks and waits for an already-entered tick to finish. */
+esp_err_t impedance_control_disarm(void);
 
 #ifdef __cplusplus
 }

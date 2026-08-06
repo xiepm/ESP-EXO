@@ -1,6 +1,6 @@
 # ESP-EXO RS01 与髋关节调试控制台命令手册
 
-> 这是阶段 3 保留的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
+> 这是阶段 5 使用的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
 > A/B 两台 RS01 写入 10 ms 上报周期并请求开启主动反馈；该操作不会使能电机。
 
 ## 命令通道
@@ -63,7 +63,19 @@ idf.py -p COMx monitor
 或换行执行。运动控制命令按一次写入发送一次，不会在后台周期重发。
 
 未接电机时可验证 `help`、`motor A`、`motor_type`、`status` 和
-`can_status`；此时 `status` 应显示 `Valid: no`、`Online: no`。
+`can_status`；此时 `status` 应显示 `Valid: no`、`Online: no`，而
+`system_status` 会说明 START 当前被阻止的原因。
+
+调试命令分为三类：
+
+- 系统请求：`start`、`stop` 及其兼容别名，只提交异步请求；
+- 只读或本地命令：`motor`、各类 `status` 和 `help`，始终可用；
+- 维护命令：所有会发送调试 CAN 帧、切换模式或修改 RAM 软件零位的命令。
+
+维护命令只有在系统处于 `IDLE` 且执行器没有占用电机操作权时才会执行。系统处于
+`STARTING`、`RUNNING`、`STOPPING` 或 `ERROR` 时，统一分发器会在调用具体处理函数
+之前拒绝它，因此不会出现“先检查状态、随后又插入 CAN”的竞争窗口。先发送 `stop`，
+再用 `system_status` 确认回到 `IDLE`，才能继续维护操作。
 
 ### 选择目标电机
 
@@ -326,28 +338,56 @@ mit_error <value>
 
 ---
 
-## 双电机正弦阻抗基线
+## 系统状态与 START/STOP
 
-### imp_start — 启动双电机基线控制
+阶段 5 的唯一整机状态为：
+
+- `INIT`：系统初始化未完成；
+- `IDLE`：输出关闭，等待操作；
+- `STARTING`：异步执行器正在准备两侧电机；
+- `RUNNING`：允许唯一 100 Hz 控制任务产生运动输出；
+- `STOPPING`：输出许可已撤销，异步执行器正在失能两侧电机；
+- `ERROR`：START/STOP 转换或清理失败。
+
+`ready_to_start` 是由控制任务、TWAI、左右关节零位/反馈及故障状态派生的就绪值，
+不是第七个系统状态。
+
+### start — 请求启动
 
 ```text
-imp_start
+start
 ```
 
-读取逻辑槽 A/B 的当前位置作为中心点，然后允许唯一的常驻 100 Hz 控制任务
-执行当前原型的正弦参考与阻抗控制。该命令不会创建任务或周期定时器；若开机
-初始化尚未结束、控制任务还没有报告存活，它会返回错误并要求稍后重试。若任一
-电机没有有效反馈，固件仍可能用零位继续，因此实机验收必须同时检查日志中没有
-`No feedback from motor`。
+该命令只调用非阻塞请求接口。返回 `ACCEPTED` 表示请求已受理且系统进入
+`STARTING`，不表示电机准备已经完成；随后应查询 `system_status`，直到状态成为
+`RUNNING` 或返回 `IDLE`/`ERROR`。在 `RUNNING` 中重复发送不会重新使能电机、
+重新捕获中心点或重置正弦相位。
 
-### imp_stop — 停止双电机基线控制
+### stop — 请求停止
 
 ```text
-imp_stop
+stop
 ```
 
-停止旧阻抗输出并向两台电机发送失能命令。常驻 100 Hz 控制任务不会停止、删除
-或重新创建，后续仍继续采集左右髋快照和更新时间统计。
+该命令立即撤销运动输出许可并提交异步清理请求。返回 `ACCEPTED` 不表示双电机
+已经确认失能；随后应查询 `system_status`，直到状态成为 `IDLE` 或 `ERROR`。
+在 `IDLE` 中重复发送是幂等操作。
+
+### imp_start / imp_stop — 阶段 4 兼容别名
+
+`imp_start` 完全等价于 `start`，`imp_stop` 完全等价于 `stop`。两者不再直接调用
+阻抗控制器，也不绕过整机状态机。常驻 100 Hz 控制任务不会因这些命令而创建、
+停止、删除或重启。
+
+### system_status — 显示整机生命周期快照
+
+```text
+system_status
+```
+
+输出一次一致性快照，包括当前六态、活动转换步骤、`ready_to_start` 及阻止原因、
+运行请求与输出许可、执行器任务身份/存活状态、状态转换和启停计数、拒绝/失败
+计数、最近请求结果和错误，以及进入当前状态和最近完成转换的时间戳。
 
 ---
 
@@ -439,26 +479,35 @@ help
 
 ## 典型操作流程
 
-```
-# 1. 选择电机
-motor 0x10
+```text
+# 1. 确认系统空闲，并查看 START 的阻止原因
+system_status
 
-# 2. 使能电机
-enable
+# 2. 双髋保持中立位时，在 IDLE 中捕获 RAM 软件零位
+joint_zero left
+joint_zero right
+system_status
 
-# 3. 运控模式控制
-move 1 0 2 0.5 0.1
+# 3. 提交异步启动请求
+start
 
-# 4. 查看反馈
+# 4. 查询直到状态成为 RUNNING；可同时查看反馈和控制周期
+system_status
+joint_status left
+joint_status right
+control_status
+
+# 5. 提交异步停止请求（输出许可立即撤销）
+stop
+
+# 6. 查询直到 IDLE，再确认电机反馈和 CAN 状态
+system_status
+motor A
 status
-
-# 5. 切换到 MIT 协议
-switch_mit
-mit_enable
-
-# 6. MIT 控制
-mit_control 1 0 1 0.1 0.1
-
-# 7. 失能电机
-mit_disable
+motor B
+status
+can_status
 ```
+
+若 `system_status` 显示 `ERROR`，不要使用低层维护命令绕过状态机；再次发送 `stop`
+请求清理，并以最终系统状态和两侧新反馈为准。

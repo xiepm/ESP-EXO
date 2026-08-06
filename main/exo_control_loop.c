@@ -5,10 +5,10 @@
 
 #include "esp_timer.h"
 #include "exo_config.h"
+#include "exo_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hip_joint.h"
-#include "impedance_control.h"
 
 #define EXO_CONTROL_TASK_STACK_BYTES 4096U
 #define EXO_CONTROL_TASK_PRIORITY 9U
@@ -167,7 +167,7 @@ static void control_task(void *arg) {
 			hip_joint_get_snapshot(EXO_HIP_JOINT_RIGHT, &right_snapshot);
 
 		const esp_err_t output_result =
-			impedance_control_process_tick(cycle_start_us);
+			exo_system_process_control_tick(cycle_start_us);
 		const bool sample_stack = stack_sample_countdown == 0U;
 		if (sample_stack) {
 			stack_high_water_mark_bytes =
