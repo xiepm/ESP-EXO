@@ -843,7 +843,10 @@ esp_err_t rs01_set_report_interval_ms(exo_actuator_id_t actuator,
     if (interval_ms < 10U || ((interval_ms - 10U) % 5U) != 0U) {
         return ESP_ERR_INVALID_ARG;
     }
-    const uint32_t encoded = 1U + ((interval_ms - 10U) / 5U);
+    /* RS01 firmware on the product hardware reports register value 1 but
+     * produces a measured 15 ms stream. Value 0 is therefore used for the
+     * requested 10 ms stream; larger values retain the observed 5 ms step. */
+    const uint32_t encoded = (interval_ms - 10U) / 5U;
     if (encoded > UINT16_MAX) {
         return ESP_ERR_INVALID_ARG;
     }

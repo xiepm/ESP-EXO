@@ -53,8 +53,6 @@ static void twai_rx_task(void *arg)
                 continue;
             }
 
-            ble_console_push_feedback(actuator, &feedback);
-
             TickType_t now = xTaskGetTickCount();
             if ((now - last_feedback_log[actuator]) >= pdMS_TO_TICKS(200)) {
                 last_feedback_log[actuator] = now;

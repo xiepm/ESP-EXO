@@ -152,7 +152,7 @@ esp_err_t rs01_write_parameter_u16(exo_actuator_id_t actuator,
                                     uint16_t index,
                                     uint16_t value);
 
-/* 10 ms maps to 1; each additional 5 ms increments the 0x7026 value by 1. */
+/* Product firmware: 10 ms maps to 0; each additional 5 ms increments 0x7026. */
 esp_err_t rs01_set_report_interval_ms(exo_actuator_id_t actuator,
                                       uint32_t interval_ms);
 /* These only send the type-24 switch; they do not write the interval. */

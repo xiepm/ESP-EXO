@@ -42,6 +42,9 @@ status
 使用支持 Nordic UART Service 的 BLE 客户端连接 `RobStride-CAN`，先订阅 TX
 特征通知，再向 RX 特征写入命令。例如发送 `help\r\n`。
 
+阶段 2 不主动向 BLE 连续推送 100 Hz 电机反馈，以免阻塞 CAN 接收。手机调试时
+使用 `motor A`/`motor B` 后发送 `status`；产品化连续遥测在阶段 10 加入。
+
 烧录串口同时用于固件烧录、ESP-IDF 日志和命令控制：
 
 ```powershell
@@ -197,6 +200,8 @@ report <0|1>
 
 `report` 只改变当前所选 A/B。命令返回成功表示 CAN 帧已发送；是否真正收到数据，
 应以 `status` 的 `Online`、`Feedback count` 和 `Feedback age` 为准。
+当前产品固件实测需写入 `0x7026=0` 才得到约 10 ms；手册所写的值 1 在当前
+两台电机上约为 15 ms。驱动已封装该差异，控制台无需直接写寄存器。
 
 ### read_param — 读参数
 ```

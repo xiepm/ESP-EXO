@@ -243,59 +243,6 @@ static void ble_vprintf(const char *fmt, ...)
 }
 
 /* ================================================================
- *  Motor feedback push (public API)
- * ================================================================ */
-void ble_console_push_feedback(exo_actuator_id_t actuator,
-                               const rs01_feedback_snapshot_t *feedback)
-{
-    if (feedback == NULL || actuator >= EXO_ACTUATOR_COUNT) {
-        return;
-    }
-
-    static TickType_t s_last_push_tick[EXO_ACTUATOR_COUNT];
-    TickType_t now = xTaskGetTickCount();
-    /* Keep the old aggregate 10 Hz debug load while guaranteeing that a
-     * fixed A/B bus order cannot starve either actuator from BLE output. */
-    if ((now - s_last_push_tick[actuator]) < pdMS_TO_TICKS(200)) {
-        return;
-    }
-
-    portENTER_CRITICAL(&s_lock);
-    bool can_send = s_notify_enabled &&
-                    (s_conn_handle != BLE_HS_CONN_HANDLE_NONE);
-    portEXIT_CRITICAL(&s_lock);
-
-    if (!can_send) return;
-    s_last_push_tick[actuator] = now;
-
-    char buf[256];
-    exo_can_node_id_t can_id = 0;
-    (void)rs01_get_can_id(actuator, &can_id);
-    int len = snprintf(buf, sizeof(buf),
-        "FB: id=%u mms=%d mot=%d ang=%.3f spd=%.3f tq=%.3f tmp=%.1f "
-        "faults: uncal=%d stall=%d mag=%d otemp=%d drive=%d uv=%d\r\n",
-        can_id,
-        (int)feedback->mode,
-        (int)feedback->control_mode,
-        (double)feedback->sample.position_rad,
-        (double)feedback->sample.velocity_rad_s,
-        (double)feedback->sample.torque_nm,
-        (double)feedback->sample.temperature_c,
-        (int)feedback->faults.uncalibrated,
-        (int)feedback->faults.stall_overload,
-        (int)feedback->faults.magnetic_encoder,
-        (int)feedback->faults.over_temperature,
-        (int)(feedback->faults.phase_over_current ||
-              feedback->faults.driver_chip),
-        (int)feedback->faults.under_voltage);
-
-    if (len < 0) return;
-    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
-
-    ble_tx_send(buf, (size_t)len);
-}
-
-/* ================================================================
  *  Connection status (public API)
  * ================================================================ */
 bool ble_console_is_connected(void)
