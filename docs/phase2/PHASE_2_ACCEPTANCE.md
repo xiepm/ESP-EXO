@@ -20,7 +20,8 @@ A/B 使用独立静态反馈对象，上电自动请求约 100 Hz 主动反馈�
 | CAN | 1 Mbps，TX GPIO4，RX GPIO2 |
 | 执行器 | A=`0x10`，B=`0x20`，Master ID=`0xFD` |
 | 基线 | `phase1-common-types-config` |
-| 实现提交 | `824feffce260699429322bb31479ffc3cf61eacc` 及其阶段 2 收口提交 |
+| 驱动重构提交 | `824feffce260699429322bb31479ffc3cf61eacc` |
+| 硬件验收收口提交 | `7544de08e22a3410191fb8995a8d18c161b8735a` |
 
 测试辅助代码只在临时环境执行，没有恢复阶段 0 的一次性脚本，也没有把原始串口
 日志加入仓库。本文件保留可审计的结果摘要。
@@ -43,6 +44,22 @@ A/B 使用独立静态反馈对象，上电自动请求约 100 Hz 主动反馈�
 | StreamBuffer 创建调用点 | 1 -> 1 |
 | `malloc/calloc/realloc/heap_caps_malloc` | 0 -> 0 |
 | `git diff --check` | PASS |
+
+## 干净构建
+
+对硬件验收收口提交执行 `tools/verify_phase0.ps1`，先 `fullclean` 再完整构建和
+尺寸检查：
+
+| 项目 | 结果 |
+|---|---:|
+| Git 工作区 | clean |
+| 目标 / ESP-IDF | ESP32-S3 / v5.5 |
+| 编译 warning/error | 0 / 0 |
+| 应用镜像 | 613,824 bytes |
+| 应用分区余量 | 约 41% |
+| 固件 SHA-256 | `E852CA2633D3ED07E73C1B8DD2AD29128B4ABE6E791491ACE32F5188F28C9CBF` |
+
+构建、尺寸、必需产物和工作区洁净性检查均为 PASS。
 
 ## 主动反馈实机验收
 
