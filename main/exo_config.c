@@ -18,6 +18,8 @@ enum {
     EXO_CONFIG_ACTUATOR_A_CAN_ID = 0x10,
     EXO_CONFIG_ACTUATOR_B_CAN_ID = 0x20,
     EXO_CONFIG_CONTROL_FREQUENCY_HZ = 100U,
+    EXO_CONFIG_RS01_REPORT_INTERVAL_MS = 10U,
+    EXO_CONFIG_RS01_FEEDBACK_TIMEOUT_MS = 100U,
     EXO_CONFIG_MAX_MOTOR_CAN_ID = 0x7F,
     EXO_CONFIG_LEGACY_ADV_NAME_MAX_LENGTH = 23U,
 };
@@ -31,9 +33,9 @@ _Static_assert(CONFIG_EXAMPLE_TX_GPIO_NUM != CONFIG_EXAMPLE_RX_GPIO_NUM,
 _Static_assert(EXO_CONFIG_ACTUATOR_A_CAN_ID != EXO_CONFIG_ACTUATOR_B_CAN_ID,
                "actuator CAN IDs must differ");
 _Static_assert(EXO_CONFIG_ACTUATOR_A_CAN_ID <= EXO_CONFIG_MAX_MOTOR_CAN_ID,
-               "actuator A CAN ID exceeds the state table");
+               "actuator A CAN ID exceeds the RS01 node-ID range");
 _Static_assert(EXO_CONFIG_ACTUATOR_B_CAN_ID <= EXO_CONFIG_MAX_MOTOR_CAN_ID,
-               "actuator B CAN ID exceeds the state table");
+               "actuator B CAN ID exceeds the RS01 node-ID range");
 _Static_assert(EXO_CONFIG_DEFAULT_ACTUATOR >= EXO_ACTUATOR_A &&
                    EXO_CONFIG_DEFAULT_ACTUATOR < EXO_ACTUATOR_COUNT,
                "default actuator must index the actuator array");
@@ -41,6 +43,13 @@ _Static_assert(EXO_CONFIG_CONTROL_FREQUENCY_HZ > 0U,
                "control frequency must be positive");
 _Static_assert((1000000U % EXO_CONFIG_CONTROL_FREQUENCY_HZ) == 0U,
                "control frequency must divide one second in microseconds");
+_Static_assert(EXO_CONFIG_RS01_REPORT_INTERVAL_MS >= 10U,
+               "RS01 report interval must be at least 10 ms");
+_Static_assert(((EXO_CONFIG_RS01_REPORT_INTERVAL_MS - 10U) % 5U) == 0U,
+               "RS01 report interval must use the documented 5 ms steps");
+_Static_assert(EXO_CONFIG_RS01_FEEDBACK_TIMEOUT_MS >
+                   EXO_CONFIG_RS01_REPORT_INTERVAL_MS,
+               "RS01 feedback timeout must exceed the report interval");
 _Static_assert((sizeof(EXO_CONFIG_BLE_DEVICE_NAME) - 1U) <=
                    EXO_CONFIG_LEGACY_ADV_NAME_MAX_LENGTH,
                "BLE device name does not fit legacy advertising data");
@@ -72,5 +81,7 @@ const exo_hardware_config_t g_exo_hardware_config = {
     },
     .default_actuator = EXO_CONFIG_DEFAULT_ACTUATOR,
     .control_frequency_hz = EXO_CONFIG_CONTROL_FREQUENCY_HZ,
+    .rs01_report_interval_ms = EXO_CONFIG_RS01_REPORT_INTERVAL_MS,
+    .rs01_feedback_timeout_ms = EXO_CONFIG_RS01_FEEDBACK_TIMEOUT_MS,
     .ble_device_name = EXO_CONFIG_BLE_DEVICE_NAME,
 };

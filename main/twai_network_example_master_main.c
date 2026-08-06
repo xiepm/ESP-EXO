@@ -13,14 +13,13 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "driver/twai.h"
 #include "exo_config.h"
-#include "robstride_control.h"
+#include "rs01_driver.h"
 #include "ble_console.h"
 
 static const char *TAG = "main";
@@ -32,121 +31,77 @@ static const char *TAG = "main";
 static void twai_rx_task(void *arg)
 {
     twai_message_t rx_msg;
-    TickType_t last_proactive_log = 0;
+    TickType_t last_feedback_log[EXO_ACTUATOR_COUNT] = {0};
+    TickType_t last_invalid_log = 0;
+    TickType_t last_unhandled_log = 0;
     ESP_LOGI(TAG, "TWAI RX task started");
 
     while (1) {
         esp_err_t err = twai_receive(&rx_msg, portMAX_DELAY);
-        if (err == ESP_OK) {
-            if ((rx_msg.flags & TWAI_MSG_FLAG_RTR) != 0) {
-                ESP_LOGW(TAG, "Ignoring unsupported CAN frame: dlc=%u flags=0x%lx",
-                         rx_msg.data_length_code, (unsigned long)rx_msg.flags);
-                continue;
-            }
-
-            bool is_extended = (rx_msg.flags & TWAI_MSG_FLAG_EXTD) != 0;
-            if (!is_extended && rx_msg.data_length_code == 5) {
-                uint32_t fault_value = (uint32_t)rx_msg.data[1] |
-                                       ((uint32_t)rx_msg.data[2] << 8) |
-                                       ((uint32_t)rx_msg.data[3] << 16) |
-                                       ((uint32_t)rx_msg.data[4] << 24);
-                robstride_update_mit_faults(fault_value);
-                ESP_LOGI(TAG, "MIT FAULT: id=%u raw=0x%08lX",
-                         rx_msg.data[0], (unsigned long)fault_value);
-                continue;
-            }
-
-            if (rx_msg.data_length_code != 8) {
-                ESP_LOGW(TAG, "Ignoring unsupported CAN frame: dlc=%u flags=0x%lx",
-                         rx_msg.data_length_code, (unsigned long)rx_msg.flags);
-                continue;
-            }
-
-            /* Save raw data to global buffer for inspection */
-            memcpy(g_rx_data, rx_msg.data, 8);
-
-            /* Determine frame type and parse */
-            uint32_t ext_id = is_extended ? rx_msg.identifier : 0;
-            uint32_t std_id = is_extended ? 0 : rx_msg.identifier;
-            uint8_t frame_mode = is_extended ? ext_id_get_mode(ext_id) : 0;
-
-            bool log_frame = true;
-            if (frame_mode == MOTOR_Proactive || frame_mode == MOTOR_FEEDBACK) {
-                TickType_t now = xTaskGetTickCount();
-                if ((now - last_proactive_log) < pdMS_TO_TICKS(200)) {
-                    log_frame = false;
-                } else {
-                    last_proactive_log = now;
-                }
-            }
-
-            if (log_frame) {
-                ESP_LOGI(TAG, "RX: ext=0x%08lX std=0x%03lX dlc=%d "
-                         "data=%02X%02X%02X%02X%02X%02X%02X%02X",
-                         ext_id, std_id, rx_msg.data_length_code,
-                         rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3],
-                         rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
-            }
-
-            bool is_motor_feedback =
-                (!is_extended &&
-                 std_id == g_exo_hardware_config.twai.master_id) ||
-                frame_mode == MOTOR_FEEDBACK ||
-                frame_mode == MOTOR_Proactive;
-
-            if (is_motor_feedback) {
-                parse_motor_feedback(is_extended, rx_msg.identifier, rx_msg.data);
-                motor_feedback_t feedback;
-                robstride_get_feedback_snapshot(&feedback);
-                ble_console_push_feedback(&feedback);
-
-                /* In private feedback frames the source motor ID is in the
-                 * low byte of the extended-ID data field; the low ID byte is
-                 * the destination master ID. */
-                uint8_t source_id = is_extended
-                    ? (uint8_t)(ext_id_get_data(ext_id) & 0xFF)
-                    : rx_msg.data[0];
-
-                /* Update per-motor state for dual-motor control */
-                robstride_update_motor_state(source_id,
-                    feedback.angle, feedback.speed,
-                    feedback.torque, feedback.temperature);
-                if (log_frame) {
-                    ESP_LOGI(TAG, "FB: id=%d mode=%d status=%d ang=%.3f spd=%.3f tq=%.3f tmp=%.1f",
-                             (int)source_id,
-                             (int)frame_mode,
-                             (int)feedback.mms,
-                             (double)feedback.angle,
-                             (double)feedback.speed,
-                             (double)feedback.torque,
-                             (double)feedback.temperature);
-                }
-            } else if (frame_mode == MOTOR_PARAREAD) {
-                uint16_t index = (uint16_t)rx_msg.data[0] |
-                                 ((uint16_t)rx_msg.data[1] << 8);
-                uint32_t raw_value = (uint32_t)rx_msg.data[4] |
-                                     ((uint32_t)rx_msg.data[5] << 8) |
-                                     ((uint32_t)rx_msg.data[6] << 16) |
-                                     ((uint32_t)rx_msg.data[7] << 24);
-                float float_value;
-                memcpy(&float_value, &raw_value, sizeof(float_value));
-                ESP_LOGI(TAG,
-                         "PARAM: index=0x%04X raw=0x%08lX uint=%lu float=%g",
-                         index, (unsigned long)raw_value,
-                         (unsigned long)raw_value, (double)float_value);
-            } else if (!is_extended) {
-                ESP_LOGI(TAG,
-                         "MIT DEVICE RESPONSE: std=0x%03lX data=%02X%02X%02X%02X%02X%02X%02X%02X",
-                         (unsigned long)std_id,
-                         rx_msg.data[0], rx_msg.data[1], rx_msg.data[2],
-                         rx_msg.data[3], rx_msg.data[4], rx_msg.data[5],
-                         rx_msg.data[6], rx_msg.data[7]);
-            } else {
-                ESP_LOGI(TAG, "Ignoring non-feedback private frame mode=0x%02X",
-                         frame_mode);
-            }
-        } else {
+        if (err != ESP_OK) {
             ESP_LOGW(TAG, "RX error: %s", esp_err_to_name(err));
+            continue;
+        }
+
+        exo_actuator_id_t actuator = EXO_ACTUATOR_COUNT;
+        rs01_rx_event_t event = rs01_process_can_frame(&rx_msg, &actuator);
+
+        if (event == RS01_RX_EVENT_FEEDBACK &&
+            actuator < EXO_ACTUATOR_COUNT) {
+            rs01_feedback_snapshot_t feedback;
+            if (!rs01_get_feedback(actuator, &feedback)) {
+                continue;
+            }
+
+            ble_console_push_feedback(actuator, &feedback);
+
+            TickType_t now = xTaskGetTickCount();
+            if ((now - last_feedback_log[actuator]) >= pdMS_TO_TICKS(200)) {
+                last_feedback_log[actuator] = now;
+                exo_can_node_id_t can_id = 0;
+                (void)rs01_get_can_id(actuator, &can_id);
+                ESP_LOGI(TAG,
+                         "FB: id=%d mode=%d status=%d ang=%.3f spd=%.3f tq=%.3f tmp=%.1f",
+                         (int)can_id,
+                         (int)event,
+                         (int)feedback.mode,
+                         (double)feedback.sample.position_rad,
+                         (double)feedback.sample.velocity_rad_s,
+                         (double)feedback.sample.torque_nm,
+                         (double)feedback.sample.temperature_c);
+            }
+        } else if (event == RS01_RX_EVENT_FAULT &&
+                   actuator < EXO_ACTUATOR_COUNT) {
+            rs01_feedback_snapshot_t feedback;
+            exo_can_node_id_t can_id = 0;
+            if (rs01_get_feedback(actuator, &feedback) &&
+                rs01_get_can_id(actuator, &can_id)) {
+                ESP_LOGW(TAG,
+                         "RS01 fault: id=%u fault=0x%08lX warning=0x%08lX",
+                         can_id,
+                         (unsigned long)feedback.fault_raw,
+                         (unsigned long)feedback.warning_raw);
+            }
+        } else if (event == RS01_RX_EVENT_INVALID) {
+            TickType_t now = xTaskGetTickCount();
+            if ((now - last_invalid_log) >= pdMS_TO_TICKS(1000)) {
+                last_invalid_log = now;
+                ESP_LOGW(TAG,
+                         "Invalid RS01 frame: id=0x%08lX dlc=%u flags=0x%lx",
+                         (unsigned long)rx_msg.identifier,
+                         rx_msg.data_length_code,
+                         (unsigned long)rx_msg.flags);
+            }
+        } else if (event == RS01_RX_EVENT_NONE) {
+            TickType_t now = xTaskGetTickCount();
+            if ((now - last_unhandled_log) >= pdMS_TO_TICKS(1000)) {
+                last_unhandled_log = now;
+                ESP_LOGI(TAG,
+                         "Unhandled CAN frame: id=0x%08lX dlc=%u flags=0x%lx",
+                         (unsigned long)rx_msg.identifier,
+                         rx_msg.data_length_code,
+                         (unsigned long)rx_msg.flags);
+            }
         }
     }
 }
@@ -188,13 +143,33 @@ void app_main(void)
              (unsigned long)(g_exo_hardware_config.twai.bitrate_bps /
                              1000000U));
 
-    ESP_ERROR_CHECK(robstride_control_init());
+    ESP_ERROR_CHECK(rs01_driver_init());
 
     /* Initialize TWAI */
     twai_init();
 
     /* Create TWAI receive task */
-    xTaskCreate(twai_rx_task, "twai_rx", 4096, NULL, 8, NULL);
+    BaseType_t rx_task_result =
+        xTaskCreate(twai_rx_task, "twai_rx", 4096, NULL, 8, NULL);
+    ESP_ERROR_CHECK(rx_task_result == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+
+    /* The RS01 report switch does not enable motor torque. A successful TX
+     * records only that reporting was requested; online becomes true after
+     * the driver receives a valid frame from the configured actuator. */
+    for (exo_actuator_id_t actuator = EXO_ACTUATOR_A;
+         actuator < EXO_ACTUATOR_COUNT;
+         actuator = (exo_actuator_id_t)(actuator + 1)) {
+        esp_err_t err = rs01_set_report_interval_ms(
+            actuator, g_exo_hardware_config.rs01_report_interval_ms);
+        if (err == ESP_OK) {
+            err = rs01_start_reporting(actuator);
+        }
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Actuator %c active reporting request failed: %s",
+                     actuator == EXO_ACTUATOR_A ? 'A' : 'B',
+                     esp_err_to_name(err));
+        }
+    }
 
     /* Initialize BLE console (creates its own task) */
     ESP_ERROR_CHECK(ble_console_init());

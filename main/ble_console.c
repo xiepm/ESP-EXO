@@ -1,6 +1,6 @@
 #include "ble_console.h"
 #include "exo_config.h"
-#include "robstride_control.h"
+#include "rs01_driver.h"
 #include "impedance_control.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -10,6 +10,7 @@
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -58,8 +59,8 @@ static SemaphoreHandle_t s_cmd_mutex;
 #define LINE_BUF_SIZE  256
 static StreamBufferHandle_t s_rx_streambuf;
 
-/* ---- Current target motor CAN ID ---- */
-static exo_can_node_id_t g_motor_id;
+/* ---- Current target logical actuator; A/B do not imply left/right. ---- */
+static exo_actuator_id_t s_selected_actuator;
 
 /* ---- Forward declarations ---- */
 static int  ble_gap_event_handler(struct ble_gap_event *event, void *arg);
@@ -71,6 +72,8 @@ static void ble_vprintf(const char *fmt, ...);
 static bool parse_long_arg(const char *text, long min_value, long max_value,
                            long *value);
 static bool parse_float_arg(const char *text, float *value);
+static exo_can_node_id_t selected_can_id(void);
+static bool driver_command_succeeded(esp_err_t err);
 
 /* ---- Command handler type ---- */
 typedef void (*cmd_handler_t)(int argc, char *argv[]);
@@ -121,7 +124,7 @@ static void cmd_help(int argc, char *argv[]);
 
 /* ---- Command table ---- */
 static const console_cmd_t s_cmd_table[] = {
-    {"motor",      "Select target motor: <can_id>",                 1, cmd_motor},
+    {"motor",      "Select target: <A|B|configured_can_id>",        1, cmd_motor},
     {"enable",     "Motor enable (private protocol)",               0, cmd_enable},
     {"disable",    "Motor disable/reset (private protocol)",        0, cmd_disable},
     {"move",       "Motion control: <t> <pos> <spd> <kp> <kd>",    5, cmd_move},
@@ -147,10 +150,10 @@ static const console_cmd_t s_cmd_table[] = {
     {"mit_set_id",   "MIT set motor ID: <new_id>",                  1, cmd_mit_set_id},
     {"mit_save",     "MIT save to flash",                           0, cmd_mit_save},
     {"mit_report",   "MIT proactive report: <0=off|1=on>",          1, cmd_mit_report},
-    {"mit_read",     "Unsupported in standard MIT protocol",        1, cmd_mit_read},
-    {"mit_write",    "Unsupported in standard MIT protocol",        2, cmd_mit_write},
+    {"mit_read",     "MIT parameter read: <reg_addr>",               1, cmd_mit_read},
+    {"mit_write",    "MIT parameter write: <reg_addr> <value>",      2, cmd_mit_write},
     {"mit_error",    "MIT error query/clear: <0-255|0xFF=clear>",    1, cmd_mit_error},
-    {"motor_type",   "Show compile-time motor type settings",       0, cmd_motor_type},
+    {"motor_type",   "Show RS01 driver limits",                     0, cmd_motor_type},
     {"status",       "Show motor feedback status",                  0, cmd_status},
     {"can_status",   "Show TWAI controller and error counters",     0, cmd_can_status},
     {"imp_start",   "Start dual-motor impedance control",            0, cmd_impedance_start},
@@ -242,11 +245,18 @@ static void ble_vprintf(const char *fmt, ...)
 /* ================================================================
  *  Motor feedback push (public API)
  * ================================================================ */
-void ble_console_push_feedback(const motor_feedback_t *fb)
+void ble_console_push_feedback(exo_actuator_id_t actuator,
+                               const rs01_feedback_snapshot_t *feedback)
 {
-    static TickType_t s_last_push_tick;
+    if (feedback == NULL || actuator >= EXO_ACTUATOR_COUNT) {
+        return;
+    }
+
+    static TickType_t s_last_push_tick[EXO_ACTUATOR_COUNT];
     TickType_t now = xTaskGetTickCount();
-    if ((now - s_last_push_tick) < pdMS_TO_TICKS(100)) {
+    /* Keep the old aggregate 10 Hz debug load while guaranteeing that a
+     * fixed A/B bus order cannot starve either actuator from BLE output. */
+    if ((now - s_last_push_tick[actuator]) < pdMS_TO_TICKS(200)) {
         return;
     }
 
@@ -256,24 +266,28 @@ void ble_console_push_feedback(const motor_feedback_t *fb)
     portEXIT_CRITICAL(&s_lock);
 
     if (!can_send) return;
-    s_last_push_tick = now;
+    s_last_push_tick[actuator] = now;
 
     char buf[256];
+    exo_can_node_id_t can_id = 0;
+    (void)rs01_get_can_id(actuator, &can_id);
     int len = snprintf(buf, sizeof(buf),
-        "FB: mms=%d mot=%d ang=%.3f spd=%.3f tq=%.3f tmp=%.1f "
+        "FB: id=%u mms=%d mot=%d ang=%.3f spd=%.3f tq=%.3f tmp=%.1f "
         "faults: uncal=%d stall=%d mag=%d otemp=%d drive=%d uv=%d\r\n",
-        (int)fb->mms,
-        (int)fb->motorMode,
-        (double)fb->angle,
-        (double)fb->speed,
-        (double)fb->torque,
-        (double)fb->temperature,
-        (int)fb->uncalibrated,
-        (int)fb->StallOverloadFault,
-        (int)fb->MagneticEncoderFault,
-        (int)fb->OverTemperatureFault,
-        (int)fb->DriveFault,
-        (int)fb->UnderVoltageFault);
+        can_id,
+        (int)feedback->mode,
+        (int)feedback->control_mode,
+        (double)feedback->sample.position_rad,
+        (double)feedback->sample.velocity_rad_s,
+        (double)feedback->sample.torque_nm,
+        (double)feedback->sample.temperature_c,
+        (int)feedback->faults.uncalibrated,
+        (int)feedback->faults.stall_overload,
+        (int)feedback->faults.magnetic_encoder,
+        (int)feedback->faults.over_temperature,
+        (int)(feedback->faults.phase_over_current ||
+              feedback->faults.driver_chip),
+        (int)feedback->faults.under_voltage);
 
     if (len < 0) return;
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
@@ -559,31 +573,62 @@ static bool parse_float_args(char *argv[], int first, int count, float values[])
     return true;
 }
 
+static exo_can_node_id_t selected_can_id(void)
+{
+    exo_can_node_id_t can_id = 0;
+    (void)rs01_get_can_id(s_selected_actuator, &can_id);
+    return can_id;
+}
+
+static bool driver_command_succeeded(esp_err_t err)
+{
+    if (err == ESP_OK) {
+        return true;
+    }
+
+    ble_vprintf("ERROR: RS01 command failed: %s\r\n", esp_err_to_name(err));
+    return false;
+}
+
 /* ================================================================
  *  Command handlers (identical to console.c, printf -> ble_vprintf)
  * ================================================================ */
 
 static void cmd_motor(int argc, char *argv[])
 {
-    long id;
-    if (!parse_long_arg(argv[1], 0, 0x7F, &id)) {
-        ble_vprintf("ERROR: motor ID must be 0-127 (decimal or 0xNN)\r\n");
-        return;
+    exo_actuator_id_t actuator = EXO_ACTUATOR_COUNT;
+    if (strcmp(argv[1], "A") == 0 || strcmp(argv[1], "a") == 0) {
+        actuator = EXO_ACTUATOR_A;
+    } else if (strcmp(argv[1], "B") == 0 || strcmp(argv[1], "b") == 0) {
+        actuator = EXO_ACTUATOR_B;
+    } else {
+        long id;
+        if (!parse_long_arg(argv[1], 0, 0x7F, &id) ||
+            !rs01_find_actuator((exo_can_node_id_t)id, &actuator)) {
+            ble_vprintf("ERROR: motor must be A, B, or a configured CAN ID\r\n");
+            return;
+        }
     }
-    g_motor_id = (uint8_t)id;
-    ble_vprintf("OK: target motor set to 0x%02X (%d)\r\n", g_motor_id, g_motor_id);
+
+    s_selected_actuator = actuator;
+    exo_can_node_id_t can_id = selected_can_id();
+    ble_vprintf("OK: target motor set to 0x%02X (%d), actuator %c\r\n",
+                can_id, can_id,
+                actuator == EXO_ACTUATOR_A ? 'A' : 'B');
 }
 
 static void cmd_enable(int argc, char *argv[])
 {
-    RobStride_motor_enable(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X enable sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_enable(s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X enable sent\r\n", selected_can_id());
+    }
 }
 
 static void cmd_disable(int argc, char *argv[])
 {
-    RobStride_motor_reset(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X disable sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_disable(s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X disable sent\r\n", selected_can_id());
+    }
 }
 
 static void cmd_move(int argc, char *argv[])
@@ -595,9 +640,12 @@ static void cmd_move(int argc, char *argv[])
     }
     float t = values[0], pos = values[1], spd = values[2];
     float kp = values[3], kd = values[4];
-    RobStrideMotor_move_control(g_motor_id, t, pos, spd, kp, kd);
-    ble_vprintf("OK: motor 0x%02X move t=%.2f pos=%.2f spd=%.2f kp=%.2f kd=%.2f\r\n",
-           g_motor_id, (double)t, (double)pos, (double)spd, (double)kp, (double)kd);
+    if (driver_command_succeeded(rs01_move(
+            s_selected_actuator, t, pos, spd, kp, kd))) {
+        ble_vprintf("OK: motor 0x%02X move t=%.2f pos=%.2f spd=%.2f kp=%.2f kd=%.2f\r\n",
+                    selected_can_id(), (double)t, (double)pos, (double)spd,
+                    (double)kp, (double)kd);
+    }
 }
 
 static void cmd_speed(int argc, char *argv[])
@@ -608,9 +656,11 @@ static void cmd_speed(int argc, char *argv[])
         return;
     }
     float cur = values[0], acc = values[1], spd = values[2];
-    RobStride_Motor_Speed_control(g_motor_id, cur, acc, spd);
-    ble_vprintf("OK: motor 0x%02X speed cur=%.2f acc=%.2f spd=%.2f\r\n",
-           g_motor_id, (double)cur, (double)acc, (double)spd);
+    if (driver_command_succeeded(rs01_speed_control(
+            s_selected_actuator, cur, acc, spd))) {
+        ble_vprintf("OK: motor 0x%02X speed cur=%.2f acc=%.2f spd=%.2f\r\n",
+                    selected_can_id(), (double)cur, (double)acc, (double)spd);
+    }
 }
 
 static void cmd_pos_pp(int argc, char *argv[])
@@ -621,9 +671,11 @@ static void cmd_pos_pp(int argc, char *argv[])
         return;
     }
     float spd = values[0], acc = values[1], ang = values[2];
-    RobStride_Motor_Pos_PP_control(g_motor_id, spd, acc, ang);
-    ble_vprintf("OK: motor 0x%02X PP pos spd=%.2f acc=%.2f ang=%.2f\r\n",
-           g_motor_id, (double)spd, (double)acc, (double)ang);
+    if (driver_command_succeeded(rs01_position_pp_control(
+            s_selected_actuator, spd, acc, ang))) {
+        ble_vprintf("OK: motor 0x%02X PP pos spd=%.2f acc=%.2f ang=%.2f\r\n",
+                    selected_can_id(), (double)spd, (double)acc, (double)ang);
+    }
 }
 
 static void cmd_pos_csp(int argc, char *argv[])
@@ -634,9 +686,11 @@ static void cmd_pos_csp(int argc, char *argv[])
         return;
     }
     float spd = values[0], ang = values[1];
-    RobStride_Motor_Pos_CSP_control(g_motor_id, spd, ang);
-    ble_vprintf("OK: motor 0x%02X CSP pos spd=%.2f ang=%.2f\r\n",
-           g_motor_id, (double)spd, (double)ang);
+    if (driver_command_succeeded(rs01_position_csp_control(
+            s_selected_actuator, spd, ang))) {
+        ble_vprintf("OK: motor 0x%02X CSP pos spd=%.2f ang=%.2f\r\n",
+                    selected_can_id(), (double)spd, (double)ang);
+    }
 }
 
 static void cmd_current(int argc, char *argv[])
@@ -646,14 +700,20 @@ static void cmd_current(int argc, char *argv[])
         ble_vprintf("ERROR: current must be a finite number\r\n");
         return;
     }
-    RobStride_Motor_current_control(g_motor_id, cur);
-    ble_vprintf("OK: motor 0x%02X current cur=%.2f\r\n", g_motor_id, (double)cur);
+    if (driver_command_succeeded(rs01_current_control(
+            s_selected_actuator, cur))) {
+        ble_vprintf("OK: motor 0x%02X current cur=%.2f\r\n",
+                    selected_can_id(), (double)cur);
+    }
 }
 
 static void cmd_set_zero(int argc, char *argv[])
 {
-    RobStride_Set_ZreoPos(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X set zero position sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_set_mechanical_zero(
+            s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X set zero position sent\r\n",
+                    selected_can_id());
+    }
 }
 
 static void cmd_set_id(int argc, char *argv[])
@@ -664,14 +724,19 @@ static void cmd_set_id(int argc, char *argv[])
         return;
     }
     uint8_t new_id = (uint8_t)parsed;
-    RobStride_Set_CAN_ID(g_motor_id, new_id);
-    ble_vprintf("OK: motor 0x%02X change ID to %d\r\n", g_motor_id, new_id);
+    exo_can_node_id_t old_id = selected_can_id();
+    if (driver_command_succeeded(rs01_set_can_id(
+            s_selected_actuator, new_id))) {
+        ble_vprintf("OK: motor 0x%02X change ID to %d\r\n", old_id, new_id);
+    }
 }
 
 static void cmd_save(int argc, char *argv[])
 {
-    RobStride_Motor_MotorDataSave(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X save to flash sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_save_parameters(s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X save to flash sent\r\n",
+                    selected_can_id());
+    }
 }
 
 static void cmd_set_baud(int argc, char *argv[])
@@ -682,8 +747,11 @@ static void cmd_set_baud(int argc, char *argv[])
         return;
     }
     uint8_t rate = (uint8_t)parsed;
-    RobStride_Motor_BaudRateChange(g_motor_id, rate);
-    ble_vprintf("OK: motor 0x%02X baud rate change sent (rate=%d)\r\n", g_motor_id, rate);
+    if (driver_command_succeeded(rs01_set_baud_rate(
+            s_selected_actuator, rate))) {
+        ble_vprintf("OK: motor 0x%02X baud rate change sent (rate=%d)\r\n",
+                    selected_can_id(), rate);
+    }
 }
 
 static void cmd_report(int argc, char *argv[])
@@ -694,22 +762,30 @@ static void cmd_report(int argc, char *argv[])
         return;
     }
     uint8_t on = (uint8_t)parsed;
-    RobStride_Motor_ProtactiveEscalationSet(g_motor_id, on);
-    ble_vprintf("OK: motor 0x%02X proactive report %s\r\n", g_motor_id, on ? "ON" : "OFF");
+    esp_err_t err = on ? rs01_start_reporting(s_selected_actuator)
+                       : rs01_stop_reporting(s_selected_actuator);
+    if (driver_command_succeeded(err)) {
+        ble_vprintf("OK: motor 0x%02X proactive report %s\r\n",
+                    selected_can_id(), on ? "ON" : "OFF");
+    }
 }
 
 static void cmd_switch_mit(int argc, char *argv[])
 {
-    RobStride_Motor_MIT_ModeSet(g_motor_id, 2);
-    ble_vprintf("OK: motor 0x%02X MIT protocol selected; power-cycle motor to apply\r\n",
-                g_motor_id);
+    if (driver_command_succeeded(rs01_set_protocol(
+            s_selected_actuator, RS01_PROTOCOL_MIT))) {
+        ble_vprintf("OK: motor 0x%02X MIT protocol selected; power-cycle motor to apply\r\n",
+                    selected_can_id());
+    }
 }
 
 static void cmd_switch_private(int argc, char *argv[])
 {
-    RobStride_Motor_MIT_ModeSet(g_motor_id, 0);
-    ble_vprintf("OK: motor 0x%02X private protocol selected; power-cycle motor to apply\r\n",
-                g_motor_id);
+    if (driver_command_succeeded(rs01_mit_set_protocol(
+            s_selected_actuator, RS01_PROTOCOL_PRIVATE))) {
+        ble_vprintf("OK: motor 0x%02X private protocol selected; power-cycle motor to apply\r\n",
+                    selected_can_id());
+    }
 }
 
 static void cmd_read_param(int argc, char *argv[])
@@ -720,20 +796,25 @@ static void cmd_read_param(int argc, char *argv[])
         return;
     }
     uint16_t reg = (uint16_t)parsed;
-    Get_RobStride_Motor_parameter(g_motor_id, reg);
-    ble_vprintf("OK: motor 0x%02X read param 0x%04X sent\r\n", g_motor_id, reg);
+    if (driver_command_succeeded(rs01_read_parameter(
+            s_selected_actuator, reg))) {
+        ble_vprintf("OK: motor 0x%02X read param 0x%04X sent\r\n",
+                    selected_can_id(), reg);
+    }
 }
 
 static void cmd_mit_enable(int argc, char *argv[])
 {
-    RobStride_Motor_MIT_enable(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X MIT enable sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_mit_enable(s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X MIT enable sent\r\n", selected_can_id());
+    }
 }
 
 static void cmd_mit_disable(int argc, char *argv[])
 {
-    RobStride_Motor_MIT_reset(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X MIT disable sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_mit_disable(s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X MIT disable sent\r\n", selected_can_id());
+    }
 }
 
 static void cmd_mit_control(int argc, char *argv[])
@@ -745,9 +826,12 @@ static void cmd_mit_control(int argc, char *argv[])
     }
     float ang = values[0], spd = values[1], kp = values[2];
     float kd = values[3], t = values[4];
-    RobStride_Motor_MIT_Control(g_motor_id, ang, spd, kp, kd, t);
-    ble_vprintf("OK: motor 0x%02X MIT control ang=%.2f spd=%.2f kp=%.2f kd=%.2f t=%.2f\r\n",
-           g_motor_id, (double)ang, (double)spd, (double)kp, (double)kd, (double)t);
+    if (driver_command_succeeded(rs01_mit_send_motion(
+            s_selected_actuator, ang, spd, kp, kd, t))) {
+        ble_vprintf("OK: motor 0x%02X MIT control ang=%.2f spd=%.2f kp=%.2f kd=%.2f t=%.2f\r\n",
+                    selected_can_id(), (double)ang, (double)spd,
+                    (double)kp, (double)kd, (double)t);
+    }
 }
 
 static void cmd_mit_pos(int argc, char *argv[])
@@ -758,9 +842,11 @@ static void cmd_mit_pos(int argc, char *argv[])
         return;
     }
     float pos = values[0], spd = values[1];
-    RobStride_Motor_MIT_PositionControl(g_motor_id, pos, spd);
-    ble_vprintf("OK: motor 0x%02X MIT position pos=%.2f spd=%.2f\r\n",
-           g_motor_id, (double)pos, (double)spd);
+    if (driver_command_succeeded(rs01_mit_position_control(
+            s_selected_actuator, pos, spd))) {
+        ble_vprintf("OK: motor 0x%02X MIT position pos=%.2f spd=%.2f\r\n",
+                    selected_can_id(), (double)pos, (double)spd);
+    }
 }
 
 static void cmd_mit_speed(int argc, char *argv[])
@@ -771,15 +857,18 @@ static void cmd_mit_speed(int argc, char *argv[])
         return;
     }
     float spd = values[0], cur = values[1];
-    RobStride_Motor_MIT_SpeedControl(g_motor_id, spd, cur);
-    ble_vprintf("OK: motor 0x%02X MIT speed spd=%.2f cur=%.2f\r\n",
-           g_motor_id, (double)spd, (double)cur);
+    if (driver_command_succeeded(rs01_mit_speed_control(
+            s_selected_actuator, spd, cur))) {
+        ble_vprintf("OK: motor 0x%02X MIT speed spd=%.2f cur=%.2f\r\n",
+                    selected_can_id(), (double)spd, (double)cur);
+    }
 }
 
 static void cmd_mit_set_zero(int argc, char *argv[])
 {
-    RobStride_Motor_MIT_SetZeroPos(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X MIT set zero sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_mit_set_zero(s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X MIT set zero sent\r\n", selected_can_id());
+    }
 }
 
 static void cmd_mit_set_type(int argc, char *argv[])
@@ -790,8 +879,11 @@ static void cmd_mit_set_type(int argc, char *argv[])
         return;
     }
     uint8_t type = (uint8_t)parsed;
-    RobStride_Motor_MIT_SetMotorType(g_motor_id, type);
-    ble_vprintf("OK: motor 0x%02X MIT set motor type to %d\r\n", g_motor_id, type);
+    if (driver_command_succeeded(rs01_mit_set_operation_mode(
+            s_selected_actuator, type))) {
+        ble_vprintf("OK: motor 0x%02X MIT set motor type to %d\r\n",
+                    selected_can_id(), type);
+    }
 }
 
 static void cmd_mit_set_id(int argc, char *argv[])
@@ -802,14 +894,19 @@ static void cmd_mit_set_id(int argc, char *argv[])
         return;
     }
     uint8_t new_id = (uint8_t)parsed;
-    RobStride_Motor_MIT_SetMotorId(g_motor_id, new_id);
-    ble_vprintf("OK: motor 0x%02X MIT set motor ID to %d\r\n", g_motor_id, new_id);
+    if (driver_command_succeeded(rs01_mit_set_can_id(
+            s_selected_actuator, new_id))) {
+        ble_vprintf("OK: motor 0x%02X MIT set motor ID to %d\r\n",
+                    selected_can_id(), new_id);
+    }
 }
 
 static void cmd_mit_save(int argc, char *argv[])
 {
-    RobStride_Motor_MIT_MotorDataSave(g_motor_id);
-    ble_vprintf("OK: motor 0x%02X MIT save sent\r\n", g_motor_id);
+    if (driver_command_succeeded(rs01_mit_save_parameters(
+            s_selected_actuator))) {
+        ble_vprintf("OK: motor 0x%02X MIT save sent\r\n", selected_can_id());
+    }
 }
 
 static void cmd_mit_report(int argc, char *argv[])
@@ -820,18 +917,42 @@ static void cmd_mit_report(int argc, char *argv[])
         return;
     }
     uint8_t on = (uint8_t)parsed;
-    RobStride_Motor_MIT_ProtactiveEscalationSet(g_motor_id, on);
-    ble_vprintf("OK: motor 0x%02X MIT proactive report %s\r\n", g_motor_id, on ? "ON" : "OFF");
+    esp_err_t err = on ? rs01_mit_start_reporting(s_selected_actuator)
+                       : rs01_mit_stop_reporting(s_selected_actuator);
+    if (driver_command_succeeded(err)) {
+        ble_vprintf("OK: motor 0x%02X MIT proactive report %s\r\n",
+                    selected_can_id(), on ? "ON" : "OFF");
+    }
 }
 
 static void cmd_mit_read(int argc, char *argv[])
 {
-    ble_vprintf("ERROR: MIT parameter read is not defined by the standard-frame protocol; no CAN frame sent\r\n");
+    long parsed;
+    if (!parse_long_arg(argv[1], 0, UINT16_MAX, &parsed)) {
+        ble_vprintf("ERROR: MIT register address must be 0-0xFFFF\r\n");
+        return;
+    }
+    if (driver_command_succeeded(rs01_mit_read_parameter(
+            s_selected_actuator, (uint16_t)parsed))) {
+        ble_vprintf("OK: motor 0x%02X MIT read param 0x%04lX sent\r\n",
+                    selected_can_id(), parsed);
+    }
 }
 
 static void cmd_mit_write(int argc, char *argv[])
 {
-    ble_vprintf("ERROR: MIT parameter write is not defined by the standard-frame protocol; no CAN frame sent\r\n");
+    long parsed;
+    float value;
+    if (!parse_long_arg(argv[1], 0, UINT16_MAX, &parsed) ||
+        !parse_float_arg(argv[2], &value)) {
+        ble_vprintf("ERROR: MIT write requires <reg_addr> <finite_value>\r\n");
+        return;
+    }
+    if (driver_command_succeeded(rs01_mit_write_parameter_float(
+            s_selected_actuator, (uint16_t)parsed, value))) {
+        ble_vprintf("OK: motor 0x%02X MIT write param 0x%04lX sent\r\n",
+                    selected_can_id(), parsed);
+    }
 }
 
 static void cmd_mit_error(int argc, char *argv[])
@@ -841,45 +962,98 @@ static void cmd_mit_error(int argc, char *argv[])
         ble_vprintf("ERROR: MIT error command must be 0-255 (0xFF clears)\r\n");
         return;
     }
-    RobStride_Motor_MIT_ClearOrCheckError(g_motor_id, (uint8_t)parsed);
-    ble_vprintf("OK: motor 0x%02X MIT error command 0x%02lX sent\r\n",
-                g_motor_id, parsed);
+    if (driver_command_succeeded(rs01_mit_clear_or_read_fault(
+            s_selected_actuator, (uint8_t)parsed))) {
+        ble_vprintf("OK: motor 0x%02X MIT error command 0x%02lX sent\r\n",
+                    selected_can_id(), parsed);
+    }
 }
 
 static void cmd_motor_type(int argc, char *argv[])
 {
-    ble_vprintf("Motor type (compile-time): MOTOR_TYPE=%d\r\n", MOTOR_TYPE);
-    ble_vprintf("  V:  [%.2f, %.2f]\r\n", (double)V_MIN, (double)V_MAX);
-    ble_vprintf("  KP: [%.2f, %.2f]\r\n", (double)KP_MIN, (double)KP_MAX);
-    ble_vprintf("  KD: [%.2f, %.2f]\r\n", (double)KD_MIN, (double)KD_MAX);
-    ble_vprintf("  T:  [%.2f, %.2f]\r\n", (double)T_MIN, (double)T_MAX);
+    const rs01_limits_t *limits = rs01_get_limits();
+    ble_vprintf("Motor driver: RS01\r\n");
+    ble_vprintf("  P:  [%.2f, %.2f] rad\r\n",
+                (double)limits->position_min_rad,
+                (double)limits->position_max_rad);
+    ble_vprintf("  V:  [%.2f, %.2f] rad/s\r\n",
+                (double)limits->velocity_min_rad_s,
+                (double)limits->velocity_max_rad_s);
+    ble_vprintf("  KP: [%.2f, %.2f]\r\n",
+                (double)limits->kp_min, (double)limits->kp_max);
+    ble_vprintf("  KD: [%.2f, %.2f]\r\n",
+                (double)limits->kd_min, (double)limits->kd_max);
+    ble_vprintf("  T:  [%.2f, %.2f] Nm\r\n",
+                (double)limits->torque_min_nm,
+                (double)limits->torque_max_nm);
 }
 
 static void cmd_status(int argc, char *argv[])
 {
-    motor_feedback_t snapshot;
-    robstride_get_feedback_snapshot(&snapshot);
-    motor_feedback_t *mf = &snapshot;
-    ble_vprintf("===== Motor 0x%02X Feedback =====\r\n", g_motor_id);
-    ble_vprintf("  Angle:       %.3f rad\r\n", (double)mf->angle);
-    ble_vprintf("  Speed:       %.3f rad/s\r\n", (double)mf->speed);
-    ble_vprintf("  Torque:      %.3f Nm\r\n", (double)mf->torque);
-    ble_vprintf("  Temperature: %.1f C\r\n", (double)mf->temperature);
-    ble_vprintf("  Mode status: %d ", (int)mf->mms);
-    switch (mf->mms) {
-        case REST:    ble_vprintf("(REST)\r\n"); break;
-        case CALI:    ble_vprintf("(CALI)\r\n"); break;
-        case RUNNING: ble_vprintf("(RUNNING)\r\n"); break;
+    rs01_feedback_snapshot_t snapshot;
+    if (!rs01_get_feedback(s_selected_actuator, &snapshot)) {
+        ble_vprintf("ERROR: cannot read RS01 feedback snapshot\r\n");
+        return;
+    }
+
+    exo_can_node_id_t can_id = selected_can_id();
+    uint64_t age_us = snapshot.valid
+        ? (uint64_t)esp_timer_get_time() - snapshot.timestamp_us
+        : 0U;
+    double rate_hz = snapshot.last_interval_us > 0U
+        ? 1000000.0 / (double)snapshot.last_interval_us
+        : 0.0;
+
+    ble_vprintf("===== Motor 0x%02X Feedback =====\r\n", can_id);
+    ble_vprintf("  Actuator:    %c\r\n",
+                s_selected_actuator == EXO_ACTUATOR_A ? 'A' : 'B');
+    ble_vprintf("  Valid:       %s\r\n", snapshot.valid ? "YES" : "no");
+    ble_vprintf("  Online:      %s\r\n", snapshot.online ? "YES" : "no");
+    ble_vprintf("  Reporting:   %s (requested)\r\n",
+                snapshot.reporting_requested ? "ON" : "OFF");
+    ble_vprintf("  Enabled:     %s (requested)\r\n",
+                snapshot.enabled_requested ? "YES" : "no");
+    ble_vprintf("  Feedback count: %lu\r\n",
+                (unsigned long)snapshot.feedback_count);
+    ble_vprintf("    Type 2:        %lu\r\n",
+                (unsigned long)snapshot.type2_feedback_count);
+    ble_vprintf("    Type 24:       %lu\r\n",
+                (unsigned long)snapshot.type24_feedback_count);
+    ble_vprintf("  Invalid frames: %lu\r\n",
+                (unsigned long)snapshot.invalid_frame_count);
+    ble_vprintf("  Last interval: %llu us (%.2f Hz)\r\n",
+                (unsigned long long)snapshot.last_interval_us, rate_hz);
+    ble_vprintf("  Feedback age: %llu us\r\n",
+                (unsigned long long)age_us);
+    ble_vprintf("  Angle:       %.3f rad\r\n",
+                (double)snapshot.sample.position_rad);
+    ble_vprintf("  Speed:       %.3f rad/s\r\n",
+                (double)snapshot.sample.velocity_rad_s);
+    ble_vprintf("  Torque:      %.3f Nm\r\n",
+                (double)snapshot.sample.torque_nm);
+    ble_vprintf("  Temperature: %.1f C\r\n",
+                (double)snapshot.sample.temperature_c);
+    ble_vprintf("  Mode status: %d ", (int)snapshot.mode);
+    switch (snapshot.mode) {
+        case RS01_MODE_STATUS_RESET:       ble_vprintf("(REST)\r\n"); break;
+        case RS01_MODE_STATUS_CALIBRATION: ble_vprintf("(CALI)\r\n"); break;
+        case RS01_MODE_STATUS_RUNNING:     ble_vprintf("(RUNNING)\r\n"); break;
         default:      ble_vprintf("(UNKNOWN)\r\n"); break;
     }
-    ble_vprintf("  Motor mode:  %d\r\n", mf->motorMode);
+    ble_vprintf("  Motor mode:  %d\r\n", (int)snapshot.control_mode);
+    ble_vprintf("  Fault raw:   0x%08lX\r\n",
+                (unsigned long)snapshot.fault_raw);
+    ble_vprintf("  Warning raw: 0x%08lX\r\n",
+                (unsigned long)snapshot.warning_raw);
     ble_vprintf("  Faults:\r\n");
-    ble_vprintf("    Uncalibrated:         %s\r\n", mf->uncalibrated ? "YES" : "no");
-    ble_vprintf("    Stall/Overload:       %s\r\n", mf->StallOverloadFault ? "YES" : "no");
-    ble_vprintf("    Magnetic Encoder:     %s\r\n", mf->MagneticEncoderFault ? "YES" : "no");
-    ble_vprintf("    Over Temperature:     %s\r\n", mf->OverTemperatureFault ? "YES" : "no");
-    ble_vprintf("    Drive Fault:          %s\r\n", mf->DriveFault ? "YES" : "no");
-    ble_vprintf("    Under Voltage:        %s\r\n", mf->UnderVoltageFault ? "YES" : "no");
+    ble_vprintf("    Uncalibrated:         %s\r\n", snapshot.faults.uncalibrated ? "YES" : "no");
+    ble_vprintf("    Stall/Overload:       %s\r\n", snapshot.faults.stall_overload ? "YES" : "no");
+    ble_vprintf("    Magnetic Encoder:     %s\r\n", snapshot.faults.magnetic_encoder ? "YES" : "no");
+    ble_vprintf("    Over Temperature:     %s\r\n", snapshot.faults.over_temperature ? "YES" : "no");
+    ble_vprintf("    Drive/Phase Current:  %s\r\n",
+                (snapshot.faults.driver_chip ||
+                 snapshot.faults.phase_over_current) ? "YES" : "no");
+    ble_vprintf("    Under Voltage:        %s\r\n", snapshot.faults.under_voltage ? "YES" : "no");
 }
 
 static void cmd_can_status(int argc, char *argv[])
@@ -960,7 +1134,10 @@ static void cmd_impedance_stop(int argc, char *argv[])
 static void cmd_help(int argc, char *argv[])
 {
     ble_vprintf("\r\nRobStride Motor Control Console\r\n");
-    ble_vprintf("Current motor: 0x%02X (%d)\r\n", g_motor_id, g_motor_id);
+    exo_can_node_id_t can_id = selected_can_id();
+    ble_vprintf("Current motor: 0x%02X (%d), actuator %c\r\n",
+                can_id, can_id,
+                s_selected_actuator == EXO_ACTUATOR_A ? 'A' : 'B');
     ble_vprintf("================================\r\n");
     for (const console_cmd_t *c = s_cmd_table; c->name != NULL; c++) {
         ble_vprintf("  %-14s %s\r\n", c->name, c->help);
@@ -1118,9 +1295,7 @@ static void uart_console_task(void *arg)
  * ================================================================ */
 esp_err_t ble_console_init(void)
 {
-    g_motor_id = g_exo_hardware_config
-                     .actuator[g_exo_hardware_config.default_actuator]
-                     .can_id;
+    s_selected_actuator = g_exo_hardware_config.default_actuator;
 
     /* Create stream buffer for RX data from BLE */
     s_rx_streambuf = xStreamBufferCreate(1024, 1);

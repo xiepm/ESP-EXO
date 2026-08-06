@@ -30,10 +30,12 @@ typedef struct {
     exo_actuator_config_t actuator[EXO_ACTUATOR_COUNT];
     exo_actuator_id_t default_actuator;
     uint32_t control_frequency_hz;
+    uint32_t rs01_report_interval_ms;
+    uint32_t rs01_feedback_timeout_ms;
     const char *ble_device_name;
 } exo_hardware_config_t;
 
-/* The only runtime-readable hardware configuration object in phase 1. */
+/* The only runtime-readable hardware configuration object. */
 extern const exo_hardware_config_t g_exo_hardware_config;
 
 #endif /* EXO_CONFIG_H */

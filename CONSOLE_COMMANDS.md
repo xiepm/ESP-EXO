@@ -1,4 +1,7 @@
-# RobStride 电机控制台命令手册
+# ESP-EXO RS01 调试控制台命令手册
+
+> 这是阶段 2 保留的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
+> A/B 两台 RS01 写入 10 ms 上报周期并请求开启主动反馈；该操作不会使能电机。
 
 ## 命令通道
 
@@ -46,7 +49,8 @@ status
 idf.py -p COMx monitor
 ```
 
-> **CAN 总线**: TX=GPIO4, RX=GPIO2, 1Mbps（可在 Kconfig 中修改）。
+> **CAN 总线**：TX=GPIO4，RX=GPIO2，1 Mbps；当前值集中定义在
+> `g_exo_hardware_config`，不是通过 Kconfig 修改。
 
 ---
 
@@ -55,7 +59,8 @@ idf.py -p COMx monitor
 连接并订阅 TX 通知后会收到欢迎信息。所有命令通过 RX 特征写入，使用回车
 或换行执行。运动控制命令按一次写入发送一次，不会在后台周期重发。
 
-未接电机时可安全验证 `help`、`motor 0x01`、`motor_type` 和 `status`。
+未接电机时可验证 `help`、`motor A`、`motor_type`、`status` 和
+`can_status`；此时 `status` 应显示 `Valid: no`、`Online: no`。
 
 ### 选择目标电机
 
@@ -63,12 +68,16 @@ idf.py -p COMx monitor
 motor <can_id>
 ```
 
-设置当前要控制的电机 CAN ID。后续所有命令都发往这个电机。默认值: `0x10` (16)。
+选择当前要控制的逻辑执行器。后续命令只接受逻辑槽 A/B；为了兼容原调试流程，
+也可输入这两个槽在硬件配置中的 CAN ID。A/B 只表示逻辑槽，不表示人体左右侧。
+默认选择 A（当前 CAN ID `0x10`）。
 
 示例：
 ```
-motor 0x01     # 选择 CAN ID = 1 的电机
-motor 0x10     # 选择 CAN ID = 16 的电机
+motor A        # 选择逻辑槽 A（当前 CAN ID 0x10）
+motor B        # 选择逻辑槽 B（当前 CAN ID 0x20）
+motor 0x10     # 兼容写法，映射到 A
+motor 0x20     # 兼容写法，映射到 B
 ```
 
 ---
@@ -93,11 +102,11 @@ move <torque> <position> <speed> <kp> <kd>
 ```
 | 参数 | 范围 | 单位 | 说明 |
 |------|------|------|------|
-| torque | T_MIN ~ T_MAX | Nm | 目标力矩 |
+| torque | -17 ~ 17 | Nm | 目标力矩 |
 | position | -12.57 ~ 12.57 | rad | 目标位置 |
-| speed | V_MIN ~ V_MAX | rad/s | 目标速度 |
-| kp | KP_MIN ~ KP_MAX | - | 比例增益 |
-| kd | KD_MIN ~ KD_MAX | - | 微分增益 |
+| speed | -44 ~ 44 | rad/s | 目标速度 |
+| kp | 0 ~ 500 | - | 比例增益 |
+| kd | 0 ~ 5 | - | 微分增益 |
 
 示例：`move 1 0 2 0.5 0.1`
 
@@ -109,7 +118,7 @@ speed <cur_limit> <acc> <speed>
 |------|------|------|------|
 | cur_limit | 0 ~ 23 | A | 电流限制 |
 | acc | - | rad/s² | 加速度 |
-| speed | V_MIN ~ V_MAX | rad/s | 目标速度 |
+| speed | -44 ~ 44 | rad/s | 目标速度 |
 
 示例：`speed 1 1 2`
 
@@ -119,7 +128,7 @@ pos_pp <speed> <acc> <angle>
 ```
 | 参数 | 范围 | 单位 | 说明 |
 |------|------|------|------|
-| speed | V_MIN ~ V_MAX | rad/s | 目标速度 |
+| speed | -44 ~ 44 | rad/s | 目标速度 |
 | acc | - | rad/s² | 加速度 |
 | angle | -12.57 ~ 12.57 | rad | 目标角度 |
 
@@ -156,7 +165,9 @@ set_zero
 ```
 set_id <new_id>
 ```
-修改当前电机的 CAN ID（0~127）。修改后需要用新 ID 重新选择电机。示例：`set_id 1`
+修改当前电机的 CAN ID（0~127）。发送成功后，当前运行中的逻辑槽会立即切换到
+新 ID，并拒绝与另一个槽重复的 ID。若希望下次上电仍使用新 ID，还必须同步修改
+`g_exo_hardware_config`。示例：`set_id 1`。
 
 ### save — 保存参数到 Flash
 ```
@@ -182,7 +193,10 @@ set_baud <rate>
 report <0|1>
 ```
 - `0` — 关闭主动上报
-- `1` — 开启主动上报（默认间隔 10ms）
+- `1` — 开启主动上报（启动时已将间隔配置为 10 ms）
+
+`report` 只改变当前所选 A/B。命令返回成功表示 CAN 帧已发送；是否真正收到数据，
+应以 `status` 的 `Online`、`Feedback count` 和 `Feedback age` 为准。
 
 ### read_param — 读参数
 ```
@@ -223,10 +237,10 @@ mit_control <angle> <speed> <kp> <kd> <torque>
 | 参数 | 范围 | 说明 |
 |------|------|------|
 | angle | -12.57 ~ 12.57 rad | 目标角度 |
-| speed | V_MIN ~ V_MAX rad/s | 目标速度 |
-| kp | KP_MIN ~ KP_MAX | 比例增益 |
-| kd | KD_MIN ~ KD_MAX | 微分增益 |
-| torque | T_MIN ~ T_MAX Nm | 目标力矩 |
+| speed | -44 ~ 44 rad/s | 目标速度 |
+| kp | 0 ~ 500 | 比例增益 |
+| kd | 0 ~ 5 | 微分增益 |
+| torque | -17 ~ 17 Nm | 目标力矩 |
 
 示例：`mit_control 1 0 1 0.1 0.1`
 
@@ -286,13 +300,14 @@ mit_report <0|1>
 ```
 mit_read <reg_addr>
 ```
-标准帧 MIT 协议未定义运行参数读命令。固件会拒绝该命令，不发送 CAN 帧。
+发送标准帧参数读命令，标识符为 `(3 << 8) | CAN_ID`。
 
 ### mit_write — MIT 写参数
 ```
 mit_write <reg_addr> <value>
 ```
-标准帧 MIT 协议未定义运行参数写命令。固件会拒绝该命令，不发送 CAN 帧。
+发送标准帧参数写命令，标识符为 `(4 << 8) | CAN_ID`，值按
+little-endian `float32` 编码。
 
 ### mit_error — MIT 查询或清除错误
 ```
@@ -311,7 +326,7 @@ mit_error <value>
 imp_start
 ```
 
-读取 CAN ID `0x10` 和 `0x20` 的当前位置作为中心点，然后启动当前原型的
+读取逻辑槽 A/B 的当前位置作为中心点，然后启动当前原型的
 100 Hz 正弦参考与阻抗控制。若任一电机没有有效反馈，固件仍可能用零位继续，
 因此阶段 0 验收时必须同时检查日志中没有 `No feedback from motor`。
 
@@ -331,7 +346,10 @@ imp_stop
 ```
 status
 ```
-输出当前电机反馈数据：角度、速度、力矩、温度、运行状态、故障标志。
+输出所选 A/B 的独立反馈快照：有效/在线状态、上报和使能请求、有效/无效帧计数、
+type 2/type 24 分项计数、
+最近帧间隔和估算频率、反馈年龄、角度、速度、力矩、温度、运行模式及故障标志。
+`Online` 只在最近 100 ms 内收到该执行器的有效反馈时为 `YES`。
 
 ### can_status — 显示 CAN 控制器状态
 ```
@@ -345,7 +363,7 @@ can_status
 ```
 motor_type
 ```
-显示编译时选择的 `MOTOR_TYPE` 及对应的 V/KP/KD/T 范围。
+显示阶段 2 RS01 驱动实际使用的 P/V/KP/KD/T 量程。
 
 ### help — 显示帮助
 ```
@@ -355,17 +373,18 @@ help
 
 ---
 
-## 当前电机型号参数 (MOTOR_TYPE=5)
+## 当前 RS01 量程
 
 | 参数 | 最小值 | 最大值 |
 |------|--------|--------|
 | 位置 (P) | -12.57 rad | 12.57 rad |
-| 速度 (V) | -50.0 rad/s | 50.0 rad/s |
+| 速度 (V) | -44.0 rad/s | 44.0 rad/s |
 | KP | 0.0 | 500.0 |
 | KD | 0.0 | 5.0 |
-| 力矩 (T) | -5.5 Nm | 5.5 Nm |
+| 力矩 (T) | -17.0 Nm | 17.0 Nm |
 
-> 修改 `MOTOR_TYPE` 宏（0~6）可切换不同的电机型号参数。编译时生效。
+这些量程来自 RS01 手册并封装在 `rs01_driver.c`，不再使用通用
+`MOTOR_TYPE` 宏。
 
 ---
 

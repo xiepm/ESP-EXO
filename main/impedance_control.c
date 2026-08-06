@@ -1,6 +1,6 @@
 #include "impedance_control.h"
 #include "exo_config.h"
-#include "robstride_control.h"
+#include "rs01_driver.h"
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -30,9 +30,11 @@ static int64_t              s_start_us;
 static volatile bool        s_running;
 static portMUX_TYPE         s_lock = portMUX_INITIALIZER_UNLOCKED;
 
-static inline exo_can_node_id_t actuator_can_id(exo_actuator_id_t actuator)
+static exo_can_node_id_t actuator_can_id(exo_actuator_id_t actuator)
 {
-    return g_exo_hardware_config.actuator[actuator].can_id;
+    exo_can_node_id_t can_id = 0;
+    (void)rs01_get_can_id(actuator, &can_id);
+    return can_id;
 }
 
 /* ================================================================
@@ -71,10 +73,10 @@ static void timer_cb(void *arg)
 
     /* Send control frames: pos, spd=0, kp, kd, tq_ff=0
      * (velocity=0 → pure impedance, no trajectory feed-forward) */
-    RobStride_Impedance_SendFrame(actuator_can_id(EXO_ACTUATOR_A), target_a,
-                                  0.0f, IMP_KP, IMP_KD, 0.0f);
-    RobStride_Impedance_SendFrame(actuator_can_id(EXO_ACTUATOR_B), target_b,
-                                  0.0f, IMP_KP, IMP_KD, 0.0f);
+    (void)rs01_send_motion(EXO_ACTUATOR_A, target_a, 0.0f, 0.0f,
+                           IMP_KP, IMP_KD);
+    (void)rs01_send_motion(EXO_ACTUATOR_B, target_b, 0.0f, 0.0f,
+                           IMP_KP, IMP_KD);
 }
 
 /* ================================================================
@@ -101,23 +103,41 @@ esp_err_t impedance_control_start(void)
              (double)IMP_FREQ_HZ, (double)IMP_RAMP_TIME_S);
 
     /* 1. Disable both motors */
-    RobStride_motor_reset(actuator_can_id(EXO_ACTUATOR_A));
+    esp_err_t err = rs01_disable(EXO_ACTUATOR_A);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
     vTaskDelay(pdMS_TO_TICKS(50));
-    RobStride_motor_reset(actuator_can_id(EXO_ACTUATOR_B));
+    err = rs01_disable(EXO_ACTUATOR_B);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
     vTaskDelay(pdMS_TO_TICKS(50));
 
     /* 2. Set MOVE_CONTROL_MODE for both motors */
-    Set_RobStride_Motor_parameter(actuator_can_id(EXO_ACTUATOR_A),
-                                  0x7005, 0, 'j');
+    err = rs01_set_control_mode(EXO_ACTUATOR_A,
+                                RS01_CONTROL_MODE_MOTION);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
     vTaskDelay(pdMS_TO_TICKS(20));
-    Set_RobStride_Motor_parameter(actuator_can_id(EXO_ACTUATOR_B),
-                                  0x7005, 0, 'j');
+    err = rs01_set_control_mode(EXO_ACTUATOR_B,
+                                RS01_CONTROL_MODE_MOTION);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
     vTaskDelay(pdMS_TO_TICKS(20));
 
     /* 3. Enable both motors */
-    RobStride_motor_enable(actuator_can_id(EXO_ACTUATOR_A));
+    err = rs01_enable(EXO_ACTUATOR_A);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
     vTaskDelay(pdMS_TO_TICKS(50));
-    RobStride_motor_enable(actuator_can_id(EXO_ACTUATOR_B));
+    err = rs01_enable(EXO_ACTUATOR_B);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
     vTaskDelay(pdMS_TO_TICKS(50));
 
     /* 4. Send initial zero-gain frames to get feedback flowing */
@@ -125,39 +145,49 @@ esp_err_t impedance_control_start(void)
     float init_pos_b = 0.0f;
 
     /* Try to read positions from per-motor state */
-    if (g_motor_states[actuator_can_id(EXO_ACTUATOR_A)].valid) {
-        init_pos_a = g_motor_states[actuator_can_id(EXO_ACTUATOR_A)].position;
+    rs01_feedback_snapshot_t feedback_a;
+    rs01_feedback_snapshot_t feedback_b;
+    if (rs01_get_feedback(EXO_ACTUATOR_A, &feedback_a) && feedback_a.valid) {
+        init_pos_a = feedback_a.sample.position_rad;
     }
-    if (g_motor_states[actuator_can_id(EXO_ACTUATOR_B)].valid) {
-        init_pos_b = g_motor_states[actuator_can_id(EXO_ACTUATOR_B)].position;
+    if (rs01_get_feedback(EXO_ACTUATOR_B, &feedback_b) && feedback_b.valid) {
+        init_pos_b = feedback_b.sample.position_rad;
     }
 
-    RobStride_Impedance_SendFrame(actuator_can_id(EXO_ACTUATOR_A), init_pos_a,
-                                  0.0f, 0.0f, 0.0f, 0.0f);
-    RobStride_Impedance_SendFrame(actuator_can_id(EXO_ACTUATOR_B), init_pos_b,
-                                  0.0f, 0.0f, 0.0f, 0.0f);
+    err = rs01_send_motion(EXO_ACTUATOR_A, init_pos_a, 0.0f, 0.0f,
+                           0.0f, 0.0f);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
+    err = rs01_send_motion(EXO_ACTUATOR_B, init_pos_b, 0.0f, 0.0f,
+                           0.0f, 0.0f);
+    if (err != ESP_OK) {
+        goto start_failed;
+    }
 
     /* 5. Wait for feedback to arrive and read center positions */
     vTaskDelay(pdMS_TO_TICKS(300));
 
+    bool has_feedback_a =
+        rs01_get_feedback(EXO_ACTUATOR_A, &feedback_a) && feedback_a.valid;
+    bool has_feedback_b =
+        rs01_get_feedback(EXO_ACTUATOR_B, &feedback_b) && feedback_b.valid;
+
     portENTER_CRITICAL(&s_lock);
-    if (g_motor_states[actuator_can_id(EXO_ACTUATOR_A)].valid) {
-        s_center[EXO_ACTUATOR_A] =
-            g_motor_states[actuator_can_id(EXO_ACTUATOR_A)].position;
-    } else {
-        s_center[EXO_ACTUATOR_A] = 0.0f;
+    s_center[EXO_ACTUATOR_A] =
+        has_feedback_a ? feedback_a.sample.position_rad : 0.0f;
+    s_center[EXO_ACTUATOR_B] =
+        has_feedback_b ? feedback_b.sample.position_rad : 0.0f;
+    portEXIT_CRITICAL(&s_lock);
+
+    if (!has_feedback_a) {
         ESP_LOGW(TAG, "No feedback from motor 0x%02X, using pos=0",
                  actuator_can_id(EXO_ACTUATOR_A));
     }
-    if (g_motor_states[actuator_can_id(EXO_ACTUATOR_B)].valid) {
-        s_center[EXO_ACTUATOR_B] =
-            g_motor_states[actuator_can_id(EXO_ACTUATOR_B)].position;
-    } else {
-        s_center[EXO_ACTUATOR_B] = 0.0f;
+    if (!has_feedback_b) {
         ESP_LOGW(TAG, "No feedback from motor 0x%02X, using pos=0",
                  actuator_can_id(EXO_ACTUATOR_B));
     }
-    portEXIT_CRITICAL(&s_lock);
 
     ESP_LOGI(TAG, "Center positions: A=%.4f rad (%.2f°), B=%.4f rad (%.2f°)",
              (double)s_center[EXO_ACTUATOR_A],
@@ -171,11 +201,10 @@ esp_err_t impedance_control_start(void)
         .arg      = NULL,
         .name     = "impedance_tmr",
     };
-    esp_err_t err = esp_timer_create(&timer_cfg, &s_timer);
+    err = esp_timer_create(&timer_cfg, &s_timer);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to create timer: %s", esp_err_to_name(err));
-        s_running = false;
-        return err;
+        goto start_failed;
     }
 
     s_start_us = esp_timer_get_time();
@@ -186,13 +215,27 @@ esp_err_t impedance_control_start(void)
         ESP_LOGE(TAG, "Failed to start timer: %s", esp_err_to_name(err));
         esp_timer_delete(s_timer);
         s_timer = NULL;
-        s_running = false;
-        return err;
+        goto start_failed;
     }
 
     ESP_LOGI(TAG, "Impedance control running @ %lu Hz",
              (unsigned long)g_exo_hardware_config.control_frequency_hz);
     return ESP_OK;
+
+start_failed:
+    if (s_timer != NULL) {
+        (void)esp_timer_stop(s_timer);
+        (void)esp_timer_delete(s_timer);
+        s_timer = NULL;
+    }
+    (void)rs01_disable(EXO_ACTUATOR_A);
+    (void)rs01_disable(EXO_ACTUATOR_B);
+    portENTER_CRITICAL(&s_lock);
+    s_running = false;
+    portEXIT_CRITICAL(&s_lock);
+    ESP_LOGE(TAG, "Failed to start impedance control: %s",
+             esp_err_to_name(err));
+    return err;
 }
 
 esp_err_t impedance_control_stop(void)
@@ -218,24 +261,25 @@ esp_err_t impedance_control_stop(void)
     /* 2. Send zero-gain frames to release torque */
     float safe_a = s_center[EXO_ACTUATOR_A];
     float safe_b = s_center[EXO_ACTUATOR_B];
-    if (g_motor_states[actuator_can_id(EXO_ACTUATOR_A)].valid) {
-        safe_a = g_motor_states[actuator_can_id(EXO_ACTUATOR_A)].position;
+    rs01_feedback_snapshot_t feedback;
+    if (rs01_get_feedback(EXO_ACTUATOR_A, &feedback) && feedback.valid) {
+        safe_a = feedback.sample.position_rad;
     }
-    if (g_motor_states[actuator_can_id(EXO_ACTUATOR_B)].valid) {
-        safe_b = g_motor_states[actuator_can_id(EXO_ACTUATOR_B)].position;
+    if (rs01_get_feedback(EXO_ACTUATOR_B, &feedback) && feedback.valid) {
+        safe_b = feedback.sample.position_rad;
     }
 
-    RobStride_Impedance_SendFrame(actuator_can_id(EXO_ACTUATOR_A), safe_a,
-                                  0.0f, 0.0f, 0.0f, 0.0f);
+    (void)rs01_send_motion(EXO_ACTUATOR_A, safe_a, 0.0f, 0.0f,
+                           0.0f, 0.0f);
     vTaskDelay(pdMS_TO_TICKS(20));
-    RobStride_Impedance_SendFrame(actuator_can_id(EXO_ACTUATOR_B), safe_b,
-                                  0.0f, 0.0f, 0.0f, 0.0f);
+    (void)rs01_send_motion(EXO_ACTUATOR_B, safe_b, 0.0f, 0.0f,
+                           0.0f, 0.0f);
     vTaskDelay(pdMS_TO_TICKS(20));
 
     /* 3. Disable both motors */
-    RobStride_motor_reset(actuator_can_id(EXO_ACTUATOR_A));
+    (void)rs01_disable(EXO_ACTUATOR_A);
     vTaskDelay(pdMS_TO_TICKS(50));
-    RobStride_motor_reset(actuator_can_id(EXO_ACTUATOR_B));
+    (void)rs01_disable(EXO_ACTUATOR_B);
     vTaskDelay(pdMS_TO_TICKS(50));
 
     ESP_LOGI(TAG, "Impedance control stopped, motors disabled");
