@@ -12,7 +12,6 @@
  *  - CAN bus feedback parsing (angle, speed, torque, temperature, faults)
  */
 
-#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_err.h"
@@ -26,6 +25,8 @@
 
 static const char *TAG = "main";
 
+#define EXO_TWAI_RX_TASK_CORE 1
+
 /* ================================================================
  *  TWAI RX Task
  *  Blocks on twai_receive(), then parses motor feedback.
@@ -33,7 +34,6 @@ static const char *TAG = "main";
 static void twai_rx_task(void *arg)
 {
     twai_message_t rx_msg;
-    TickType_t last_feedback_log[EXO_ACTUATOR_COUNT] = {0};
     TickType_t last_invalid_log = 0;
     TickType_t last_unhandled_log = 0;
     ESP_LOGI(TAG, "TWAI RX task started");
@@ -50,26 +50,9 @@ static void twai_rx_task(void *arg)
 
         if (event == RS01_RX_EVENT_FEEDBACK &&
             actuator < EXO_ACTUATOR_COUNT) {
-            rs01_feedback_snapshot_t feedback;
-            if (!rs01_get_feedback(actuator, &feedback)) {
-                continue;
-            }
-
-            TickType_t now = xTaskGetTickCount();
-            if ((now - last_feedback_log[actuator]) >= pdMS_TO_TICKS(200)) {
-                last_feedback_log[actuator] = now;
-                exo_can_node_id_t can_id = 0;
-                (void)rs01_get_can_id(actuator, &can_id);
-                ESP_LOGI(TAG,
-                         "FB: id=%d mode=%d status=%d ang=%.3f spd=%.3f tq=%.3f tmp=%.1f",
-                         (int)can_id,
-                         (int)event,
-                         (int)feedback.mode,
-                         (double)feedback.sample.position_rad,
-                         (double)feedback.sample.velocity_rad_s,
-                         (double)feedback.sample.torque_nm,
-                         (double)feedback.sample.temperature_c);
-            }
+            /* rs01_process_can_frame() has already published the feedback.
+             * Keep this event-driven task draining the queue; status is
+             * available on demand through the UART/BLE console. */
         } else if (event == RS01_RX_EVENT_FAULT &&
                    actuator < EXO_ACTUATOR_COUNT) {
             rs01_feedback_snapshot_t feedback;
@@ -150,8 +133,9 @@ void app_main(void)
     twai_init();
 
     /* Create TWAI receive task */
-    BaseType_t rx_task_result =
-        xTaskCreate(twai_rx_task, "twai_rx", 4096, NULL, 8, NULL);
+    BaseType_t rx_task_result = xTaskCreatePinnedToCore(
+        twai_rx_task, "twai_rx", 4096, NULL, 8, NULL,
+        EXO_TWAI_RX_TASK_CORE);
     ESP_ERROR_CHECK(rx_task_result == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     /* The RS01 report switch does not enable motor torque. A successful TX
