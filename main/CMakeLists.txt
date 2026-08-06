@@ -3,6 +3,7 @@ idf_component_register(
         "twai_network_example_master_main.c"
         "exo_config.c"
         "rs01_driver.c"
+        "hip_joint.c"
         "ble_console.c"
         "impedance_control.c"
     INCLUDE_DIRS "." "include"

@@ -1,5 +1,6 @@
 #include "ble_console.h"
 #include "exo_config.h"
+#include "hip_joint.h"
 #include "rs01_driver.h"
 #include "impedance_control.h"
 #include "freertos/FreeRTOS.h"
@@ -21,6 +22,7 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include "services/gap/ble_svc_gap.h"
 #include <string.h>
+#include <strings.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -72,6 +74,7 @@ static void ble_vprintf(const char *fmt, ...);
 static bool parse_long_arg(const char *text, long min_value, long max_value,
                            long *value);
 static bool parse_float_arg(const char *text, float *value);
+static bool parse_joint_arg(const char *text, exo_hip_joint_id_t *joint);
 static exo_can_node_id_t selected_can_id(void);
 static bool driver_command_succeeded(esp_err_t err);
 
@@ -117,6 +120,9 @@ static void cmd_mit_write(int argc, char *argv[]);
 static void cmd_mit_error(int argc, char *argv[]);
 static void cmd_motor_type(int argc, char *argv[]);
 static void cmd_status(int argc, char *argv[]);
+static void cmd_joint_status(int argc, char *argv[]);
+static void cmd_joint_zero(int argc, char *argv[]);
+static void cmd_joint_zero_clear(int argc, char *argv[]);
 static void cmd_can_status(int argc, char *argv[]);
 static void cmd_impedance_start(int argc, char *argv[]);
 static void cmd_impedance_stop(int argc, char *argv[]);
@@ -132,7 +138,7 @@ static const console_cmd_t s_cmd_table[] = {
     {"pos_pp",     "PP position: <speed> <acc> <angle>",            3, cmd_pos_pp},
     {"pos_csp",    "CSP position: <speed> <angle>",                 2, cmd_pos_csp},
     {"current",    "Current control: <current>",                    1, cmd_current},
-    {"set_zero",   "Set mechanical zero position",                  0, cmd_set_zero},
+    {"set_zero",   "Set RS01 motor mechanical zero (CAN)",         0, cmd_set_zero},
     {"set_id",     "Set motor CAN ID: <new_id>",                    1, cmd_set_id},
     {"save",       "Save parameters to flash",                      0, cmd_save},
     {"set_baud",   "Change baud: <1=1M|2=500K|3=250K|4=125K>",     1, cmd_set_baud},
@@ -145,7 +151,7 @@ static const console_cmd_t s_cmd_table[] = {
     {"mit_control",  "MIT control: <ang> <spd> <kp> <kd> <t>",     5, cmd_mit_control},
     {"mit_pos",      "MIT position: <pos> <spd>",                   2, cmd_mit_pos},
     {"mit_speed",    "MIT speed: <spd> <cur>",                      2, cmd_mit_speed},
-    {"mit_set_zero", "MIT set zero position",                       0, cmd_mit_set_zero},
+    {"mit_set_zero", "Set MIT motor mechanical zero (CAN)",        0, cmd_mit_set_zero},
     {"mit_set_type", "MIT set motor type: <0-2>",                   1, cmd_mit_set_type},
     {"mit_set_id",   "MIT set motor ID: <new_id>",                  1, cmd_mit_set_id},
     {"mit_save",     "MIT save to flash",                           0, cmd_mit_save},
@@ -155,6 +161,9 @@ static const console_cmd_t s_cmd_table[] = {
     {"mit_error",    "MIT error query/clear: <0-255|0xFF=clear>",    1, cmd_mit_error},
     {"motor_type",   "Show RS01 driver limits",                     0, cmd_motor_type},
     {"status",       "Show motor feedback status",                  0, cmd_status},
+    {"joint_status", "Show hip joint: <left|right>",                1, cmd_joint_status},
+    {"joint_zero",   "Capture RAM software zero: <left|right>",    1, cmd_joint_zero},
+    {"joint_zero_clear", "Clear RAM software zero: <left|right>", 1, cmd_joint_zero_clear},
     {"can_status",   "Show TWAI controller and error counters",     0, cmd_can_status},
     {"imp_start",   "Start dual-motor impedance control",            0, cmd_impedance_start},
     {"imp_stop",    "Stop dual-motor impedance control",             0, cmd_impedance_stop},
@@ -508,6 +517,22 @@ static bool parse_float_arg(const char *text, float *value)
 
     *value = parsed;
     return true;
+}
+
+static bool parse_joint_arg(const char *text, exo_hip_joint_id_t *joint)
+{
+    if (text == NULL || joint == NULL) {
+        return false;
+    }
+    if (strcasecmp(text, "left") == 0 || strcasecmp(text, "l") == 0) {
+        *joint = EXO_HIP_JOINT_LEFT;
+        return true;
+    }
+    if (strcasecmp(text, "right") == 0 || strcasecmp(text, "r") == 0) {
+        *joint = EXO_HIP_JOINT_RIGHT;
+        return true;
+    }
+    return false;
 }
 
 static bool parse_float_args(char *argv[], int first, int count, float values[])
@@ -1001,6 +1026,148 @@ static void cmd_status(int argc, char *argv[])
                 (snapshot.faults.driver_chip ||
                  snapshot.faults.phase_over_current) ? "YES" : "no");
     ble_vprintf("    Under Voltage:        %s\r\n", snapshot.faults.under_voltage ? "YES" : "no");
+}
+
+static const char *joint_name(exo_hip_joint_id_t joint)
+{
+    return joint == EXO_HIP_JOINT_LEFT ? "LEFT" : "RIGHT";
+}
+
+static const char *joint_direction_name(exo_direction_t direction)
+{
+    if (direction == EXO_DIRECTION_POSITIVE) {
+        return "+1";
+    }
+    if (direction == EXO_DIRECTION_NEGATIVE) {
+        return "-1";
+    }
+    return "UNKNOWN";
+}
+
+static void print_joint_status(exo_hip_joint_id_t joint)
+{
+    hip_joint_snapshot_t snapshot;
+    if (!hip_joint_get_snapshot(joint, &snapshot)) {
+        ble_vprintf("ERROR: cannot read hip joint snapshot\r\n");
+        return;
+    }
+
+    uint64_t age_us = 0U;
+    const uint64_t now_us = (uint64_t)esp_timer_get_time();
+    if (snapshot.feedback_valid && now_us >= snapshot.feedback_timestamp_us) {
+        age_us = now_us - snapshot.feedback_timestamp_us;
+    }
+    const bool raw_available = snapshot.mapping_valid &&
+        snapshot.feedback_valid &&
+        isfinite(snapshot.raw_actuator_sample.position_rad) &&
+        isfinite(snapshot.raw_actuator_sample.velocity_rad_s) &&
+        isfinite(snapshot.raw_actuator_sample.torque_nm) &&
+        isfinite(snapshot.raw_actuator_sample.temperature_c);
+    const bool joint_sample_available = raw_available &&
+        snapshot.direction_valid && snapshot.zero_valid;
+
+    ble_vprintf("===== Hip Joint %s =====\r\n", joint_name(joint));
+    if (snapshot.mapping_valid) {
+        ble_vprintf("  Mapping:       actuator %c (valid)\r\n",
+                    snapshot.actuator == EXO_ACTUATOR_A ? 'A' : 'B');
+    } else {
+        ble_vprintf("  Mapping:       UNMAPPED\r\n");
+    }
+    ble_vprintf("  Direction:     %s (%s)\r\n",
+                joint_direction_name(snapshot.direction),
+                snapshot.direction_valid ? "valid" : "INVALID");
+    if (snapshot.zero_valid) {
+        ble_vprintf("  Software zero: %.3f rad (valid, RAM only)\r\n",
+                    (double)snapshot.software_zero_motor_rad);
+        ble_vprintf("  Zero source:   feedback count=%lu timestamp=%llu us\r\n",
+                    (unsigned long)snapshot.zero_source_feedback_count,
+                    (unsigned long long)snapshot.zero_source_timestamp_us);
+    } else {
+        ble_vprintf("  Software zero: N/A (INVALID, RAM only)\r\n");
+        ble_vprintf("  Zero source:   none\r\n");
+    }
+    if (!snapshot.mapping_valid) {
+        ble_vprintf("  Feedback:      N/A (joint unmapped)\r\n");
+    } else if (!snapshot.feedback_valid) {
+        ble_vprintf("  Feedback:      INVALID / OFFLINE, count=%lu, age=N/A\r\n",
+                    (unsigned long)snapshot.source_feedback_count);
+    } else {
+        ble_vprintf("  Feedback:      valid / %s, count=%lu, age=%llu us\r\n",
+                    snapshot.online ? "online" : "OFFLINE",
+                    (unsigned long)snapshot.source_feedback_count,
+                    (unsigned long long)age_us);
+    }
+    if (raw_available) {
+        ble_vprintf("  Raw actuator:  q=%.3f rad dq=%.3f rad/s tau=%.3f Nm temp=%.1f C\r\n",
+                    (double)snapshot.raw_actuator_sample.position_rad,
+                    (double)snapshot.raw_actuator_sample.velocity_rad_s,
+                    (double)snapshot.raw_actuator_sample.torque_nm,
+                    (double)snapshot.raw_actuator_sample.temperature_c);
+    } else {
+        ble_vprintf("  Raw actuator:  N/A\r\n");
+    }
+    if (joint_sample_available) {
+        ble_vprintf("  Joint:         q=%.3f rad dq=%.3f rad/s tau=%.3f Nm\r\n",
+                    (double)snapshot.joint_sample.position_rad,
+                    (double)snapshot.joint_sample.velocity_rad_s,
+                    (double)snapshot.joint_sample.torque_nm);
+    } else {
+        ble_vprintf("  Joint:         N/A\r\n");
+    }
+    ble_vprintf("  Joint valid:   %s\r\n",
+                snapshot.joint_valid ? "YES" : "no");
+}
+
+static bool command_joint_from_arg(char *argv[], exo_hip_joint_id_t *joint)
+{
+    if (parse_joint_arg(argv[1], joint)) {
+        return true;
+    }
+    ble_vprintf("ERROR: hip joint must be left or right\r\n");
+    return false;
+}
+
+static void cmd_joint_status(int argc, char *argv[])
+{
+    exo_hip_joint_id_t joint;
+    if (command_joint_from_arg(argv, &joint)) {
+        print_joint_status(joint);
+    }
+}
+
+static void cmd_joint_zero(int argc, char *argv[])
+{
+    exo_hip_joint_id_t joint;
+    if (!command_joint_from_arg(argv, &joint)) {
+        return;
+    }
+
+    esp_err_t err = hip_joint_set_zero_from_current(joint);
+    if (err != ESP_OK) {
+        ble_vprintf("ERROR: %s hip software zero not captured: %s\r\n",
+                    joint_name(joint), esp_err_to_name(err));
+        return;
+    }
+    ble_vprintf("OK: %s hip RAM software zero captured; motor zero unchanged\r\n",
+                joint_name(joint));
+    print_joint_status(joint);
+}
+
+static void cmd_joint_zero_clear(int argc, char *argv[])
+{
+    exo_hip_joint_id_t joint;
+    if (!command_joint_from_arg(argv, &joint)) {
+        return;
+    }
+
+    esp_err_t err = hip_joint_clear_zero(joint);
+    if (err != ESP_OK) {
+        ble_vprintf("ERROR: %s hip software zero not cleared: %s\r\n",
+                    joint_name(joint), esp_err_to_name(err));
+        return;
+    }
+    ble_vprintf("OK: %s hip RAM software zero cleared; motor zero unchanged\r\n",
+                joint_name(joint));
 }
 
 static void cmd_can_status(int argc, char *argv[])

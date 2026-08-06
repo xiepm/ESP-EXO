@@ -6,6 +6,20 @@
 #define EXO_CONFIG_TWAI_BITRATE_BPS 1000000U
 #define EXO_CONFIG_DEFAULT_ACTUATOR EXO_ACTUATOR_A
 
+/*
+ * Phase 3 physical calibration (2026-08-06):
+ *   LEFT  -> actuator B / CAN 0x20, raw angle increases during hip flexion.
+ *   RIGHT -> actuator A / CAN 0x10, raw angle decreases during hip flexion.
+ */
+#define EXO_CONFIG_LEFT_ACTUATOR EXO_ACTUATOR_B
+#define EXO_CONFIG_RIGHT_ACTUATOR EXO_ACTUATOR_A
+#define EXO_CONFIG_LEFT_DIRECTION EXO_DIRECTION_POSITIVE
+#define EXO_CONFIG_RIGHT_DIRECTION EXO_DIRECTION_NEGATIVE
+#define EXO_CONFIG_LEFT_MAPPING_VALID true
+#define EXO_CONFIG_RIGHT_MAPPING_VALID true
+#define EXO_CONFIG_LEFT_DIRECTION_VALID true
+#define EXO_CONFIG_RIGHT_DIRECTION_VALID true
+
 #if EXO_CONFIG_TWAI_BITRATE_BPS == 1000000U
 #define EXO_CONFIG_TWAI_TIMING() TWAI_TIMING_CONFIG_1MBITS()
 #else
@@ -39,6 +53,34 @@ _Static_assert(EXO_CONFIG_ACTUATOR_B_CAN_ID <= EXO_CONFIG_MAX_MOTOR_CAN_ID,
 _Static_assert(EXO_CONFIG_DEFAULT_ACTUATOR >= EXO_ACTUATOR_A &&
                    EXO_CONFIG_DEFAULT_ACTUATOR < EXO_ACTUATOR_COUNT,
                "default actuator must index the actuator array");
+_Static_assert(EXO_CONFIG_LEFT_MAPPING_VALID
+                   ? EXO_CONFIG_LEFT_ACTUATOR < EXO_ACTUATOR_COUNT
+                   : EXO_CONFIG_LEFT_ACTUATOR == EXO_ACTUATOR_COUNT,
+               "left hip mapping and actuator sentinel disagree");
+_Static_assert(EXO_CONFIG_RIGHT_MAPPING_VALID
+                   ? EXO_CONFIG_RIGHT_ACTUATOR < EXO_ACTUATOR_COUNT
+                   : EXO_CONFIG_RIGHT_ACTUATOR == EXO_ACTUATOR_COUNT,
+               "right hip mapping and actuator sentinel disagree");
+_Static_assert(!(EXO_CONFIG_LEFT_MAPPING_VALID &&
+                 EXO_CONFIG_RIGHT_MAPPING_VALID) ||
+                   EXO_CONFIG_LEFT_ACTUATOR != EXO_CONFIG_RIGHT_ACTUATOR,
+               "left and right hips must map to different actuators");
+_Static_assert(EXO_CONFIG_LEFT_DIRECTION_VALID
+                   ? (EXO_CONFIG_LEFT_DIRECTION == EXO_DIRECTION_POSITIVE ||
+                      EXO_CONFIG_LEFT_DIRECTION == EXO_DIRECTION_NEGATIVE)
+                   : EXO_CONFIG_LEFT_DIRECTION == EXO_DIRECTION_UNKNOWN,
+               "left hip direction and validity flag disagree");
+_Static_assert(EXO_CONFIG_RIGHT_DIRECTION_VALID
+                   ? (EXO_CONFIG_RIGHT_DIRECTION == EXO_DIRECTION_POSITIVE ||
+                      EXO_CONFIG_RIGHT_DIRECTION == EXO_DIRECTION_NEGATIVE)
+                   : EXO_CONFIG_RIGHT_DIRECTION == EXO_DIRECTION_UNKNOWN,
+               "right hip direction and validity flag disagree");
+_Static_assert(!EXO_CONFIG_LEFT_DIRECTION_VALID ||
+                   EXO_CONFIG_LEFT_MAPPING_VALID,
+               "left hip direction requires a valid actuator mapping");
+_Static_assert(!EXO_CONFIG_RIGHT_DIRECTION_VALID ||
+                   EXO_CONFIG_RIGHT_MAPPING_VALID,
+               "right hip direction requires a valid actuator mapping");
 _Static_assert(EXO_CONFIG_CONTROL_FREQUENCY_HZ > 0U,
                "control frequency must be positive");
 _Static_assert((1000000U % EXO_CONFIG_CONTROL_FREQUENCY_HZ) == 0U,
@@ -66,16 +108,28 @@ const exo_hardware_config_t g_exo_hardware_config = {
     .actuator = {
         [EXO_ACTUATOR_A] = {
             .can_id = EXO_CONFIG_ACTUATOR_A_CAN_ID,
-            .physical_side = EXO_SIDE_UNKNOWN,
-            .direction = EXO_DIRECTION_UNKNOWN,
-            .software_zero_rad = 0.0f,
-            .software_zero_valid = false,
         },
         [EXO_ACTUATOR_B] = {
             .can_id = EXO_CONFIG_ACTUATOR_B_CAN_ID,
-            .physical_side = EXO_SIDE_UNKNOWN,
-            .direction = EXO_DIRECTION_UNKNOWN,
+        },
+    },
+    .hip_joint = {
+        [EXO_HIP_JOINT_LEFT] = {
+            .side = EXO_SIDE_LEFT,
+            .actuator = EXO_CONFIG_LEFT_ACTUATOR,
+            .direction = EXO_CONFIG_LEFT_DIRECTION,
             .software_zero_rad = 0.0f,
+            .mapping_valid = EXO_CONFIG_LEFT_MAPPING_VALID,
+            .direction_valid = EXO_CONFIG_LEFT_DIRECTION_VALID,
+            .software_zero_valid = false,
+        },
+        [EXO_HIP_JOINT_RIGHT] = {
+            .side = EXO_SIDE_RIGHT,
+            .actuator = EXO_CONFIG_RIGHT_ACTUATOR,
+            .direction = EXO_CONFIG_RIGHT_DIRECTION,
+            .software_zero_rad = 0.0f,
+            .mapping_valid = EXO_CONFIG_RIGHT_MAPPING_VALID,
+            .direction_valid = EXO_CONFIG_RIGHT_DIRECTION_VALID,
             .software_zero_valid = false,
         },
     },

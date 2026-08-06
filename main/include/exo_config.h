@@ -19,15 +19,22 @@ typedef struct {
 
 typedef struct {
     exo_can_node_id_t can_id;
-    exo_side_t physical_side;
+} exo_actuator_config_t;
+
+typedef struct {
+    exo_side_t side;
+    exo_actuator_id_t actuator;
     exo_direction_t direction;
     float software_zero_rad;
+    bool mapping_valid;
+    bool direction_valid;
     bool software_zero_valid;
-} exo_actuator_config_t;
+} exo_hip_joint_config_t;
 
 typedef struct {
     exo_twai_config_t twai;
     exo_actuator_config_t actuator[EXO_ACTUATOR_COUNT];
+    exo_hip_joint_config_t hip_joint[EXO_HIP_JOINT_COUNT];
     exo_actuator_id_t default_actuator;
     uint32_t control_frequency_hz;
     uint32_t rs01_report_interval_ms;

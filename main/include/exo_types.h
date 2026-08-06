@@ -23,6 +23,13 @@ typedef enum {
     EXO_ACTUATOR_COUNT = 2,
 } exo_actuator_id_t;
 
+/* Human-domain hip joints. Mapping to actuator A/B is explicit in config. */
+typedef enum {
+    EXO_HIP_JOINT_LEFT = 0,
+    EXO_HIP_JOINT_RIGHT = 1,
+    EXO_HIP_JOINT_COUNT = 2,
+} exo_hip_joint_id_t;
+
 /* Sign between motor-positive rotation and the future joint convention. */
 typedef enum {
     EXO_DIRECTION_UNKNOWN = 0,
@@ -42,10 +49,16 @@ typedef struct {
 static_assert(EXO_ACTUATOR_A == 0, "actuator A must index element 0");
 static_assert(EXO_ACTUATOR_B == 1, "actuator B must index element 1");
 static_assert(EXO_ACTUATOR_COUNT == 2, "phase 1 supports exactly two actuators");
+static_assert(EXO_HIP_JOINT_LEFT == 0, "left hip must index element 0");
+static_assert(EXO_HIP_JOINT_RIGHT == 1, "right hip must index element 1");
+static_assert(EXO_HIP_JOINT_COUNT == 2, "exactly two hip joints are supported");
 #else
 _Static_assert(EXO_ACTUATOR_A == 0, "actuator A must index element 0");
 _Static_assert(EXO_ACTUATOR_B == 1, "actuator B must index element 1");
 _Static_assert(EXO_ACTUATOR_COUNT == 2, "phase 1 supports exactly two actuators");
+_Static_assert(EXO_HIP_JOINT_LEFT == 0, "left hip must index element 0");
+_Static_assert(EXO_HIP_JOINT_RIGHT == 1, "right hip must index element 1");
+_Static_assert(EXO_HIP_JOINT_COUNT == 2, "exactly two hip joints are supported");
 #endif
 
 #endif /* EXO_TYPES_H */

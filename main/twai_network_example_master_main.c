@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "driver/twai.h"
 #include "exo_config.h"
+#include "hip_joint.h"
 #include "rs01_driver.h"
 #include "ble_console.h"
 
@@ -142,6 +143,7 @@ void app_main(void)
                              1000000U));
 
     ESP_ERROR_CHECK(rs01_driver_init());
+    ESP_ERROR_CHECK(hip_joint_init());
 
     /* Initialize TWAI */
     twai_init();

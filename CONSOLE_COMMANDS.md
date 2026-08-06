@@ -1,6 +1,6 @@
-# ESP-EXO RS01 调试控制台命令手册
+# ESP-EXO RS01 与髋关节调试控制台命令手册
 
-> 这是阶段 2 保留的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
+> 这是阶段 3 保留的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
 > A/B 两台 RS01 写入 10 ms 上报周期并请求开启主动反馈；该操作不会使能电机。
 
 ## 命令通道
@@ -42,7 +42,7 @@ status
 使用支持 Nordic UART Service 的 BLE 客户端连接 `RobStride-CAN`，先订阅 TX
 特征通知，再向 RX 特征写入命令。例如发送 `help\r\n`。
 
-阶段 2 不主动向 BLE 连续推送 100 Hz 电机反馈，以免阻塞 CAN 接收。手机调试时
+当前调试固件不主动向 BLE 连续推送 100 Hz 电机反馈，以免阻塞 CAN 接收。手机调试时
 使用 `motor A`/`motor B` 后发送 `status`；产品化连续遥测在阶段 10 加入。
 
 烧录串口同时用于固件烧录、ESP-IDF 日志和命令控制：
@@ -162,7 +162,8 @@ current <current>
 ```
 set_zero
 ```
-将当前电机位置设为零点。
+向当前 RS01 发送私有协议的电机机械置零命令。它会改变电机侧零点，不是髋关节
+RAM 软件零位；阶段 3 标定应使用 `joint_zero left/right`，不要使用本命令。
 
 ### set_id — 修改电机 CAN ID
 ```
@@ -275,6 +276,8 @@ mit_speed <speed> <current_limit>
 ```
 mit_set_zero
 ```
+向当前 RS01 发送 MIT 协议的电机机械置零命令。它不是髋关节 RAM 软件零位；
+阶段 3 标定不得使用本命令。
 
 ### mit_set_type — MIT 设置电机类型
 ```
@@ -355,6 +358,33 @@ status
 type 2/type 24 分项计数、
 最近帧间隔和估算频率、反馈年龄、角度、速度、力矩、温度、运行模式及故障标志。
 `Online` 只在最近 100 ms 内收到该执行器的有效反馈时为 `YES`。
+
+### joint_status — 显示髋关节快照
+
+```text
+joint_status <left|right>
+```
+
+输出左/右髋到执行器 A/B 的映射、安装方向、RAM 软件零位、原始执行器采样、换算后的关节采样、
+反馈时间戳和最终 `Joint valid`。只有映射、方向、软件零位、反馈有效和在线状态全部成立时，
+`Joint valid` 才为 `YES`。
+
+### joint_zero — 捕获软件零位
+
+```text
+joint_zero <left|right>
+```
+
+把当前 RS01 输出位置保存为所选髋关节的 RAM 偏置。该命令不发送 CAN 帧、不使能电机，也不会修改
+RS01 机械零位；重启 ESP32 后该运行时零位丢失。它与电机维护命令 `set_zero`、`mit_set_zero` 完全不同。
+
+### joint_zero_clear — 清除软件零位
+
+```text
+joint_zero_clear <left|right>
+```
+
+只清除所选髋关节的 RAM 软件零位，不影响另一侧，也不修改电机反馈或机械零位。
 
 ### can_status — 显示 CAN 控制器状态
 ```
