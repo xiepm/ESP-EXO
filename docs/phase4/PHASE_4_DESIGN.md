@@ -139,13 +139,15 @@ RS01 driver
 -> TWAI driver
 -> TWAI RX task
 -> RS01 proactive reporting
--> permanent control loop
 -> BLE/UART consoles
+-> permanent control loop
 -> app_main return
 ```
 
-控制任务先于命令入口建立。`app_main()` 不包含周期循环或控制算法；初始化完成后
-返回，由 ESP-IDF 删除 main task。
+NVS/NimBLE 初始化可能暂停调度数十毫秒，因此在它完成后才创建控制任务，避免把
+重量级启动过程计入实时周期。控制台中的旧 `imp_start` 在任务尚未报告存活时直接
+拒绝；正常启动中两者只相隔一次同步函数返回。`app_main()` 不包含周期循环或控制
+算法；初始化完成后返回，由 ESP-IDF 删除 main task。
 
 ## 文件范围
 

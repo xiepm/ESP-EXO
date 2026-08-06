@@ -172,10 +172,12 @@ void app_main(void)
         }
     }
 
-    /* The control task is permanent and must exist before command transports
-     * can request the legacy control demo. */
-    ESP_ERROR_CHECK(exo_control_loop_init());
-
-    /* Initialize BLE/UART consoles (creates their own tasks). */
+    /* Finish the heavyweight NimBLE/NVS initialization before starting the
+     * timing diagnostics of the permanent control task. The legacy imp_start
+     * command explicitly rejects requests until that task reports alive. */
     ESP_ERROR_CHECK(ble_console_init());
+
+    /* Create the permanent control task after all heavyweight subsystem
+     * initialization. app_main then returns and performs no periodic work. */
+    ESP_ERROR_CHECK(exo_control_loop_init());
 }

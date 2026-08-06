@@ -1283,6 +1283,12 @@ static void cmd_can_status(int argc, char *argv[])
 
 static void cmd_impedance_start(int argc, char *argv[])
 {
+    exo_control_loop_snapshot_t control_snapshot;
+    if (!exo_control_loop_get_snapshot(&control_snapshot) ||
+        !control_snapshot.task_alive) {
+        ble_vprintf("ERROR: control loop is not ready; try again\r\n");
+        return;
+    }
     if (impedance_control_is_running()) {
         ble_vprintf("ERROR: impedance control already running. Use imp_stop first.\r\n");
         return;
