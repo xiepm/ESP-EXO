@@ -11,7 +11,8 @@
 烧录串口示例：
 
 ```powershell
-& "D:\Espressif\tools\idf-exe\1.0.3\idf.py.exe" -p COM17 monitor
+. 'C:\Espressif\tools\Microsoft.v5.5.PowerShell_profile.ps1'
+idf.py -p COMx flash monitor
 ```
 
 进入 monitor 后输入：
@@ -41,7 +42,8 @@ status
 烧录串口同时用于固件烧录、ESP-IDF 日志和命令控制：
 
 ```powershell
-& "D:\Espressif\tools\idf-exe\1.0.3\idf.py.exe" -p COM17 monitor
+. 'C:\Espressif\tools\Microsoft.v5.5.PowerShell_profile.ps1'
+idf.py -p COMx monitor
 ```
 
 > **CAN 总线**: TX=GPIO4, RX=GPIO2, 1Mbps（可在 Kconfig 中修改）。
@@ -298,6 +300,28 @@ mit_error <value>
 ```
 - `mit_error 0xFF`：清除当前错误。
 - 其他 `0~255` 数值：按参考协议发送错误状态查询命令。
+
+---
+
+## 双电机正弦阻抗基线
+
+### imp_start — 启动双电机基线控制
+
+```text
+imp_start
+```
+
+读取 CAN ID `0x10` 和 `0x20` 的当前位置作为中心点，然后启动当前原型的
+100 Hz 正弦参考与阻抗控制。若任一电机没有有效反馈，固件仍可能用零位继续，
+因此阶段 0 验收时必须同时检查日志中没有 `No feedback from motor`。
+
+### imp_stop — 停止双电机基线控制
+
+```text
+imp_stop
+```
+
+停止 100 Hz 定时器控制并向两台电机发送失能命令。
 
 ---
 

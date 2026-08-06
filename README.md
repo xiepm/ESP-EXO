@@ -12,6 +12,10 @@ ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 E
 
 > 当前代码仍属于 `esp_can` 原型基线，不代表最终产品架构。后续将按照公共类型、RS01 驱动、髋关节对象、单一 100 Hz 控制任务、状态机、BLE 产品协议和步态控制等阶段逐步重构。
 
+阶段 0 的软件基线、构建证据和硬件验收边界见
+[阶段 0 基线](docs/baseline/PHASE_0_BASELINE.md)。连接开发板后的逐项验证见
+[硬件冒烟测试](docs/baseline/SMOKE_TEST.md)。
+
 ## 目录
 
 ```text
@@ -37,10 +41,18 @@ GPIO、电机左右安装关系和软件零位应以实际设备标定结果为�
 
 ## 构建
 
-先安装并激活 ESP-IDF 5.x 环境，然后在仓库根目录执行：
+本基线锁定 ESP-IDF v5.5（内部版本 5.5.0）。在 PowerShell 中激活环境后构建：
 
 ```powershell
+. 'C:\Espressif\tools\Microsoft.v5.5.PowerShell_profile.ps1'
+cd D:\ESP32\esp_can
 idf.py build
+```
+
+执行阶段 0 的干净构建、尺寸检查和产物检查：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\verify_phase0.ps1
 ```
 
 烧录并打开串口监视器：

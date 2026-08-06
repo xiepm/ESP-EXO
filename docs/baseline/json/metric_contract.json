@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "baseline_id": "esp-can-prototype-v0.1",
+  "baseline_kind": "verify-local-existing",
+  "acceptance_target": "phase0_reproducible_firmware",
+  "status": "blocked_by_hardware_connection",
+  "path": ".",
+  "task": {
+    "identity": "build-and-smoke-current-esp-can-prototype",
+    "description": "Freeze the observable pre-refactor ESP32-S3 firmware baseline."
+  },
+  "dataset": {
+    "identity": "not_applicable",
+    "split": "not_applicable",
+    "reason": "This comparator is embedded firmware, not a dataset evaluation."
+  },
+  "evaluation": {
+    "build_script": "tools/verify_phase0.ps1",
+    "hardware_checklist": "docs/baseline/SMOKE_TEST.md",
+    "required_path": "fullclean -> build -> size -> flash -> boot/UART/BLE/CAN/motor smoke"
+  },
+  "primary_metric": "build_success",
+  "metric_directions": {
+    "build_success": "must_equal_true",
+    "app_partition_overflow_bytes": "must_equal_zero",
+    "boot_smoke_success": "must_equal_true",
+    "dual_motor_smoke_success": "must_equal_true"
+  },
+  "metrics_summary": {
+    "build_success": {
+      "value": true,
+      "required": true,
+      "description": "ESP-IDF v5.5 full project build exits successfully.",
+      "derivation": "A completed 1180-step idf.py build on 2026-08-06.",
+      "source_ref": "docs/baseline/PHASE_0_BASELINE.md"
+    },
+    "app_partition_overflow_bytes": {
+      "value": 0,
+      "required": true,
+      "description": "Application image does not exceed the 1 MiB app partition.",
+      "derivation": "idf.py size; image 608233 bytes with about 42 percent free.",
+      "source_ref": "docs/baseline/PHASE_0_BASELINE.md"
+    },
+    "boot_smoke_success": {
+      "value": null,
+      "required": true,
+      "description": "The flashed ESP32-S3 boots and runs for 60 seconds without reset or panic.",
+      "origin_path": "docs/baseline/SMOKE_TEST.md",
+      "source_ref": "pending: no ESP32-S3 port connected on 2026-08-06"
+    },
+    "dual_motor_smoke_success": {
+      "value": null,
+      "required": true,
+      "description": "Both RS01 devices report independently and complete the impedance start/stop smoke.",
+      "origin_path": "docs/baseline/SMOKE_TEST.md",
+      "source_ref": "pending: hardware stack not connected on 2026-08-06"
+    }
+  },
+  "environment": {
+    "host": "Windows",
+    "target": "esp32s3",
+    "esp_idf": "v5.5",
+    "cmake": "3.30.2",
+    "ninja": "1.12.1",
+    "compiler": "xtensa-esp-elf 14.2.0 esp-14.2.0_20241119"
+  },
+  "source": {
+    "repository": "https://github.com/xiepm/ESP-EXO.git",
+    "baseline_parent_commit": "0946666e00b48e4263c38edb86b100b7fd0e0611",
+    "upstream_repository": "https://github.com/saltedfish12138/esp_can.git",
+    "upstream_commit": "52a70d9",
+    "baseline_ref": "baseline-esp-can-v0.1"
+  },
+  "known_deviations": [
+    "sdkconfig was regenerated from ESP-IDF 5.3.1 to 5.5.0 without an intended product behavior change.",
+    "Hardware smoke evidence is pending because only Bluetooth RFCOMM COM3/COM4 were online.",
+    "The current feedback snapshot and BLE feedback cannot reliably attribute simultaneous dual-motor feedback."
+  ],
+  "next_route": "Connect the ESP32-S3, execute docs/baseline/SMOKE_TEST.md, record evidence, then promote to baseline-esp-can-v0."
+}
