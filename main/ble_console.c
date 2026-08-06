@@ -60,6 +60,7 @@ static SemaphoreHandle_t s_cmd_mutex;
 
 /* ---- RX line buffer ---- */
 #define LINE_BUF_SIZE  256
+#define EXO_CONSOLE_TASK_CORE 0
 static StreamBufferHandle_t s_rx_streambuf;
 
 /* ---- Current target logical actuator; A/B do not imply left/right. ---- */
@@ -1546,14 +1547,14 @@ esp_err_t ble_console_init(void)
     nimble_port_freertos_init(ble_host_task);
 
     /* Create console command processing task */
-    if (xTaskCreate(ble_console_task, "ble_console", 4096, NULL, 5, NULL) !=
-        pdPASS) {
+    if (xTaskCreatePinnedToCore(ble_console_task, "ble_console", 4096, NULL, 5,
+                                NULL, EXO_CONSOLE_TASK_CORE) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create BLE console task");
         return ESP_ERR_NO_MEM;
     }
 
-    if (xTaskCreate(uart_console_task, "uart_console", 4096, NULL, 5, NULL) !=
-        pdPASS) {
+    if (xTaskCreatePinnedToCore(uart_console_task, "uart_console", 4096, NULL,
+                                5, NULL, EXO_CONSOLE_TASK_CORE) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create programming UART console task");
         return ESP_ERR_NO_MEM;
     }
