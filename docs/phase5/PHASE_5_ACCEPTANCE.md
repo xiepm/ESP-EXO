@@ -11,7 +11,7 @@
 
 | 记录项 | 值 |
 |---|---|
-| 阶段 5 实现提交 | 待填写 |
+| 阶段 5 实现提交 | `c152b02c50534314c05d0afb8d69fbffab633355` |
 | 最终验收提交 | 待填写 |
 | 正式标签 | 计划为 `phase5-system-state-start-stop` |
 | ESP-IDF 版本 | `v5.5` |
@@ -123,9 +123,9 @@ idf.py build
 
 | 产物 | 大小 | SHA-256 |
 |---|---:|---|
-| 应用 `.bin` | 626,384 bytes | `F3542A2D44EA106C1A402B0100540E1DBACB1A6D9007C0F7FB7FD8194B7099CD` |
-| 应用 `.elf` | 7,498,544 bytes | `6E2EE0376D04FB2576043B9F793FE2450140AD6590F573224814E4E5F62EA745` |
-| `bootloader.bin` | 21,088 bytes | `F08425EA8A257813C607D002BE038F7A278A1BA6AA9385221D2781FE6828388E` |
+| 应用 `.bin` | 626,384 bytes | `31A5F96C4976250278BAD0FA14B65470C9A193A7C46BBE21A532A9FD947A4C83` |
+| 应用 `.elf` | 7,498,544 bytes | `ADE352A6F3E10A6500C278B4E7C679DB6B2C57618ADE1E1F2FE0DB4628553C10` |
+| `bootloader.bin` | 21,088 bytes | `8CD6BB7AC8D5A0820E87FC58877DB5326989D534F9BF57696A7503D65F89A1C9` |
 | `partition-table.bin` | 3,072 bytes | `7F00B6C042A89B15B0CAC534F82ED988CAF29278FF5700B0C511EB1B5BB7C820` |
 
 ## 无运动实机验收
@@ -157,7 +157,7 @@ idf.py build
 
 | 关节 | 软件零位 | feedback count | timestamp | `joint_valid` |
 |---|---:|---:|---:|---|
-| LEFT（B，`+1`） | 临时门控值 `4.700 rad`，已清除 | `979` | `9842915 us` | 临时为 YES，最终为 no |
+| LEFT（B，`+1`） | 临时门控值 `4.700 rad`，已清除 | `850` | `8603071 us` | 临时为 YES，最终为 no |
 | RIGHT（A，`-1`） | 待填写 | 待填写 | 待填写 | 待填写 |
 
 LEFT 的值只用于验证单侧门控，不代表中立位标定；测试后已执行 `joint_zero_clear left`。
@@ -169,14 +169,14 @@ LEFT 的值只用于验证单侧门控，不代表中立位标定；测试后已
 |---|---|---|---|---|
 | IDLE 重复 STOP | stop req/success/failure=`0/0/0`，transition=1 | 连续发送 STOP | `2/0/0`，transition=1 | PASS，两次均 `ALREADY_SATISFIED` |
 | IDLE 维护作用域 | LEFT zero invalid | 临时 `joint_zero left`，随后 clear | 维护结束后 inactive，LEFT 再次 invalid | PASS，操作作用域正常释放 |
-| BLE 断开重连 | control/executor=`0x3fc9ffa4/0x3fca11cc`，IDLE，transition=1 | 两次连接 `44:1B:F6:FE:22:C2` 并查询状态 | identity/state/target/transition 均不变；cycle `1118 -> 3899` | PASS |
+| BLE 断开重连 | control/executor=`0x3fc9ffa4/0x3fca11cc`，IDLE，transition=1 | 两次连接 `44:1B:F6:FE:22:C2` 并查询状态 | identity/state/target/transition 均不变；cycle `1078 -> 3714` | PASS |
 
 BLE 重连前后必须比较控制任务 identity、执行器任务 identity、`run_requested`、
 `output_allowed` 和状态转换计数，不能只检查命令仍能响应。
 
 最终无运动会话中，START request/rejected=`2/2`，start success/failure/cancel=`0/0/0`；
 TWAI 始终 RUNNING，TX/RX error、TX failed、bus error、arbitration lost 和 RX missed
-均为 0。控制周期均值 10,000 us，最大周期误差 499 us，deadline/skipped/output error
+均为 0。最终控制周期均值 9,999 us（100.010 Hz），最大周期误差 499 us，deadline/skipped/output error
 均为 0。最终 A/B 仍为 REST、未使能、零故障，LEFT/RIGHT RAM 软件零位均无效。
 
 已知调试边界：IDLE 下的维护控制台仍允许人工执行 `enable/move` 等底层命令，因此
