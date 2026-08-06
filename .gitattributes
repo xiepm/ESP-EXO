@@ -1,0 +1,5 @@
+# Preserve hardware evidence byte-for-byte, including serial CR/ANSI control data.
+docs/baseline/evidence/raw/*.txt binary
+
+# Keep structured evidence stable across Windows and Unix checkouts.
+docs/baseline/evidence/*.json text eol=lf

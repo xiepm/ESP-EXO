@@ -1,0 +1,244 @@
+{
+  "analysis_schema_version": 1,
+  "analysis_mode": "offline_replay_of_saved_hardware_transcript",
+  "source_capture_path": "docs/baseline/evidence/raw/esp_exo_phase0_impedance_20260806.txt",
+  "source_capture_bytes": 57689,
+  "source_capture_sha256": "121AAB98C0966126AD6EF3FC6FCBECC4678AD24CD20F6A7E1F6CA5AF1C824A89",
+  "source_inline_result_pass": true,
+  "port": "COM5",
+  "started_at_utc": "2026-08-06T06:57:21.688493+00:00",
+  "completed_at_utc": "2026-08-06T06:58:16.133743+00:00",
+  "cycles": 3,
+  "run_seconds_per_cycle": 10.0,
+  "initial_status": {
+    "running": true,
+    "tx_error": 0,
+    "rx_error": 0,
+    "tx_failed": 0,
+    "bus_error": 0,
+    "arbitration_lost": 0,
+    "rx_missed": 0
+  },
+  "cycle_results": [
+    {
+      "cycle": 1,
+      "status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "fatal_markers": {
+        "No feedback from motor": false,
+        "ext TX failed": false,
+        "State:             BUS_OFF": false,
+        "State:             RECOVERING": false,
+        "Guru Meditation Error": false,
+        "assert failed": false,
+        "Task watchdog got triggered": false,
+        "Interrupt wdt timeout": false,
+        "Brownout detector was triggered": false,
+        "Rebooting...": false
+      },
+      "feedback_samples_logged": {
+        "0x10": 44,
+        "0x20": 6
+      },
+      "logged_angle_span_rad": {
+        "0x10": 0.8360000000000003,
+        "0x20": 0.43199999999999994
+      },
+      "motion_observed_both_motors": true,
+      "feedback_from_both_motors": true,
+      "motion_characterization": {
+        "shared_frequency_hz": 0.504,
+        "period_seconds": 1.9841269841269842,
+        "absolute_phase_difference_degrees": 176.8202317036581,
+        "sample_coverage_seconds": {
+          "0x10": 9.6,
+          "0x20": 9.0
+        },
+        "longest_dense_segment": {
+          "0x10": {
+            "duration_seconds": 7.8,
+            "sample_count": 40
+          },
+          "0x20": {
+            "duration_seconds": 0.8,
+            "sample_count": 5
+          }
+        },
+        "fit_by_motor": {
+          "0x10": {
+            "amplitude_rad": 0.3936313690168793,
+            "r_squared": 0.885324046172702
+          },
+          "0x20": {
+            "amplitude_rad": 0.39643136719081284,
+            "r_squared": 0.9726709699334347
+          }
+        },
+        "pass": false
+      },
+      "pass": true
+    },
+    {
+      "cycle": 2,
+      "status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "fatal_markers": {
+        "No feedback from motor": false,
+        "ext TX failed": false,
+        "State:             BUS_OFF": false,
+        "State:             RECOVERING": false,
+        "Guru Meditation Error": false,
+        "assert failed": false,
+        "Task watchdog got triggered": false,
+        "Interrupt wdt timeout": false,
+        "Brownout detector was triggered": false,
+        "Rebooting...": false
+      },
+      "feedback_samples_logged": {
+        "0x10": 14,
+        "0x20": 36
+      },
+      "logged_angle_span_rad": {
+        "0x10": 0.8479999999999999,
+        "0x20": 0.9420000000000002
+      },
+      "motion_observed_both_motors": true,
+      "feedback_from_both_motors": true,
+      "motion_characterization": {
+        "shared_frequency_hz": 0.498,
+        "period_seconds": 2.0080321285140563,
+        "absolute_phase_difference_degrees": 178.3941316469056,
+        "sample_coverage_seconds": {
+          "0x10": 2.6,
+          "0x20": 9.8
+        },
+        "longest_dense_segment": {
+          "0x10": {
+            "duration_seconds": 2.6,
+            "sample_count": 14
+          },
+          "0x20": {
+            "duration_seconds": 4.8,
+            "sample_count": 25
+          }
+        },
+        "fit_by_motor": {
+          "0x10": {
+            "amplitude_rad": 0.45886525894566443,
+            "r_squared": 0.9907909767374885
+          },
+          "0x20": {
+            "amplitude_rad": 0.44975398912362075,
+            "r_squared": 0.8677403460584413
+          }
+        },
+        "pass": true
+      },
+      "pass": true
+    },
+    {
+      "cycle": 3,
+      "status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "fatal_markers": {
+        "No feedback from motor": false,
+        "ext TX failed": false,
+        "State:             BUS_OFF": false,
+        "State:             RECOVERING": false,
+        "Guru Meditation Error": false,
+        "assert failed": false,
+        "Task watchdog got triggered": false,
+        "Interrupt wdt timeout": false,
+        "Brownout detector was triggered": false,
+        "Rebooting...": false
+      },
+      "feedback_samples_logged": {
+        "0x10": 44,
+        "0x20": 6
+      },
+      "logged_angle_span_rad": {
+        "0x10": 0.8489999999999998,
+        "0x20": 0.41500000000000004
+      },
+      "motion_observed_both_motors": true,
+      "feedback_from_both_motors": true,
+      "motion_characterization": {
+        "shared_frequency_hz": 0.5,
+        "period_seconds": 2.0,
+        "absolute_phase_difference_degrees": 172.6849248187979,
+        "sample_coverage_seconds": {
+          "0x10": 9.6,
+          "0x20": 9.0
+        },
+        "longest_dense_segment": {
+          "0x10": {
+            "duration_seconds": 7.8,
+            "sample_count": 40
+          },
+          "0x20": {
+            "duration_seconds": 0.8,
+            "sample_count": 5
+          }
+        },
+        "fit_by_motor": {
+          "0x10": {
+            "amplitude_rad": 0.4004905525668491,
+            "r_squared": 0.8899109914157043
+          },
+          "0x20": {
+            "amplitude_rad": 0.36748136835256984,
+            "r_squared": 0.9911814680336459
+          }
+        },
+        "pass": false
+      },
+      "pass": true
+    }
+  ],
+  "signal_validation": {
+    "method": "shared-frequency fit; at least one cycle has >=10 samples and >=2.2 seconds dense coverage per motor; each motor has >=8 seconds total coverage in at least one cycle",
+    "minimum_joint_cycle_passes": 1,
+    "joint_cycle_passes": 1,
+    "long_coverage_by_motor": {
+      "0x10": true,
+      "0x20": true
+    },
+    "pass": true
+  },
+  "final_status": {
+    "running": true,
+    "tx_error": 0,
+    "rx_error": 0,
+    "tx_failed": 0,
+    "bus_error": 0,
+    "arbitration_lost": 0,
+    "rx_missed": 0
+  },
+  "final_cleanup_command_acknowledgements": {
+    "impedance_stopped_or_already_stopped": true,
+    "report_off_count": 2,
+    "disable_command_count": 2
+  },
+  "pass": true
+}

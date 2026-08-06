@@ -1,0 +1,814 @@
+# RESULT JSON
+{
+  "port": "COM5",
+  "started_at_utc": "2026-08-06T06:59:50.249538+00:00",
+  "completed_at_utc": "2026-08-06T07:01:02.885586+00:00",
+  "observe_seconds_per_motor": 30.0,
+  "observation_requirement_met": true,
+  "before": {
+    "running": true,
+    "tx_error": 0,
+    "rx_error": 0,
+    "tx_failed": 0,
+    "bus_error": 0,
+    "arbitration_lost": 0,
+    "rx_missed": 0
+  },
+  "motors": {
+    "0x10": {
+      "selected": true,
+      "report_on_ack": true,
+      "sample_count": 150,
+      "feedback_seen_within_5_seconds": true,
+      "finite_samples": true,
+      "samples_in_motor_type_5_range": true,
+      "last_sample": [
+        "24",
+        "0",
+        "-3.889",
+        "-0.054",
+        "-0.000",
+        "31.9"
+      ],
+      "can_status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "report_off_ack": true,
+      "pass": true
+    },
+    "0x20": {
+      "selected": true,
+      "report_on_ack": true,
+      "sample_count": 150,
+      "feedback_seen_within_5_seconds": true,
+      "finite_samples": true,
+      "samples_in_motor_type_5_range": true,
+      "last_sample": [
+        "24",
+        "0",
+        "3.390",
+        "-0.111",
+        "-0.000",
+        "31.9"
+      ],
+      "can_status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "report_off_ack": true,
+      "pass": true
+    }
+  },
+  "after": {
+    "running": true,
+    "tx_error": 0,
+    "rx_error": 0,
+    "tx_failed": 0,
+    "bus_error": 0,
+    "arbitration_lost": 0,
+    "rx_missed": 0
+  },
+  "counter_delta": {
+    "tx_error": 0,
+    "rx_error": 0,
+    "tx_failed": 0,
+    "bus_error": 0,
+    "arbitration_lost": 0,
+    "rx_missed": 0
+  },
+  "pass": true
+}
+
+# TRANSCRIPT
+# CAN STATUS BEFORE
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+
+# 0x10 SELECT
+OK: target motor set to 0x10 (16)
+
+# 0x10 REPORT ON
+OK: motor 0x10 proactive report ON
+[0;32mI (1312876) main: RX: ext=0x020010FD std=0x000 dlc=8 data=58647FAB7FFF013F[0m
+[0;32mI (1312876) main: FB: id=16 mode=2 status=0 ang=-3.890 spd=-0.129 tq=-0.000 tmp=31.9[0m
+[0;32mI (1313076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF77FFF013F[0m
+[0;32mI (1313076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.013 tq=-0.000 tmp=31.9[0m
+[0;32mI (1313276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580127FFF013F[0m
+[0;32mI (1313276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.028 tq=-0.000 tmp=31.9[0m
+[0;32mI (1313476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864801F7FFF013F[0m
+[0;32mI (1313476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.048 tq=-0.000 tmp=31.9[0m
+
+# 0x10 FEEDBACK
+[0;32mI (1313676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480057FFF013F[0m
+[0;32mI (1313676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.008 tq=-0.000 tmp=31.9[0m
+[0;32mI (1313876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FAF7FFF013F[0m
+[0;32mI (1313876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.123 tq=-0.000 tmp=31.9[0m
+[0;32mI (1314076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FEF7FFF013F[0m
+[0;32mI (1314076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1314276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865800F7FFF013F[0m
+[0;32mI (1314276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.024 tq=-0.000 tmp=31.9[0m
+[0;32mI (1314476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE87FFF013F[0m
+[0;32mI (1314476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1314676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FCF7FFF013F[0m
+[0;32mI (1314676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.074 tq=-0.000 tmp=31.9[0m
+[0;32mI (1314876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FB37FFF013F[0m
+[0;32mI (1314876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.117 tq=-0.000 tmp=31.9[0m
+[0;32mI (1315076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FE97FFF013F[0m
+[0;32mI (1315076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1315276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE67FFF013F[0m
+[0;32mI (1315276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.039 tq=-0.000 tmp=31.9[0m
+[0;32mI (1315476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FFB7FFF013F[0m
+[0;32mI (1315476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1315676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480317FFF013F[0m
+[0;32mI (1315676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.076 tq=-0.000 tmp=31.9[0m
+[0;32mI (1315876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580547FFF013F[0m
+[0;32mI (1315876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.129 tq=-0.000 tmp=31.9[0m
+[0;32mI (1316076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FDA7FFF013F[0m
+[0;32mI (1316076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1316276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE47FFF013F[0m
+[0;32mI (1316276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.042 tq=-0.000 tmp=31.9[0m
+[0;32mI (1316476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FC17FFF013F[0m
+[0;32mI (1316476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.095 tq=-0.000 tmp=31.9[0m
+[0;32mI (1316676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FFB7FFF013F[0m
+[0;32mI (1316676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1316876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865800B7FFF013F[0m
+[0;32mI (1316876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.018 tq=-0.000 tmp=31.9[0m
+[0;32mI (1317076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480387FFF013F[0m
+[0;32mI (1317076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.086 tq=-0.000 tmp=31.9[0m
+[0;32mI (1317276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF77FFF013F[0m
+[0;32mI (1317276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.013 tq=-0.000 tmp=31.9[0m
+[0;32mI (1317476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480357FFF013F[0m
+[0;32mI (1317476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.082 tq=-0.000 tmp=31.9[0m
+[0;32mI (1317676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865800C7FFF013F[0m
+[0;32mI (1317676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1317876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FEE7FFF013F[0m
+[0;32mI (1317876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1318076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480107FFF013F[0m
+[0;32mI (1318076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1318276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480257FFF013F[0m
+[0;32mI (1318276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1318476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FD07FFF013F[0m
+[0;32mI (1318476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.072 tq=-0.000 tmp=31.9[0m
+[0;32mI (1318676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864800A7FFF013F[0m
+[0;32mI (1318676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.016 tq=-0.000 tmp=31.9[0m
+[0;32mI (1318876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FEF7FFF013F[0m
+[0;32mI (1318876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1319076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FF97FFF013F[0m
+[0;32mI (1319076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.010 tq=-0.000 tmp=31.9[0m
+[0;32mI (1319276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480127FFF013F[0m
+[0;32mI (1319276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.028 tq=-0.000 tmp=31.9[0m
+[0;32mI (1319476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480257FFF013F[0m
+[0;32mI (1319476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1319676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE57FFF013F[0m
+[0;32mI (1319676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.040 tq=-0.000 tmp=31.9[0m
+[0;32mI (1319876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FEC7FFF013F[0m
+[0;32mI (1319876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.030 tq=-0.000 tmp=31.9[0m
+[0;32mI (1320076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE67FFF013F[0m
+[0;32mI (1320076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.039 tq=-0.000 tmp=31.9[0m
+[0;32mI (1320276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480017FFF013F[0m
+[0;32mI (1320276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1320476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580147FFF013F[0m
+[0;32mI (1320476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.031 tq=-0.000 tmp=31.9[0m
+[0;32mI (1320676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF37FFF013F[0m
+[0;32mI (1320676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1320876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FD17FFF013F[0m
+[0;32mI (1320876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.071 tq=-0.000 tmp=31.9[0m
+[0;32mI (1321076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FC37FFF013F[0m
+[0;32mI (1321076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.092 tq=-0.000 tmp=31.9[0m
+[0;32mI (1321276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FC37FFF013F[0m
+[0;32mI (1321276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.092 tq=-0.000 tmp=31.9[0m
+[0;32mI (1321476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865800D7FFF013F[0m
+[0;32mI (1321476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1321676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480057FFF013F[0m
+[0;32mI (1321676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.008 tq=-0.000 tmp=31.9[0m
+[0;32mI (1321876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDC7FFF013F[0m
+[0;32mI (1321876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.054 tq=-0.000 tmp=31.9[0m
+[0;32mI (1322076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480327FFF013F[0m
+[0;32mI (1322076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.077 tq=-0.000 tmp=31.9[0m
+[0;32mI (1322276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FD97FFF013F[0m
+[0;32mI (1322276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.059 tq=-0.000 tmp=31.9[0m
+[0;32mI (1322476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE47FFF013F[0m
+[0;32mI (1322486) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.042 tq=-0.000 tmp=31.9[0m
+[0;32mI (1322676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480227FFF013F[0m
+[0;32mI (1322686) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.053 tq=-0.000 tmp=31.9[0m
+[0;32mI (1322876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FD87FFF013F[0m
+[0;32mI (1322886) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1323076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580037FFF013F[0m
+[0;32mI (1323086) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.005 tq=-0.000 tmp=31.9[0m
+[0;32mI (1323276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480217FFF013F[0m
+[0;32mI (1323286) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1323476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDD7FFF013F[0m
+[0;32mI (1323476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.053 tq=-0.000 tmp=31.9[0m
+[0;32mI (1323676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FBE7FFF013F[0m
+[0;32mI (1323676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.100 tq=-0.000 tmp=31.9[0m
+[0;32mI (1323876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FDF7FFF013F[0m
+[0;32mI (1323876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.050 tq=-0.000 tmp=31.9[0m
+[0;32mI (1324076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDE7FFF013F[0m
+[0;32mI (1324076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1324276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FA47FFF013F[0m
+[0;32mI (1324276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.140 tq=-0.000 tmp=31.9[0m
+[0;32mI (1324476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580157FFF013F[0m
+[0;32mI (1324476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.033 tq=-0.000 tmp=31.9[0m
+[0;32mI (1324676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580127FFF013F[0m
+[0;32mI (1324676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.028 tq=-0.000 tmp=31.9[0m
+[0;32mI (1324876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580617FFF013F[0m
+[0;32mI (1324876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.149 tq=-0.000 tmp=31.9[0m
+[0;32mI (1325076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580217FFF013F[0m
+[0;32mI (1325076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1325276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FAE7FFF013F[0m
+[0;32mI (1325276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.124 tq=-0.000 tmp=31.9[0m
+[0;32mI (1325476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF17FFF013F[0m
+[0;32mI (1325476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.022 tq=-0.000 tmp=31.9[0m
+[0;32mI (1325676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FD57FFF013F[0m
+[0;32mI (1325676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.065 tq=-0.000 tmp=31.9[0m
+[0;32mI (1325876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FFE7FFF013F[0m
+[0;32mI (1325876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1326076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FBB7FFF013F[0m
+[0;32mI (1326076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.105 tq=-0.000 tmp=31.9[0m
+[0;32mI (1326276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865803F7FFF013F[0m
+[0;32mI (1326276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.097 tq=-0.000 tmp=31.9[0m
+[0;32mI (1326476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580267FFF013F[0m
+[0;32mI (1326476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.059 tq=-0.000 tmp=31.9[0m
+[0;32mI (1326676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE37FFF013F[0m
+[0;32mI (1326676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.043 tq=-0.000 tmp=31.9[0m
+[0;32mI (1326876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480107FFF013F[0m
+[0;32mI (1326876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1327076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864803E7FFF013F[0m
+[0;32mI (1327076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.095 tq=-0.000 tmp=31.9[0m
+[0;32mI (1327276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FFF7FFF013F[0m
+[0;32mI (1327276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.001 tq=-0.000 tmp=31.9[0m
+[0;32mI (1327476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDA7FFF013F[0m
+[0;32mI (1327476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1327676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FFD7FFF013F[0m
+[0;32mI (1327676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.004 tq=-0.000 tmp=31.9[0m
+[0;32mI (1327876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580527FFF013F[0m
+[0;32mI (1327876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.126 tq=-0.000 tmp=31.9[0m
+[0;32mI (1328076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864800C7FFF013F[0m
+[0;32mI (1328076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1328276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FB07FFF013F[0m
+[0;32mI (1328276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.121 tq=-0.000 tmp=31.9[0m
+[0;32mI (1328476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864800C7FFF013F[0m
+[0;32mI (1328476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1328676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580437FFF013F[0m
+[0;32mI (1328676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.103 tq=-0.000 tmp=31.9[0m
+[0;32mI (1328876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580617FFF013F[0m
+[0;32mI (1328876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.149 tq=-0.000 tmp=31.9[0m
+[0;32mI (1329076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580477FFF013F[0m
+[0;32mI (1329076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.109 tq=-0.000 tmp=31.9[0m
+[0;32mI (1329276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FC57FFF013F[0m
+[0;32mI (1329276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.089 tq=-0.000 tmp=31.9[0m
+[0;32mI (1329476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580157FFF013F[0m
+[0;32mI (1329476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.033 tq=-0.000 tmp=31.9[0m
+[0;32mI (1329676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580337FFF013F[0m
+[0;32mI (1329676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.079 tq=-0.000 tmp=31.9[0m
+[0;32mI (1329876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580417FFF013F[0m
+[0;32mI (1329876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.100 tq=-0.000 tmp=31.9[0m
+[0;32mI (1330076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF97FFF013F[0m
+[0;32mI (1330076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.010 tq=-0.000 tmp=31.9[0m
+[0;32mI (1330276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580237FFF013F[0m
+[0;32mI (1330276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.054 tq=-0.000 tmp=31.9[0m
+[0;32mI (1330476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FEF7FFF013F[0m
+[0;32mI (1330476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1330676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580087FFF013F[0m
+[0;32mI (1330676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.013 tq=-0.000 tmp=31.9[0m
+[0;32mI (1330876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480027FFF013F[0m
+[0;32mI (1330876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.004 tq=-0.000 tmp=31.9[0m
+[0;32mI (1331076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480177FFF013F[0m
+[0;32mI (1331076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1331276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FD17FFF013F[0m
+[0;32mI (1331276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.071 tq=-0.000 tmp=31.9[0m
+[0;32mI (1331476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF87FFF013F[0m
+[0;32mI (1331476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1331676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580227FFF013F[0m
+[0;32mI (1331676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.053 tq=-0.000 tmp=31.9[0m
+[0;32mI (1331876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865803B7FFF013F[0m
+[0;32mI (1331876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.091 tq=-0.000 tmp=31.9[0m
+[0;32mI (1332076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF37FFF013F[0m
+[0;32mI (1332076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1332276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FEC7FFF013F[0m
+[0;32mI (1332276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.030 tq=-0.000 tmp=31.9[0m
+[0;32mI (1332476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480287FFF013F[0m
+[0;32mI (1332476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.062 tq=-0.000 tmp=31.9[0m
+[0;32mI (1332676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FC97FFF013F[0m
+[0;32mI (1332676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.083 tq=-0.000 tmp=31.9[0m
+[0;32mI (1332876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE07FFF013F[0m
+[0;32mI (1332876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.048 tq=-0.000 tmp=31.9[0m
+[0;32mI (1333076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580277FFF013F[0m
+[0;32mI (1333076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1333276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480017FFF013F[0m
+[0;32mI (1333276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1333476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FEE7FFF013F[0m
+[0;32mI (1333476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1333676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864800D7FFF013F[0m
+[0;32mI (1333676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1333876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480177FFF013F[0m
+[0;32mI (1333876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1334076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE57FFF013F[0m
+[0;32mI (1334076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.040 tq=-0.000 tmp=31.9[0m
+[0;32mI (1334276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580207FFF013F[0m
+[0;32mI (1334276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.050 tq=-0.000 tmp=31.9[0m
+[0;32mI (1334476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE97FFF013F[0m
+[0;32mI (1334476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1334676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDD7FFF013F[0m
+[0;32mI (1334676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.053 tq=-0.000 tmp=31.9[0m
+[0;32mI (1334876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480157FFF013F[0m
+[0;32mI (1334876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.033 tq=-0.000 tmp=31.9[0m
+[0;32mI (1335076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF57FFF013F[0m
+[0;32mI (1335076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.016 tq=-0.000 tmp=31.9[0m
+[0;32mI (1335276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FDC7FFF013F[0m
+[0;32mI (1335276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.054 tq=-0.000 tmp=31.9[0m
+[0;32mI (1335476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF37FFF013F[0m
+[0;32mI (1335476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1335676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864802B7FFF013F[0m
+[0;32mI (1335676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.066 tq=-0.000 tmp=31.9[0m
+[0;32mI (1335876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865803A7FFF013F[0m
+[0;32mI (1335876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.089 tq=-0.000 tmp=31.9[0m
+[0;32mI (1336076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580027FFF013F[0m
+[0;32mI (1336076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.004 tq=-0.000 tmp=31.9[0m
+[0;32mI (1336276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF17FFF013F[0m
+[0;32mI (1336276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.022 tq=-0.000 tmp=31.9[0m
+[0;32mI (1336476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDE7FFF013F[0m
+[0;32mI (1336476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1336676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480007FFF013F[0m
+[0;32mI (1336676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.001 tq=-0.000 tmp=31.9[0m
+[0;32mI (1336876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865802F7FFF013F[0m
+[0;32mI (1336876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.072 tq=-0.000 tmp=31.9[0m
+[0;32mI (1337076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FCC7FFF013F[0m
+[0;32mI (1337076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.079 tq=-0.000 tmp=31.9[0m
+[0;32mI (1337276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864801B7FFF013F[0m
+[0;32mI (1337276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.042 tq=-0.000 tmp=31.9[0m
+[0;32mI (1337476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480167FFF013F[0m
+[0;32mI (1337476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1337676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580177FFF013F[0m
+[0;32mI (1337686) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1337876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480177FFF013F[0m
+[0;32mI (1337886) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1338076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580167FFF013F[0m
+[0;32mI (1338086) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1338276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF27FFF013F[0m
+[0;32mI (1338286) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1338476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480017FFF013F[0m
+[0;32mI (1338476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1338676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FC97FFF013F[0m
+[0;32mI (1338676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.083 tq=-0.000 tmp=31.9[0m
+[0;32mI (1338876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580427FFF013F[0m
+[0;32mI (1338876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.101 tq=-0.000 tmp=31.9[0m
+[0;32mI (1339076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480167FFF013F[0m
+[0;32mI (1339076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1339276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580127FFF013F[0m
+[0;32mI (1339276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.028 tq=-0.000 tmp=31.9[0m
+[0;32mI (1339476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FD67FFF013F[0m
+[0;32mI (1339476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.063 tq=-0.000 tmp=31.9[0m
+[0;32mI (1339676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480237FFF013F[0m
+[0;32mI (1339676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.054 tq=-0.000 tmp=31.9[0m
+[0;32mI (1339876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF87FFF013F[0m
+[0;32mI (1339876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1340076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580077FFF013F[0m
+[0;32mI (1340076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1340276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF07FFF013F[0m
+[0;32mI (1340276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.024 tq=-0.000 tmp=31.9[0m
+[0;32mI (1340476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FB57FFF013F[0m
+[0;32mI (1340476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.114 tq=-0.000 tmp=31.9[0m
+[0;32mI (1340676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF17FFF013F[0m
+[0;32mI (1340676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.022 tq=-0.000 tmp=31.9[0m
+[0;32mI (1340876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF07FFF013F[0m
+[0;32mI (1340876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.024 tq=-0.000 tmp=31.9[0m
+[0;32mI (1341076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480177FFF013F[0m
+[0;32mI (1341076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1341276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FE37FFF013F[0m
+[0;32mI (1341276) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.043 tq=-0.000 tmp=31.9[0m
+[0;32mI (1341476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480177FFF013F[0m
+[0;32mI (1341476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1341676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865805F7FFF013F[0m
+[0;32mI (1341676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.146 tq=-0.000 tmp=31.9[0m
+[0;32mI (1341876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480147FFF013F[0m
+[0;32mI (1341876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.031 tq=-0.000 tmp=31.9[0m
+[0;32mI (1342076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FEE7FFF013F[0m
+[0;32mI (1342076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1342276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864800A7FFF013F[0m
+[0;32mI (1342276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.016 tq=-0.000 tmp=31.9[0m
+[0;32mI (1342476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580037FFF013F[0m
+[0;32mI (1342476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.005 tq=-0.000 tmp=31.9[0m
+[0;32mI (1342676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865801A7FFF013F[0m
+[0;32mI (1342676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.040 tq=-0.000 tmp=31.9[0m
+[0;32mI (1342876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FB37FFF013F[0m
+[0;32mI (1342876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.117 tq=-0.000 tmp=31.9[0m
+[0;32mI (1343076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864801A7FFF013F[0m
+[0;32mI (1343076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.040 tq=-0.000 tmp=31.9[0m
+[0;32mI (1343276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDE7FFF013F[0m
+[0;32mI (1343276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1343476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FDC7FFF013F[0m
+[0;32mI (1343476) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.054 tq=-0.000 tmp=31.9[0m
+
+# 0x10 CAN STATUS
+[0;32mI (1343676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865802F7FFF013F[0m
+[0;32mI (1343676) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.072 tq=-0.000 tmp=31.9[0m
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+[0;32mI (1343876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580157FFF013F[0m
+[0;32mI (1343876) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.033 tq=-0.000 tmp=31.9[0m
+[0;32mI (1344076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480367FFF013F[0m
+[0;32mI (1344076) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.083 tq=-0.000 tmp=31.9[0m
+[0;32mI (1344276) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480147FFF013F[0m
+[0;32mI (1344276) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.031 tq=-0.000 tmp=31.9[0m
+[0;32mI (1344476) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480077FFF013F[0m
+[0;32mI (1344476) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1344676) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FEE7FFF013F[0m
+[0;32mI (1344676) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1344876) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FEE7FFF013F[0m
+[0;32mI (1344876) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1345076) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586580147FFF013F[0m
+[0;32mI (1345076) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.031 tq=-0.000 tmp=31.9[0m
+
+# 0x10 REPORT OFF
+OK: motor 0x10 proactive report OFF
+
+# 0x20 SELECT
+OK: target motor set to 0x20 (32)
+
+# 0x20 REPORT ON
+OK: motor 0x20 proactive report ON
+[0;32mI (1346836) main: RX: ext=0x020020FD std=0x000 dlc=8 data=A2857FF87FFF013F[0m
+[0;32mI (1346836) main: FB: id=32 mode=2 status=0 ang=3.390 spd=-0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1347036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FCA7FFF013F[0m
+[0;32mI (1347036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.082 tq=-0.000 tmp=31.9[0m
+[0;32mI (1347236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FEF7FFF013F[0m
+[0;32mI (1347236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1347436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FB87FFF013F[0m
+[0;32mI (1347436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.109 tq=-0.000 tmp=31.9[0m
+
+# 0x20 FEEDBACK
+[0;32mI (1347636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580187FFF013F[0m
+[0;32mI (1347646) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.037 tq=-0.000 tmp=31.9[0m
+[0;32mI (1347836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580107FFF013F[0m
+[0;32mI (1347846) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1348036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FEE7FFF013F[0m
+[0;32mI (1348046) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1348236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FFB7FFF013F[0m
+[0;32mI (1348246) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1348436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580017FFF013F[0m
+[0;32mI (1348446) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1348636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF37FFF013F[0m
+[0;32mI (1348646) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1348836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FE47FFF013F[0m
+[0;32mI (1348846) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.042 tq=-0.000 tmp=31.9[0m
+[0;32mI (1349036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FDA7FFF013F[0m
+[0;32mI (1349036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1349236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FB77FFF013F[0m
+[0;32mI (1349236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.111 tq=-0.000 tmp=31.9[0m
+[0;32mI (1349436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580047FFF013F[0m
+[0;32mI (1349436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1349636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285801C7FFF013F[0m
+[0;32mI (1349636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.043 tq=-0.000 tmp=31.9[0m
+[0;32mI (1349836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FFA7FFF013F[0m
+[0;32mI (1349836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.008 tq=-0.000 tmp=31.9[0m
+[0;32mI (1350036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FFE7FFF013F[0m
+[0;32mI (1350036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1350236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580027FFF013F[0m
+[0;32mI (1350236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.004 tq=-0.000 tmp=31.9[0m
+[0;32mI (1350436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FD27FFF013F[0m
+[0;32mI (1350436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.069 tq=-0.000 tmp=31.9[0m
+[0;32mI (1350636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285801E7FFF013F[0m
+[0;32mI (1350636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.047 tq=-0.000 tmp=31.9[0m
+[0;32mI (1350836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF07FFF013F[0m
+[0;32mI (1350836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.024 tq=-0.000 tmp=31.9[0m
+[0;32mI (1351036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A284800C7FFF013F[0m
+[0;32mI (1351036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1351236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580007FFF013F[0m
+[0;32mI (1351236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.001 tq=-0.000 tmp=31.9[0m
+[0;32mI (1351436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285801D7FFF013F[0m
+[0;32mI (1351436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.045 tq=-0.000 tmp=31.9[0m
+[0;32mI (1351636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FFB7FFF013F[0m
+[0;32mI (1351636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1351836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF57FFF013F[0m
+[0;32mI (1351836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.016 tq=-0.000 tmp=31.9[0m
+[0;32mI (1352036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580187FFF013F[0m
+[0;32mI (1352036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.037 tq=-0.000 tmp=31.9[0m
+[0;32mI (1352236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580137FFF013F[0m
+[0;32mI (1352236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.030 tq=-0.000 tmp=31.9[0m
+[0;32mI (1352436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FCB7FFF013F[0m
+[0;32mI (1352436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.080 tq=-0.000 tmp=31.9[0m
+[0;32mI (1352636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580327FFF013F[0m
+[0;32mI (1352636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.077 tq=-0.000 tmp=31.9[0m
+[0;32mI (1352836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FDF7FFF013F[0m
+[0;32mI (1352836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.050 tq=-0.000 tmp=31.9[0m
+[0;32mI (1353036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF47FFF013F[0m
+[0;32mI (1353036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.018 tq=-0.000 tmp=31.9[0m
+[0;32mI (1353236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285803E7FFF013F[0m
+[0;32mI (1353236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.095 tq=-0.000 tmp=31.9[0m
+[0;32mI (1353436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FD17FFF013F[0m
+[0;32mI (1353436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.071 tq=-0.000 tmp=31.9[0m
+[0;32mI (1353636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FFC7FFF013F[0m
+[0;32mI (1353636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.005 tq=-0.000 tmp=31.9[0m
+[0;32mI (1353836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580007FFF013F[0m
+[0;32mI (1353836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.001 tq=-0.000 tmp=31.9[0m
+[0;32mI (1354036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580197FFF013F[0m
+[0;32mI (1354036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.039 tq=-0.000 tmp=31.9[0m
+[0;32mI (1354236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580457FFF013F[0m
+[0;32mI (1354236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.106 tq=-0.000 tmp=31.9[0m
+[0;32mI (1354436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD07FFF013F[0m
+[0;32mI (1354436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.072 tq=-0.000 tmp=31.9[0m
+[0;32mI (1354636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580277FFF013F[0m
+[0;32mI (1354636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1354836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580087FFF013F[0m
+[0;32mI (1354836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.013 tq=-0.000 tmp=31.9[0m
+[0;32mI (1355036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580147FFF013F[0m
+[0;32mI (1355036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.031 tq=-0.000 tmp=31.9[0m
+[0;32mI (1355236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FFB7FFF013F[0m
+[0;32mI (1355236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1355436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FEF7FFF013F[0m
+[0;32mI (1355436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1355636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580217FFF013F[0m
+[0;32mI (1355636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1355836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580067FFF013F[0m
+[0;32mI (1355836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.010 tq=-0.000 tmp=31.9[0m
+[0;32mI (1356036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FD37FFF013F[0m
+[0;32mI (1356036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.068 tq=-0.000 tmp=31.9[0m
+[0;32mI (1356236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580267FFF013F[0m
+[0;32mI (1356236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.059 tq=-0.000 tmp=31.9[0m
+[0;32mI (1356436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD17FFF013F[0m
+[0;32mI (1356436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.071 tq=-0.000 tmp=31.9[0m
+[0;32mI (1356636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FEE7FFF013F[0m
+[0;32mI (1356636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1356836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FE67FFF013F[0m
+[0;32mI (1356836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.039 tq=-0.000 tmp=31.9[0m
+[0;32mI (1357036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285802D7FFF013F[0m
+[0;32mI (1357036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.069 tq=-0.000 tmp=31.9[0m
+[0;32mI (1357236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580077FFF013F[0m
+[0;32mI (1357236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1357436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A284800B7FFF013F[0m
+[0;32mI (1357436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.018 tq=-0.000 tmp=31.9[0m
+[0;32mI (1357636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580447FFF013F[0m
+[0;32mI (1357636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.105 tq=-0.000 tmp=31.9[0m
+[0;32mI (1357836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FE17FFF013F[0m
+[0;32mI (1357836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.047 tq=-0.000 tmp=31.9[0m
+[0;32mI (1358036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD27FFF013F[0m
+[0;32mI (1358036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.069 tq=-0.000 tmp=31.9[0m
+[0;32mI (1358236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285803C7FFF013F[0m
+[0;32mI (1358236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.092 tq=-0.000 tmp=31.9[0m
+[0;32mI (1358436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580037FFF013F[0m
+[0;32mI (1358436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.005 tq=-0.000 tmp=31.9[0m
+[0;32mI (1358636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD77FFF013F[0m
+[0;32mI (1358636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.062 tq=-0.000 tmp=31.9[0m
+[0;32mI (1358836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580197FFF013F[0m
+[0;32mI (1358836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.039 tq=-0.000 tmp=31.9[0m
+[0;32mI (1359036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF87FFF013F[0m
+[0;32mI (1359036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1359236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FEB7FFF013F[0m
+[0;32mI (1359236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.031 tq=-0.000 tmp=31.9[0m
+[0;32mI (1359436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580227FFF013F[0m
+[0;32mI (1359436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.053 tq=-0.000 tmp=31.9[0m
+[0;32mI (1359636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800B7FFF013F[0m
+[0;32mI (1359636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.018 tq=-0.000 tmp=31.9[0m
+[0;32mI (1359836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FD77FFF013F[0m
+[0;32mI (1359836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.062 tq=-0.000 tmp=31.9[0m
+[0;32mI (1360036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FE87FFF013F[0m
+[0;32mI (1360036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1360236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285803B7FFF013F[0m
+[0;32mI (1360236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.091 tq=-0.000 tmp=31.9[0m
+[0;32mI (1360436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285804C7FFF013F[0m
+[0;32mI (1360436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.117 tq=-0.000 tmp=31.9[0m
+[0;32mI (1360636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FF27FFF013F[0m
+[0;32mI (1360636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1360836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580527FFF013F[0m
+[0;32mI (1360836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.126 tq=-0.000 tmp=31.9[0m
+[0;32mI (1361036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580287FFF013F[0m
+[0;32mI (1361036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.062 tq=-0.000 tmp=31.9[0m
+[0;32mI (1361236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF77FFF013F[0m
+[0;32mI (1361236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.013 tq=-0.000 tmp=31.9[0m
+[0;32mI (1361436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD07FFF013F[0m
+[0;32mI (1361436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.072 tq=-0.000 tmp=31.9[0m
+[0;32mI (1361636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285802E7FFF013F[0m
+[0;32mI (1361636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.071 tq=-0.000 tmp=31.9[0m
+[0;32mI (1361836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF67FFF013F[0m
+[0;32mI (1361836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.014 tq=-0.000 tmp=31.9[0m
+[0;32mI (1362036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580267FFF013F[0m
+[0;32mI (1362036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.059 tq=-0.000 tmp=31.9[0m
+[0;32mI (1362236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28480017FFF013F[0m
+[0;32mI (1362236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1362436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FDE7FFF013F[0m
+[0;32mI (1362436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1362636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF87FFF013F[0m
+[0;32mI (1362636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1362836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580177FFF013F[0m
+[0;32mI (1362836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1363036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FFA7FFF013F[0m
+[0;32mI (1363036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.008 tq=-0.000 tmp=31.9[0m
+[0;32mI (1363236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800C7FFF013F[0m
+[0;32mI (1363236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1363436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FE17FFF013F[0m
+[0;32mI (1363436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.047 tq=-0.000 tmp=31.9[0m
+[0;32mI (1363636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A284801C7FFF013F[0m
+[0;32mI (1363636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.043 tq=-0.000 tmp=31.9[0m
+[0;32mI (1363836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF47FFF013F[0m
+[0;32mI (1363836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.018 tq=-0.000 tmp=31.9[0m
+[0;32mI (1364036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580277FFF013F[0m
+[0;32mI (1364036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1364236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580037FFF013F[0m
+[0;32mI (1364236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.005 tq=-0.000 tmp=31.9[0m
+[0;32mI (1364436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF07FFF013F[0m
+[0;32mI (1364436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.024 tq=-0.000 tmp=31.9[0m
+[0;32mI (1364636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285803A7FFF013F[0m
+[0;32mI (1364636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.089 tq=-0.000 tmp=31.9[0m
+[0;32mI (1364836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580037FFF013F[0m
+[0;32mI (1364836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.005 tq=-0.000 tmp=31.9[0m
+[0;32mI (1365036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FB57FFF013F[0m
+[0;32mI (1365036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.114 tq=-0.000 tmp=31.9[0m
+[0;32mI (1365236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800C7FFF013F[0m
+[0;32mI (1365236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1365436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FCD7FFF013F[0m
+[0;32mI (1365436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.077 tq=-0.000 tmp=31.9[0m
+[0;32mI (1365636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800C7FFF013F[0m
+[0;32mI (1365636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1365836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FEA7FFF013F[0m
+[0;32mI (1365836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.033 tq=-0.000 tmp=31.9[0m
+[0;32mI (1366036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580117FFF013F[0m
+[0;32mI (1366046) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.027 tq=-0.000 tmp=31.9[0m
+[0;32mI (1366236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800D7FFF013F[0m
+[0;32mI (1366246) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1366436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FE67FFF013F[0m
+[0;32mI (1366446) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.039 tq=-0.000 tmp=31.9[0m
+[0;32mI (1366636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FA07FFF013F[0m
+[0;32mI (1366646) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.146 tq=-0.000 tmp=31.9[0m
+[0;32mI (1366836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FE77FFF013F[0m
+[0;32mI (1366846) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.037 tq=-0.000 tmp=31.9[0m
+[0;32mI (1367036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580257FFF013F[0m
+[0;32mI (1367046) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1367236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FDE7FFF013F[0m
+[0;32mI (1367236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1367436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285804D7FFF013F[0m
+[0;32mI (1367436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.118 tq=-0.000 tmp=31.9[0m
+[0;32mI (1367636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF87FFF013F[0m
+[0;32mI (1367636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1367836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD47FFF013F[0m
+[0;32mI (1367836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.066 tq=-0.000 tmp=31.9[0m
+[0;32mI (1368036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A284801D7FFF013F[0m
+[0;32mI (1368036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.045 tq=-0.000 tmp=31.9[0m
+[0;32mI (1368236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FF27FFF013F[0m
+[0;32mI (1368236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1368436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF37FFF013F[0m
+[0;32mI (1368436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1368636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285801F7FFF013F[0m
+[0;32mI (1368636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.048 tq=-0.000 tmp=31.9[0m
+[0;32mI (1368836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FD47FFF013F[0m
+[0;32mI (1368836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.066 tq=-0.000 tmp=31.9[0m
+[0;32mI (1369036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28480137FFF013F[0m
+[0;32mI (1369036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.030 tq=-0.000 tmp=31.9[0m
+[0;32mI (1369236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580087FFF013F[0m
+[0;32mI (1369236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.013 tq=-0.000 tmp=31.9[0m
+[0;32mI (1369436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580107FFF013F[0m
+[0;32mI (1369436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1369636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580257FFF013F[0m
+[0;32mI (1369636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1369836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD77FFF013F[0m
+[0;32mI (1369836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.062 tq=-0.000 tmp=31.9[0m
+[0;32mI (1370036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800D7FFF013F[0m
+[0;32mI (1370036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1370236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FE17FFF013F[0m
+[0;32mI (1370236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.047 tq=-0.000 tmp=31.9[0m
+[0;32mI (1370436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580497FFF013F[0m
+[0;32mI (1370436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.112 tq=-0.000 tmp=31.9[0m
+[0;32mI (1370636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580197FFF013F[0m
+[0;32mI (1370636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.039 tq=-0.000 tmp=31.9[0m
+[0;32mI (1370836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580277FFF013F[0m
+[0;32mI (1370836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1371036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580597FFF013F[0m
+[0;32mI (1371036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.137 tq=-0.000 tmp=31.9[0m
+[0;32mI (1371236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800D7FFF013F[0m
+[0;32mI (1371236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1371436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FDE7FFF013F[0m
+[0;32mI (1371436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.051 tq=-0.000 tmp=31.9[0m
+[0;32mI (1371636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28480087FFF013F[0m
+[0;32mI (1371636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.013 tq=-0.000 tmp=31.9[0m
+[0;32mI (1371836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FDB7FFF013F[0m
+[0;32mI (1371836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.056 tq=-0.000 tmp=31.9[0m
+[0;32mI (1372036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580277FFF013F[0m
+[0;32mI (1372036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1372236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580147FFF013F[0m
+[0;32mI (1372236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.031 tq=-0.000 tmp=31.9[0m
+[0;32mI (1372436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580257FFF013F[0m
+[0;32mI (1372436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.057 tq=-0.000 tmp=31.9[0m
+[0;32mI (1372636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285806D7FFF013F[0m
+[0;32mI (1372636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.167 tq=-0.000 tmp=31.9[0m
+[0;32mI (1372836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580207FFF013F[0m
+[0;32mI (1372836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.050 tq=-0.000 tmp=31.9[0m
+[0;32mI (1373036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FDF7FFF013F[0m
+[0;32mI (1373036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.050 tq=-0.000 tmp=31.9[0m
+[0;32mI (1373236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FF17FFF013F[0m
+[0;32mI (1373236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.022 tq=-0.000 tmp=31.9[0m
+[0;32mI (1373436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FD67FFF013F[0m
+[0;32mI (1373436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.063 tq=-0.000 tmp=31.9[0m
+[0;32mI (1373636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FB27FFF013F[0m
+[0;32mI (1373636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.118 tq=-0.000 tmp=31.9[0m
+[0;32mI (1373836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580167FFF013F[0m
+[0;32mI (1373836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1374036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A284800D7FFF013F[0m
+[0;32mI (1374036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.021 tq=-0.000 tmp=31.9[0m
+[0;32mI (1374236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FD87FFF013F[0m
+[0;32mI (1374236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1374436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285802B7FFF013F[0m
+[0;32mI (1374436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.066 tq=-0.000 tmp=31.9[0m
+[0;32mI (1374636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FB17FFF013F[0m
+[0;32mI (1374636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.120 tq=-0.000 tmp=31.9[0m
+[0;32mI (1374836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580187FFF013F[0m
+[0;32mI (1374836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.037 tq=-0.000 tmp=31.9[0m
+[0;32mI (1375036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FA57FFF013F[0m
+[0;32mI (1375036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.138 tq=-0.000 tmp=31.9[0m
+[0;32mI (1375236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580317FFF013F[0m
+[0;32mI (1375236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.076 tq=-0.000 tmp=31.9[0m
+[0;32mI (1375436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FED7FFF013F[0m
+[0;32mI (1375436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.028 tq=-0.000 tmp=31.9[0m
+[0;32mI (1375636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FAC7FFF013F[0m
+[0;32mI (1375636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.127 tq=-0.000 tmp=31.9[0m
+[0;32mI (1375836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800F7FFF013F[0m
+[0;32mI (1375836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.024 tq=-0.000 tmp=31.9[0m
+[0;32mI (1376036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF97FFF013F[0m
+[0;32mI (1376036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.010 tq=-0.000 tmp=31.9[0m
+[0;32mI (1376236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FDC7FFF013F[0m
+[0;32mI (1376236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.054 tq=-0.000 tmp=31.9[0m
+[0;32mI (1376436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580237FFF013F[0m
+[0;32mI (1376436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.054 tq=-0.000 tmp=31.9[0m
+[0;32mI (1376636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28480287FFF013F[0m
+[0;32mI (1376636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.062 tq=-0.000 tmp=31.9[0m
+[0;32mI (1376836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580267FFF013F[0m
+[0;32mI (1376836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.059 tq=-0.000 tmp=31.9[0m
+[0;32mI (1377036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800C7FFF013F[0m
+[0;32mI (1377036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1377236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FF57FFF013F[0m
+[0;32mI (1377236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.016 tq=-0.000 tmp=31.9[0m
+[0;32mI (1377436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FB77FFF013F[0m
+[0;32mI (1377436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.111 tq=-0.000 tmp=31.9[0m
+
+# 0x20 CAN STATUS
+[0;32mI (1377636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FAF7FFF013F[0m
+[0;32mI (1377636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.123 tq=-0.000 tmp=31.9[0m
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+[0;32mI (1377836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580037FFF013F[0m
+[0;32mI (1377836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.005 tq=-0.000 tmp=31.9[0m
+[0;32mI (1378036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FEF7FFF013F[0m
+[0;32mI (1378036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.025 tq=-0.000 tmp=31.9[0m
+[0;32mI (1378236) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285800C7FFF013F[0m
+[0;32mI (1378236) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1378436) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285805A7FFF013F[0m
+[0;32mI (1378436) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.138 tq=-0.000 tmp=31.9[0m
+[0;32mI (1378636) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2857FFF7FFF013F[0m
+[0;32mI (1378636) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.001 tq=-0.000 tmp=31.9[0m
+[0;32mI (1378836) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FEC7FFF013F[0m
+[0;32mI (1378836) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.030 tq=-0.000 tmp=31.9[0m
+[0;32mI (1379036) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FDF7FFF013F[0m
+[0;32mI (1379036) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.050 tq=-0.000 tmp=31.9[0m
+
+# 0x20 REPORT OFF
+OK: motor 0x20 proactive report OFF
+
+# CAN STATUS AFTER
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "baseline_id": "esp-can-prototype-v0.1",
+  "baseline_id": "esp-can-prototype-v0",
   "baseline_kind": "verify-local-existing",
   "acceptance_target": "phase0_reproducible_firmware",
-  "status": "blocked_by_hardware_connection",
+  "status": "accepted",
   "path": ".",
   "task": {
     "identity": "build-and-smoke-current-esp-can-prototype",
@@ -17,6 +17,8 @@
   "evaluation": {
     "build_script": "tools/verify_phase0.ps1",
     "hardware_checklist": "docs/baseline/SMOKE_TEST.md",
+    "hardware_evidence": "docs/baseline/evidence/hardware_smoke_20260806.json",
+    "impedance_analysis": "docs/baseline/evidence/impedance_analysis_20260806.json",
     "required_path": "fullclean -> build -> size -> flash -> boot/UART/BLE/CAN/motor smoke"
   },
   "primary_metric": "build_success",
@@ -24,6 +26,8 @@
     "build_success": "must_equal_true",
     "app_partition_overflow_bytes": "must_equal_zero",
     "boot_smoke_success": "must_equal_true",
+    "ble_nus_smoke_success": "must_equal_true",
+    "twai_error_counter_final": "must_equal_zero",
     "dual_motor_smoke_success": "must_equal_true"
   },
   "metrics_summary": {
@@ -42,18 +46,32 @@
       "source_ref": "docs/baseline/PHASE_0_BASELINE.md"
     },
     "boot_smoke_success": {
-      "value": null,
+      "value": true,
       "required": true,
       "description": "The flashed ESP32-S3 boots and runs for 60 seconds without reset or panic.",
-      "origin_path": "docs/baseline/SMOKE_TEST.md",
-      "source_ref": "pending: no ESP32-S3 port connected on 2026-08-06"
+      "origin_path": "docs/baseline/evidence/hardware_smoke_20260806.json",
+      "source_ref": "61-second COM5 boot/UART capture on 2026-08-06"
+    },
+    "ble_nus_smoke_success": {
+      "value": true,
+      "required": true,
+      "description": "The target advertises, exposes NUS, accepts commands, notifies responses, and reconnects.",
+      "origin_path": "docs/baseline/evidence/hardware_smoke_20260806.json",
+      "source_ref": "two Windows BLE GATT sessions; three consecutive commands and a 3.250-second rediscovery on 2026-08-06"
+    },
+    "twai_error_counter_final": {
+      "value": 0,
+      "required": true,
+      "description": "TWAI remains RUNNING with no accumulated bus, TX, RX, arbitration, or missed-frame errors.",
+      "origin_path": "docs/baseline/evidence/hardware_smoke_20260806.json",
+      "source_ref": "pre/post motor and three-cycle impedance status snapshots"
     },
     "dual_motor_smoke_success": {
-      "value": null,
+      "value": true,
       "required": true,
       "description": "Both RS01 devices report independently and complete the impedance start/stop smoke.",
-      "origin_path": "docs/baseline/SMOKE_TEST.md",
-      "source_ref": "pending: hardware stack not connected on 2026-08-06"
+      "origin_path": "docs/baseline/evidence/hardware_smoke_20260806.json",
+      "source_ref": "150 samples per motor plus three 10-second impedance cycles; one joint dense cycle and per-motor cross-cycle long coverage passed 0.5 Hz antiphase fitting"
     }
   },
   "environment": {
@@ -69,12 +87,21 @@
     "baseline_parent_commit": "0946666e00b48e4263c38edb86b100b7fd0e0611",
     "upstream_repository": "https://github.com/saltedfish12138/esp_can.git",
     "upstream_commit": "52a70d9",
-    "baseline_ref": "baseline-esp-can-v0.1"
+    "firmware_source_commit": "234088602ed3f5f0ff266b00a61e40f95660d950",
+    "baseline_ref": "baseline-esp-can-v0"
   },
+  "verification": {
+    "verdict": "verified_match_with_recorded_caveats",
+    "verified_at": "2026-08-06",
+    "evidence": "docs/baseline/evidence/hardware_smoke_20260806.json",
+    "confirmation_method": "durable local/Git evidence; dedicated artifact confirmation tool unavailable"
+  },
+  "summary": "ESP-IDF v5.5 build, ESP32-S3 flash/boot, UART, BLE NUS, two RS01 feedback paths, and three impedance start/stop cycles passed.",
   "known_deviations": [
     "sdkconfig was regenerated from ESP-IDF 5.3.1 to 5.5.0 without an intended product behavior change.",
-    "Hardware smoke evidence is pending because only Bluetooth RFCOMM COM3/COM4 were online.",
-    "The current feedback snapshot and BLE feedback cannot reliably attribute simultaneous dual-motor feedback."
+    "The physical flash is 16 MB while the frozen prototype image remains configured for 2 MB.",
+    "The current feedback snapshot and BLE feedback cannot reliably attribute simultaneous dual-motor feedback.",
+    "Physical left/right mapping and mechanical zero are intentionally deferred to the hip-joint object stage."
   ],
-  "next_route": "Connect the ESP32-S3, execute docs/baseline/SMOKE_TEST.md, record evidence, then promote to baseline-esp-can-v0."
+  "next_route": "Proceed to phase 1 common types and hardware configuration using baseline-esp-can-v0 as the comparator."
 }

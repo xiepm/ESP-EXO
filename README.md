@@ -16,11 +16,15 @@ ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 E
 [阶段 0 基线](docs/baseline/PHASE_0_BASELINE.md)。连接开发板后的逐项验证见
 [硬件冒烟测试](docs/baseline/SMOKE_TEST.md)。
 
+阶段 0 已于 2026-08-06 完成，正式基线标签为 `baseline-esp-can-v0`。
+
 ## 目录
 
 ```text
 ESP-EXO/
 ├── main/                 # ESP-IDF 主组件及当前固件源码
+├── docs/baseline/        # 阶段 0 合同、报告和硬件证据
+├── tools/                # 阶段 0 构建验证脚本
 ├── CMakeLists.txt        # 工程构建入口
 ├── sdkconfig             # 当前 ESP32-S3 工程配置
 └── CONSOLE_COMMANDS.md   # 当前串口/BLE 控制台命令说明
@@ -65,7 +69,7 @@ idf.py -p COMx flash monitor
 
 ## 重构顺序
 
-0. 固化现有基线；
+0. 固化现有基线（已完成：`baseline-esp-can-v0`）；
 1. 建立公共类型和配置；
 2. 重构 RS01 驱动及主动反馈；
 3. 建立髋关节对象和软件零位；

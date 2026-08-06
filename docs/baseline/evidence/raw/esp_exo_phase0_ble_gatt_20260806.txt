@@ -1,0 +1,197 @@
+# RESULT JSON
+{
+  "name": "RobStride-CAN",
+  "address": "44:1B:F6:FE:22:C2",
+  "service_uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+  "rx_uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e",
+  "tx_uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e",
+  "advertisement_observed": true,
+  "first_session": {
+    "connected": true,
+    "service_present": true,
+    "rx_characteristic_present": true,
+    "tx_characteristic_present": true,
+    "rx_properties": [
+      "write",
+      "write-without-response"
+    ],
+    "tx_properties": [
+      "notify"
+    ],
+    "rx_writable": true,
+    "tx_notifiable": true,
+    "welcome": "\r\nRobStride Motor Control - BLE Console\r\nConnected! Type 'help' for command list.\r\n",
+    "welcome_received": true,
+    "commands": [
+      {
+        "command": "help",
+        "notification_count": 39,
+        "response": "\r\nRobStride Motor Control Console\r\nCurrent motor: 0x10 (16)\r\n================================\r\n  motor          Select target motor: <can_id>\r\n  enable         Motor enable (private protocol)\r\n  disable        Motor disable/reset (private protocol)\r\n  move           Motion control: <t> <pos> <spd> <kp> <kd>\r\n  speed          Speed control: <cur_limit> <acc> <speed>\r\n  pos_pp         PP position: <speed> <acc> <angle>\r\n  pos_csp        CSP position: <speed> <angle>\r\n  current        Current control: <current>\r\n  set_zero       Set mechanical zero position\r\n  set_id         Set motor CAN ID: <new_id>\r\n  save           Save parameters to flash\r\n  set_baud       Change baud: <1=1M|2=500K|3=250K|4=125K>\r\n  report         Proactive report: <0=off|1=on>\r\n  switch_mit     Switch protocol to MIT\r\n  switch_private Switch protocol to private\r\n  read_param     Read parameter (private): <reg_addr>\r\n  mit_enable     MIT motor enable\r\n  mit_disable    MIT motor disable\r\n  mit_control    MIT control: <ang> <spd> <kp> <kd> <t>\r\n  mit_pos        MIT position: <pos> <spd>\r\n  mit_speed      MIT speed: <spd> <cur>\r\n  mit_set_zero   MIT set zero position\r\n  mit_set_type   MIT set motor type: <0-2>\r\n  mit_set_id     MIT set motor ID: <new_id>\r\n  mit_save       MIT save to flash\r\n  mit_report     MIT proactive report: <0=off|1=on>\r\n  mit_read       Unsupported in standard MIT protocol\r\n  mit_write      Unsupported in standard MIT protocol\r\n  mit_error      MIT error query/clear: <0-255|0xFF=clear>\r\n  motor_type     Show compile-time motor type settings\r\n  status         Show motor feedback status\r\n  can_status     Show TWAI controller and error counters\r\n  imp_start      Start dual-motor impedance control\r\n  imp_stop       Stop dual-motor impedance control\r\n  help           Show this help\r\n\r\n",
+        "expected": {
+          "RobStride Motor Control Console": true,
+          "motor_type": true,
+          "can_status": true,
+          "imp_start": true,
+          "imp_stop": true
+        },
+        "pass": true
+      },
+      {
+        "command": "motor_type",
+        "notification_count": 5,
+        "response": "Motor type (compile-time): MOTOR_TYPE=5\r\n  V:  [-50.00, 50.00]\r\n  KP: [0.00, 500.00]\r\n  KD: [0.00, 5.00]\r\n  T:  [-5.50, 5.50]\r\n",
+        "expected": {
+          "Motor type (compile-time): MOTOR_TYPE=5": true
+        },
+        "pass": true
+      },
+      {
+        "command": "can_status",
+        "notification_count": 11,
+        "response": "===== TWAI Status =====\r\n  State:             RUNNING\r\n  RX GPIO2 level:   1 (recessive/idle)\r\n  TX queued:         0\r\n  RX queued:         0\r\n  TX error counter:  0\r\n  RX error counter:  0\r\n  TX failed count:   0\r\n  Bus error count:   0\r\n  Arbitration lost:  0\r\n  RX missed:         0\r\n",
+        "expected": {
+          "===== TWAI Status =====": true,
+          "State:             RUNNING": true,
+          "TX error counter:  0": true,
+          "RX error counter:  0": true,
+          "TX failed count:   0": true,
+          "Bus error count:   0": true,
+          "Arbitration lost:  0": true,
+          "RX missed:         0": true
+        },
+        "pass": true
+      }
+    ],
+    "pass": true
+  },
+  "reappeared_after_disconnect": true,
+  "reappearance_seconds": 3.25,
+  "reappeared_within_5_seconds": true,
+  "second_session": {
+    "connected": true,
+    "service_present": true,
+    "rx_characteristic_present": true,
+    "tx_characteristic_present": true,
+    "rx_properties": [
+      "write",
+      "write-without-response"
+    ],
+    "tx_properties": [
+      "notify"
+    ],
+    "rx_writable": true,
+    "tx_notifiable": true,
+    "welcome": "\r\nRobStride Motor Control - BLE Console\r\nConnected! Type 'help' for command list.\r\n",
+    "welcome_received": true,
+    "commands": [
+      {
+        "command": "can_status",
+        "notification_count": 11,
+        "response": "===== TWAI Status =====\r\n  State:             RUNNING\r\n  RX GPIO2 level:   1 (recessive/idle)\r\n  TX queued:         0\r\n  RX queued:         0\r\n  TX error counter:  0\r\n  RX error counter:  0\r\n  TX failed count:   0\r\n  Bus error count:   0\r\n  Arbitration lost:  0\r\n  RX missed:         0\r\n",
+        "expected": {
+          "===== TWAI Status =====": true,
+          "State:             RUNNING": true,
+          "TX error counter:  0": true,
+          "RX error counter:  0": true,
+          "TX failed count:   0": true,
+          "Bus error count:   0": true,
+          "Arbitration lost:  0": true,
+          "RX missed:         0": true
+        },
+        "pass": true
+      }
+    ],
+    "pass": true
+  },
+  "pass": true,
+  "started_at_utc": "2026-08-06T07:07:15.397156+00:00",
+  "completed_at_utc": "2026-08-06T07:07:26.747657+00:00",
+  "initial_scan_timeout_seconds": 15.0,
+  "reconnect_timeout_seconds": 5.0
+}
+
+# TRANSCRIPT
+# FIRST CONNECTION WELCOME
+
+RobStride Motor Control - BLE Console
+Connected! Type 'help' for command list.
+
+# FIRST CONNECTION: help
+
+RobStride Motor Control Console
+Current motor: 0x10 (16)
+================================
+  motor          Select target motor: <can_id>
+  enable         Motor enable (private protocol)
+  disable        Motor disable/reset (private protocol)
+  move           Motion control: <t> <pos> <spd> <kp> <kd>
+  speed          Speed control: <cur_limit> <acc> <speed>
+  pos_pp         PP position: <speed> <acc> <angle>
+  pos_csp        CSP position: <speed> <angle>
+  current        Current control: <current>
+  set_zero       Set mechanical zero position
+  set_id         Set motor CAN ID: <new_id>
+  save           Save parameters to flash
+  set_baud       Change baud: <1=1M|2=500K|3=250K|4=125K>
+  report         Proactive report: <0=off|1=on>
+  switch_mit     Switch protocol to MIT
+  switch_private Switch protocol to private
+  read_param     Read parameter (private): <reg_addr>
+  mit_enable     MIT motor enable
+  mit_disable    MIT motor disable
+  mit_control    MIT control: <ang> <spd> <kp> <kd> <t>
+  mit_pos        MIT position: <pos> <spd>
+  mit_speed      MIT speed: <spd> <cur>
+  mit_set_zero   MIT set zero position
+  mit_set_type   MIT set motor type: <0-2>
+  mit_set_id     MIT set motor ID: <new_id>
+  mit_save       MIT save to flash
+  mit_report     MIT proactive report: <0=off|1=on>
+  mit_read       Unsupported in standard MIT protocol
+  mit_write      Unsupported in standard MIT protocol
+  mit_error      MIT error query/clear: <0-255|0xFF=clear>
+  motor_type     Show compile-time motor type settings
+  status         Show motor feedback status
+  can_status     Show TWAI controller and error counters
+  imp_start      Start dual-motor impedance control
+  imp_stop       Stop dual-motor impedance control
+  help           Show this help
+
+
+# FIRST CONNECTION: motor_type
+Motor type (compile-time): MOTOR_TYPE=5
+  V:  [-50.00, 50.00]
+  KP: [0.00, 500.00]
+  KD: [0.00, 5.00]
+  T:  [-5.50, 5.50]
+
+# FIRST CONNECTION: can_status
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+
+# SECOND CONNECTION WELCOME
+
+RobStride Motor Control - BLE Console
+Connected! Type 'help' for command list.
+
+# SECOND CONNECTION: can_status
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0

@@ -1,0 +1,125 @@
+{
+  "schema_version": 2,
+  "baseline_id": "esp-can-prototype-v0",
+  "verification_verdict": "verified_match_with_recorded_caveats",
+  "status": "complete",
+  "date": "2026-08-06",
+  "timezone": "Asia/Shanghai",
+  "firmware_source_commit": "234088602ed3f5f0ff266b00a61e40f95660d950",
+  "firmware": {
+    "app_bin_bytes": 608352,
+    "app_bin_sha256": "0EC1EAA7965F18901E10EC8F2A35D04F0B164E14DA1E3CDCF614B7CE27170A70",
+    "elf_bytes": 7364532,
+    "elf_sha256": "464C893E0CCD675D734711650F9D273CBE1690D96A509CCEE3531F2B29E11DDF",
+    "bootloader_bytes": 21088,
+    "bootloader_sha256": "21A98DCF0DD82575C13ECC9B8796D44C226DF8CC58C1E61D907588DEBAAB0446",
+    "partition_table_bytes": 3072,
+    "partition_table_sha256": "7F00B6C042A89B15B0CAC534F82ED988CAF29278FF5700B0C511EB1B5BB7C820",
+    "flash_write_hash_verified": true
+  },
+  "hardware": {
+    "port": "COM5",
+    "usb_uart": "USB-Enhanced-SERIAL CH343",
+    "usb_hardware_id": "USB\\VID_1A86&PID_55D3\\5C94152132",
+    "usb_driver": "wch.cn 2.1.2025.7",
+    "chip": "ESP32-S3 QFN56 revision v0.2",
+    "wifi_mac": "44:1B:F6:FE:22:C0",
+    "ble_mac": "44:1B:F6:FE:22:C2",
+    "physical_flash_mb": 16,
+    "configured_flash_mb": 2,
+    "embedded_psram_mb": 8
+  },
+  "results": {
+    "flash_verified": true,
+    "boot_started_at_utc": "2026-08-06T07:01:16.700340+00:00",
+    "boot_completed_at_utc": "2026-08-06T07:02:23.930431+00:00",
+    "boot_observation_seconds": 61,
+    "startup_markers_complete": true,
+    "unexpected_resets": 0,
+    "fatal_runtime_markers": 0,
+    "uart_help": true,
+    "uart_motor_type_5": true,
+    "twai_running": true,
+    "twai_all_error_counters_final": 0,
+    "ble_address": "44:1B:F6:FE:22:C2",
+    "ble_advertisement_observed": true,
+    "ble_nus_service_present": true,
+    "ble_welcome_received_on_both_connections": true,
+    "ble_first_session_commands": ["help", "motor_type", "can_status"],
+    "ble_second_session_commands": ["can_status"],
+    "ble_disconnect_reconnect": true,
+    "ble_reappearance_seconds": 3.250,
+    "motor_observation_seconds_each": 30,
+    "motor_0x10_samples": 150,
+    "motor_0x10_feedback_within_5_seconds": true,
+    "motor_0x10_last_angle_rad": -3.889,
+    "motor_0x10_last_temperature_c": 31.9,
+    "motor_0x20_samples": 150,
+    "motor_0x20_feedback_within_5_seconds": true,
+    "motor_0x20_last_angle_rad": 3.390,
+    "motor_0x20_last_temperature_c": 31.9,
+    "motor_select_and_report_acknowledgements_complete": true,
+    "impedance_cycles": 3,
+    "impedance_seconds_per_cycle": 10,
+    "impedance_operational_cycle_passes": 3,
+    "impedance_signal_validation_cycle_passes": 1,
+    "motor_0x10_angle_span_rad_by_cycle": [0.836, 0.848, 0.849],
+    "motor_0x20_angle_span_rad_by_cycle": [0.432, 0.942, 0.415],
+    "joint_signal_validation_cycle": 2,
+    "joint_signal_frequency_hz": 0.498,
+    "joint_signal_period_seconds": 2.008,
+    "joint_signal_absolute_phase_difference_degrees": 178.4,
+    "joint_signal_dense_segment_seconds_0x10": 2.6,
+    "joint_signal_dense_segment_seconds_0x20": 4.8,
+    "long_coverage_present_for_each_motor_across_cycles": true,
+    "final_stop_report_off_disable_commands_acknowledged": true
+  },
+  "raw_log_evidence": [
+    {
+      "name": "esp_exo_phase0_uart_pass_20260806.txt",
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_uart_pass_20260806.txt",
+      "bytes": 8756,
+      "sha256": "FAEB6AD19BE2B4ED7A25FD9DA810DE6A839A8B484915799F06E007C04F041A6E"
+    },
+    {
+      "name": "esp_exo_phase0_motor_feedback_20260806.txt",
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_motor_feedback_20260806.txt",
+      "bytes": 64009,
+      "sha256": "72D5361520483F4AD5BEB83C3BE22B178B8D0313531CCB19E28D19A5D910A0FB"
+    },
+    {
+      "name": "esp_exo_phase0_ble_gatt_20260806.txt",
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_ble_gatt_20260806.txt",
+      "bytes": 8821,
+      "sha256": "3D01FC1AF253EE657ED9FDA5B0557DB7A9A99278C76D0D3C4C1152E43AF71ACC"
+    },
+    {
+      "name": "esp_exo_phase0_impedance_20260806.txt",
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_impedance_20260806.txt",
+      "bytes": 57689,
+      "sha256": "121AAB98C0966126AD6EF3FC6FCBECC4678AD24CD20F6A7E1F6CA5AF1C824A89"
+    }
+  ],
+  "flash_log_evidence": {
+    "path": "docs/baseline/evidence/raw/esp_exo_phase0_flash_20260806.txt",
+    "bytes": 7668,
+    "sha256": "2B9489CE411C478BF709DD08373C7A38F189132118A23235C24C47600045AFAA",
+    "verified_write_regions": 3,
+    "hard_reset_completed": true
+  },
+  "impedance_analysis_evidence": {
+    "path": "docs/baseline/evidence/impedance_analysis_20260806.json",
+    "bytes": 6868,
+    "sha256": "243F4935C751C09A8D9039F9A16C0508E197FD80A8913A3D41C3F63330010DE7",
+    "source_capture_sha256": "121AAB98C0966126AD6EF3FC6FCBECC4678AD24CD20F6A7E1F6CA5AF1C824A89",
+    "supersedes_inline_signal_coverage_judgement": true
+  },
+  "evidence_format": "Each smoke-test raw log starts with the capture-time result JSON and then the complete transcript. The saved strict impedance analysis is authoritative for waveform acceptance. The flash raw log is the direct idf.py/esptool output.",
+  "known_caveats": [
+    "The physical flash is 16 MB while the frozen prototype image is configured for 2 MB.",
+    "Physical left/right motor mapping, mechanical zeros, transceiver model, supply model, and motor serial numbers are not electronically available in the current protocol.",
+    "The firmware reported a dirty Git description because verification documents and tools were uncommitted during that build; main source and sdkconfig content matched firmware_source_commit.",
+    "The UART logger applies one shared 200 ms throttle to both motors. Waveform acceptance therefore requires one joint cycle with at least 10 samples and at least 2.2 seconds of dense data per motor, plus at least one eight-second total-coverage cycle for each motor across the three runs; it does not claim an independent spectrum for every motor in every cycle.",
+    "The console confirms that stop, report-off, and disable commands were sent; the current protocol does not provide an independent post-disable actuator-state acknowledgement."
+  ]
+}

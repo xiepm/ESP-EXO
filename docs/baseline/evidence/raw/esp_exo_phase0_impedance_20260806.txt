@@ -1,0 +1,860 @@
+# RESULT JSON
+{
+  "port": "COM5",
+  "started_at_utc": "2026-08-06T06:57:21.688493+00:00",
+  "completed_at_utc": "2026-08-06T06:58:16.133743+00:00",
+  "cycles": 3,
+  "run_seconds_per_cycle": 10.0,
+  "initial_status": {
+    "running": true,
+    "tx_error": 0,
+    "rx_error": 0,
+    "tx_failed": 0,
+    "bus_error": 0,
+    "arbitration_lost": 0,
+    "rx_missed": 0
+  },
+  "cycle_results": [
+    {
+      "cycle": 1,
+      "status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "fatal_markers": {
+        "No feedback from motor": false,
+        "ext TX failed": false,
+        "State:             BUS_OFF": false,
+        "State:             RECOVERING": false,
+        "Guru Meditation Error": false,
+        "assert failed": false,
+        "Task watchdog got triggered": false,
+        "Interrupt wdt timeout": false,
+        "Brownout detector was triggered": false,
+        "Rebooting...": false
+      },
+      "feedback_samples_logged": {
+        "0x10": 44,
+        "0x20": 6
+      },
+      "logged_angle_span_rad": {
+        "0x10": 0.8360000000000003,
+        "0x20": 0.43199999999999994
+      },
+      "motion_observed_both_motors": true,
+      "feedback_from_both_motors": true,
+      "motion_characterization": {
+        "shared_frequency_hz": 0.504,
+        "period_seconds": 1.9841269841269842,
+        "absolute_phase_difference_degrees": 176.8202317036581,
+        "sample_coverage_seconds": {
+          "0x10": 9.6,
+          "0x20": 9.0
+        },
+        "fit_by_motor": {
+          "0x10": {
+            "amplitude_rad": 0.3936313690168793,
+            "r_squared": 0.885324046172702
+          },
+          "0x20": {
+            "amplitude_rad": 0.39643136719081284,
+            "r_squared": 0.9726709699334347
+          }
+        },
+        "pass": true
+      },
+      "pass": true
+    },
+    {
+      "cycle": 2,
+      "status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "fatal_markers": {
+        "No feedback from motor": false,
+        "ext TX failed": false,
+        "State:             BUS_OFF": false,
+        "State:             RECOVERING": false,
+        "Guru Meditation Error": false,
+        "assert failed": false,
+        "Task watchdog got triggered": false,
+        "Interrupt wdt timeout": false,
+        "Brownout detector was triggered": false,
+        "Rebooting...": false
+      },
+      "feedback_samples_logged": {
+        "0x10": 14,
+        "0x20": 36
+      },
+      "logged_angle_span_rad": {
+        "0x10": 0.8479999999999999,
+        "0x20": 0.9420000000000002
+      },
+      "motion_observed_both_motors": true,
+      "feedback_from_both_motors": true,
+      "motion_characterization": {
+        "shared_frequency_hz": 0.498,
+        "period_seconds": 2.0080321285140563,
+        "absolute_phase_difference_degrees": 178.3941316469056,
+        "sample_coverage_seconds": {
+          "0x10": 2.6,
+          "0x20": 9.8
+        },
+        "fit_by_motor": {
+          "0x10": {
+            "amplitude_rad": 0.45886525894566443,
+            "r_squared": 0.9907909767374885
+          },
+          "0x20": {
+            "amplitude_rad": 0.44975398912362075,
+            "r_squared": 0.8677403460584413
+          }
+        },
+        "pass": false
+      },
+      "pass": true
+    },
+    {
+      "cycle": 3,
+      "status": {
+        "running": true,
+        "tx_error": 0,
+        "rx_error": 0,
+        "tx_failed": 0,
+        "bus_error": 0,
+        "arbitration_lost": 0,
+        "rx_missed": 0
+      },
+      "fatal_markers": {
+        "No feedback from motor": false,
+        "ext TX failed": false,
+        "State:             BUS_OFF": false,
+        "State:             RECOVERING": false,
+        "Guru Meditation Error": false,
+        "assert failed": false,
+        "Task watchdog got triggered": false,
+        "Interrupt wdt timeout": false,
+        "Brownout detector was triggered": false,
+        "Rebooting...": false
+      },
+      "feedback_samples_logged": {
+        "0x10": 44,
+        "0x20": 6
+      },
+      "logged_angle_span_rad": {
+        "0x10": 0.8489999999999998,
+        "0x20": 0.41500000000000004
+      },
+      "motion_observed_both_motors": true,
+      "feedback_from_both_motors": true,
+      "motion_characterization": {
+        "shared_frequency_hz": 0.5,
+        "period_seconds": 2.0,
+        "absolute_phase_difference_degrees": 172.6849248187979,
+        "sample_coverage_seconds": {
+          "0x10": 9.6,
+          "0x20": 9.0
+        },
+        "fit_by_motor": {
+          "0x10": {
+            "amplitude_rad": 0.4004905525668491,
+            "r_squared": 0.8899109914157043
+          },
+          "0x20": {
+            "amplitude_rad": 0.36748136835256984,
+            "r_squared": 0.9911814680336459
+          }
+        },
+        "pass": true
+      },
+      "pass": true
+    }
+  ],
+  "signal_validation": {
+    "method": "shared-frequency sinusoid fit on timestamped dual-motor feedback",
+    "minimum_passing_cycles": 2,
+    "passing_cycles": 2,
+    "pass": true
+  },
+  "final_status": {
+    "running": true,
+    "tx_error": 0,
+    "rx_error": 0,
+    "tx_failed": 0,
+    "bus_error": 0,
+    "arbitration_lost": 0,
+    "rx_missed": 0
+  },
+  "final_cleanup_command_acknowledgements": {
+    "impedance_stopped_or_already_stopped": true,
+    "report_off_count": 2,
+    "disable_command_count": 2
+  },
+  "pass": true
+}
+
+# TRANSCRIPT
+# INITIAL CAN STATUS
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+
+OK: target motor set to 0x10 (16)
+
+OK: motor 0x10 proactive report OFF
+[0;32mI (1163386) main: RX: ext=0x020010FD std=0x000 dlc=8 data=62097FE87FFF013F[0m
+[0;32mI (1163386) main: FB: id=16 mode=2 status=0 ang=-2.942 spd=-0.036 tq=-0.000 tmp=31.9[0m
+
+OK: target motor set to 0x20 (32)
+
+OK: motor 0x20 proactive report OFF
+[0;32mI (1163966) main: RX: ext=0x020020FD std=0x000 dlc=8 data=96E9802C7FFF013F[0m
+[0;32mI (1163966) main: FB: id=32 mode=2 status=0 ang=2.250 spd=0.068 tq=-0.000 tmp=31.9[0m
+
+OK: target motor set to 0x10 (16)
+
+OK: motor 0x10 proactive report ON
+[0;32mI (1164556) main: RX: ext=0x020010FD std=0x000 dlc=8 data=620A7FF07FFF013F[0m
+[0;32mI (1164556) main: FB: id=16 mode=2 status=0 ang=-2.942 spd=-0.024 tq=-0.000 tmp=31.9[0m
+[0;32mI (1164756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A7FF27FFF013F[0m
+[0;32mI (1164756) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=-0.021 tq=-0.000 tmp=31.9[0m
+
+[0;32mI (1164956) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A801D7FFF013F[0m
+[0;32mI (1164956) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=0.045 tq=-0.000 tmp=31.9[0m
+OK: target motor set to 0x20 (32)
+[0;32mI (1165156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A7FD97FFF013F[0m
+[0;32mI (1165156) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=-0.059 tq=-0.000 tmp=31.9[0m
+
+OK: motor 0x20 proactive report ON
+[0;32mI (1165356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A800A7FFF013F[0m
+[0;32mI (1165356) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=0.016 tq=-0.000 tmp=31.9[0m
+[0;32mI (1165556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A801F7FFF013F[0m
+[0;32mI (1165556) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=0.048 tq=-0.000 tmp=31.9[0m
+
+[0;32mI (1165756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A802E7FFF013F[0m
+[0;32mI (1165756) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=0.071 tq=-0.000 tmp=31.9[0m
+[0;32mI (1165956) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A80157FFF013F[0m
+[0;32mI (1165956) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=0.033 tq=-0.000 tmp=31.9[0m
+[0;32mI (1166156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A80077FFF013F[0m
+[0;32mI (1166156) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=0.011 tq=-0.000 tmp=31.9[0m
+[0;32mI (1166356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A7FEC7FFF0139[0m
+[0;32mI (1166356) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=-0.030 tq=-0.000 tmp=31.3[0m
+[0;32mI (1166556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=62097FDE7FFF0139[0m
+[0;32mI (1166556) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=-0.051 tq=-0.000 tmp=31.3[0m
+
+# CYCLE 1 START
+[0;32mI (1166706) impedance: Starting dual-motor impedance control...[0m
+[0;32mI (1166706) impedance:   Motors: 0x10 (anti-phase) + 0x20 (in-phase)[0m
+[0;32mI (1166706) impedance:   KP=0.200  KD=0.100  Amp=90°  Freq=0.5Hz  Ramp=3.0s[0m
+[0;32mI (1166756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=620A7FFB7FFF013F[0m
+[0;32mI (1166756) main: FB: id=16 mode=24 status=0 ang=-2.942 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1166956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=620A802A80450139[0m
+[0;32mI (1166956) main: FB: id=16 mode=2 status=2 ang=-2.942 spd=0.065 tq=0.012 tmp=31.3[0m
+[0;32mI (1167156) main: RX: ext=0x188010FD std=0x000 dlc=8 data=620B800A7F47013F[0m
+[0;32mI (1167156) main: FB: id=16 mode=24 status=2 ang=-2.942 spd=0.016 tq=-0.031 tmp=31.9[0m
+[0;32mI (1167256) impedance: Center positions: A=-2.9417 rad (-168.55°), B=2.2501 rad (128.92°)[0m
+[0;32mI (1167256) impedance: Impedance control running @ 100 Hz[0m
+OK: dual-motor impedance control started
+[0;32mI (1167356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=620B802F7F170139[0m
+[0;32mI (1167356) main: FB: id=16 mode=2 status=2 ang=-2.942 spd=0.072 tq=-0.039 tmp=31.3[0m
+[0;32mI (1167556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=620B7FE6803F0139[0m
+[0;32mI (1167556) main: FB: id=16 mode=2 status=2 ang=-2.942 spd=-0.039 tq=0.011 tmp=31.3[0m
+[0;32mI (1167756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=620B800A7EC60139[0m
+[0;32mI (1167756) main: FB: id=16 mode=2 status=2 ang=-2.942 spd=0.016 tq=-0.053 tmp=31.3[0m
+[0;32mI (1167956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=96E77FE07FFE013F[0m
+[0;32mI (1167956) main: FB: id=32 mode=24 status=2 ang=2.249 spd=-0.048 tq=-0.000 tmp=31.9[0m
+[0;32mI (1168156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=96E780088041013F[0m
+[0;32mI (1168156) main: FB: id=32 mode=24 status=2 ang=2.249 spd=0.013 tq=0.011 tmp=31.9[0m
+[0;32mI (1168356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=96E780017F86013F[0m
+[0;32mI (1168356) main: FB: id=32 mode=24 status=2 ang=2.249 spd=0.002 tq=-0.020 tmp=31.9[0m
+[0;32mI (1168556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=96E37FE9804E013F[0m
+[0;32mI (1168556) main: FB: id=32 mode=24 status=2 ang=2.248 spd=-0.034 tq=0.013 tmp=31.9[0m
+
+# CYCLE 1 RUN
+[0;32mI (1168756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=96CA7F437E00013F[0m
+[0;32mI (1168756) main: FB: id=32 mode=24 status=2 ang=2.238 spd=-0.288 tq=-0.086 tmp=31.9[0m
+[0;32mI (1168956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=623A803780EC0139[0m
+[0;32mI (1168956) main: FB: id=16 mode=2 status=2 ang=-2.924 spd=0.085 tq=0.040 tmp=31.3[0m
+[0;32mI (1169156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=623A801980880139[0m
+[0;32mI (1169156) main: FB: id=16 mode=2 status=2 ang=-2.924 spd=0.039 tq=0.023 tmp=31.3[0m
+[0;32mI (1169356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=62377FA280020139[0m
+[0;32mI (1169356) main: FB: id=16 mode=2 status=2 ang=-2.925 spd=-0.143 tq=0.000 tmp=31.3[0m
+[0;32mI (1169556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=62147FA37CC40139[0m
+[0;32mI (1169556) main: FB: id=16 mode=2 status=2 ang=-2.938 spd=-0.141 tq=-0.139 tmp=31.3[0m
+[0;32mI (1169756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=60957CC07D220139[0m
+[0;32mI (1169756) main: FB: id=16 mode=2 status=2 ang=-3.085 spd=-1.269 tq=-0.123 tmp=31.3[0m
+[0;32mI (1169956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E427D827E300139[0m
+[0;32mI (1169956) main: FB: id=16 mode=2 status=2 ang=-3.313 spd=-0.973 tq=-0.078 tmp=31.3[0m
+[0;32mI (1170156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DA7800880AA0139[0m
+[0;32mI (1170156) main: FB: id=16 mode=2 status=2 ang=-3.373 spd=0.013 tq=0.029 tmp=31.3[0m
+[0;32mI (1170356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DB68037822B0139[0m
+[0;32mI (1170356) main: FB: id=16 mode=2 status=2 ang=-3.367 spd=0.085 tq=0.093 tmp=31.3[0m
+[0;32mI (1170556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5EB7835F81CC0139[0m
+[0;32mI (1170556) main: FB: id=16 mode=2 status=2 ang=-3.269 spd=1.318 tq=0.077 tmp=31.3[0m
+[0;32mI (1170756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=61C8850C81660139[0m
+[0;32mI (1170756) main: FB: id=16 mode=2 status=2 ang=-2.967 spd=1.972 tq=0.060 tmp=31.3[0m
+[0;32mI (1170956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=6513842C81620139[0m
+[0;32mI (1170956) main: FB: id=16 mode=2 status=2 ang=-2.644 spd=1.630 tq=0.060 tmp=31.3[0m
+[0;32mI (1171156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=6622800A81A20139[0m
+[0;32mI (1171156) main: FB: id=16 mode=2 status=2 ang=-2.540 spd=0.016 tq=0.070 tmp=31.3[0m
+[0;32mI (1171356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=661E7F9D7E750139[0m
+[0;32mI (1171356) main: FB: id=16 mode=2 status=2 ang=-2.542 spd=-0.150 tq=-0.066 tmp=31.3[0m
+[0;32mI (1171556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=64BF7C8A81120139[0m
+[0;32mI (1171556) main: FB: id=16 mode=2 status=2 ang=-2.676 spd=-1.351 tq=0.046 tmp=31.3[0m
+[0;32mI (1171756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=61D97B8C7E100139[0m
+[0;32mI (1171756) main: FB: id=16 mode=2 status=2 ang=-2.961 spd=-1.739 tq=-0.083 tmp=31.3[0m
+[0;32mI (1171956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5EED7C857F050139[0m
+[0;32mI (1171956) main: FB: id=16 mode=2 status=2 ang=-3.248 spd=-1.359 tq=-0.042 tmp=31.3[0m
+[0;32mI (1172156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DED800E7F750139[0m
+[0;32mI (1172156) main: FB: id=16 mode=2 status=2 ang=-3.346 spd=0.022 tq=-0.023 tmp=31.3[0m
+[0;32mI (1172356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E078029816C0139[0m
+[0;32mI (1172356) main: FB: id=16 mode=2 status=2 ang=-3.336 spd=0.063 tq=0.061 tmp=31.3[0m
+[0;32mI (1172556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5EE7830A7EE90139[0m
+[0;32mI (1172556) main: FB: id=16 mode=2 status=2 ang=-3.250 spd=1.188 tq=-0.047 tmp=31.3[0m
+[0;32mI (1172756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=61FF84EB80300139[0m
+[0;32mI (1172756) main: FB: id=16 mode=2 status=2 ang=-2.946 spd=1.922 tq=0.008 tmp=31.3[0m
+[0;32mI (1172956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=652A840181360139[0m
+[0;32mI (1172956) main: FB: id=16 mode=2 status=2 ang=-2.635 spd=1.565 tq=0.052 tmp=31.3[0m
+[0;32mI (1173156) main: RX: ext=0x188010FD std=0x000 dlc=8 data=662B80187F850139[0m
+[0;32mI (1173156) main: FB: id=16 mode=24 status=2 ang=-2.537 spd=0.037 tq=-0.021 tmp=31.3[0m
+[0;32mI (1173356) main: RX: ext=0x188010FD std=0x000 dlc=8 data=6629805A7E120139[0m
+[0;32mI (1173356) main: FB: id=16 mode=24 status=2 ang=-2.537 spd=0.138 tq=-0.083 tmp=31.3[0m
+[0;32mI (1173556) main: RX: ext=0x188010FD std=0x000 dlc=8 data=65877D477EEA0139[0m
+[0;32mI (1173556) main: FB: id=16 mode=24 status=2 ang=-2.600 spd=-1.063 tq=-0.047 tmp=31.3[0m
+[0;32mI (1173756) main: RX: ext=0x188010FD std=0x000 dlc=8 data=62767B1E7F500139[0m
+[0;32mI (1173756) main: FB: id=16 mode=24 status=2 ang=-2.901 spd=-1.907 tq=-0.029 tmp=31.3[0m
+[0;32mI (1173956) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5F4B7C0D7F110139[0m
+[0;32mI (1173956) main: FB: id=16 mode=24 status=2 ang=-3.212 spd=-1.542 tq=-0.040 tmp=31.3[0m
+[0;32mI (1174156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E2B800F81180139[0m
+[0;32mI (1174156) main: FB: id=16 mode=2 status=2 ang=-3.322 spd=0.024 tq=0.047 tmp=31.3[0m
+[0;32mI (1174356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E347FE681780139[0m
+[0;32mI (1174356) main: FB: id=16 mode=2 status=2 ang=-3.319 spd=-0.039 tq=0.063 tmp=31.3[0m
+[0;32mI (1174556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5F458305821B0139[0m
+[0;32mI (1174556) main: FB: id=16 mode=2 status=2 ang=-3.214 spd=1.180 tq=0.091 tmp=31.3[0m
+[0;32mI (1174756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=623184D981780139[0m
+[0;32mI (1174756) main: FB: id=16 mode=2 status=2 ang=-2.927 spd=1.894 tq=0.063 tmp=31.3[0m
+[0;32mI (1174956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=6538834F81F00139[0m
+[0;32mI (1174956) main: FB: id=16 mode=2 status=2 ang=-2.630 spd=1.293 tq=0.083 tmp=31.3[0m
+[0;32mI (1175156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=66117FC980190139[0m
+[0;32mI (1175156) main: FB: id=16 mode=2 status=2 ang=-2.547 spd=-0.083 tq=0.004 tmp=31.3[0m
+[0;32mI (1175356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=65F47F667E490139[0m
+[0;32mI (1175356) main: FB: id=16 mode=2 status=2 ang=-2.558 spd=-0.234 tq=-0.074 tmp=31.3[0m
+[0;32mI (1175556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=64FF7C867E9B0139[0m
+[0;32mI (1175556) main: FB: id=16 mode=2 status=2 ang=-2.652 spd=-1.357 tq=-0.060 tmp=31.3[0m
+[0;32mI (1175756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=62127B8D7DD00139[0m
+[0;32mI (1175756) main: FB: id=16 mode=2 status=2 ang=-2.939 spd=-1.737 tq=-0.094 tmp=31.3[0m
+[0;32mI (1175956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5F1A7C9B82E10139[0m
+[0;32mI (1175956) main: FB: id=16 mode=2 status=2 ang=-3.231 spd=-1.325 tq=0.124 tmp=31.3[0m
+[0;32mI (1176156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DFE803A7F860139[0m
+[0;32mI (1176156) main: FB: id=16 mode=2 status=2 ang=-3.340 spd=0.089 tq=-0.020 tmp=31.3[0m
+[0;32mI (1176356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E0B800A81F80139[0m
+[0;32mI (1176356) main: FB: id=16 mode=2 status=2 ang=-3.335 spd=0.016 tq=0.085 tmp=31.3[0m
+[0;32mI (1176556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5EFA832C804D0139[0m
+[0;32mI (1176556) main: FB: id=16 mode=2 status=2 ang=-3.243 spd=1.240 tq=0.013 tmp=31.3[0m
+[0;32mI (1176756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=61E784B07FE70139[0m
+[0;32mI (1176756) main: FB: id=16 mode=2 status=2 ang=-2.956 spd=1.832 tq=-0.004 tmp=31.3[0m
+[0;32mI (1176956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=934A7C0D7F0D0139[0m
+[0;32mI (1176956) main: FB: id=32 mode=24 status=2 ang=1.894 spd=-1.542 tq=-0.041 tmp=31.3[0m
+[0;32mI (1177156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9264805580870139[0m
+[0;32mI (1177156) main: FB: id=32 mode=24 status=2 ang=1.806 spd=0.130 tq=0.023 tmp=31.3[0m
+[0;32mI (1177356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=929980A281A90139[0m
+[0;32mI (1177356) main: FB: id=32 mode=24 status=2 ang=1.827 spd=0.248 tq=0.071 tmp=31.3[0m
+[0;32mI (1177556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=935F83677FB00139[0m
+[0;32mI (1177556) main: FB: id=32 mode=24 status=2 ang=1.903 spd=1.330 tq=-0.013 tmp=31.3[0m
+[0;32mI (1177756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=968F856780560139[0m
+[0;32mI (1177756) main: FB: id=32 mode=24 status=2 ang=2.216 spd=2.111 tq=0.015 tmp=31.3[0m
+[0;32mI (1177956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5F017CC77ED70139[0m
+[0;32mI (1177956) main: FB: id=16 mode=2 status=2 ang=-3.240 spd=-1.258 tq=-0.050 tmp=31.3[0m
+[0;32mI (1178156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DFC7FD67F540139[0m
+[0;32mI (1178156) main: FB: id=16 mode=2 status=2 ang=-3.340 spd=-0.063 tq=-0.029 tmp=31.3[0m
+[0;32mI (1178356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E0B800480EA0139[0m
+[0;32mI (1178356) main: FB: id=16 mode=2 status=2 ang=-3.335 spd=0.007 tq=0.039 tmp=31.3[0m
+[0;32mI (1178556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5ED682D57FAA0139[0m
+[0;32mI (1178556) main: FB: id=16 mode=2 status=2 ang=-3.257 spd=1.107 tq=-0.014 tmp=31.3[0m
+
+# CYCLE 1 STATUS
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (dominant/busy)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+[0;32mI (1178756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=61CB84B081510139[0m
+[0;32mI (1178756) main: FB: id=16 mode=2 status=2 ang=-2.966 spd=1.832 tq=0.057 tmp=31.3[0m
+[0;32mI (1178956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=64EE83C180880139[0m
+[0;32mI (1178956) main: FB: id=16 mode=2 status=2 ang=-2.658 spd=1.467 tq=0.023 tmp=31.3[0m
+[0;32mI (1179156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=65F97FB580920139[0m
+[0;32mI (1179156) main: FB: id=16 mode=2 status=2 ang=-2.556 spd=-0.114 tq=0.025 tmp=31.3[0m
+[0;32mI (1179356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=65EE7FFE7F9E0139[0m
+[0;32mI (1179356) main: FB: id=16 mode=2 status=2 ang=-2.560 spd=-0.002 tq=-0.016 tmp=31.3[0m
+[0;32mI (1179556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=64F17CD07E090139[0m
+[0;32mI (1179556) main: FB: id=16 mode=2 status=2 ang=-2.657 spd=-1.244 tq=-0.084 tmp=31.3[0m
+[0;32mI (1179756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=62057B837CFD0139[0m
+[0;32mI (1179756) main: FB: id=16 mode=2 status=2 ang=-2.944 spd=-1.752 tq=-0.129 tmp=31.3[0m
+
+# CYCLE 1 STOP
+[0;32mI (1179906) impedance: Stopping impedance control...[0m
+[0;32mI (1179956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A068352810D0139[0m
+[0;32mI (1179956) main: FB: id=32 mode=24 status=2 ang=2.556 spd=1.298 tq=0.045 tmp=31.3[0m
+[0;32mI (1180046) impedance: Impedance control stopped, motors disabled[0m
+OK: impedance control stopped, motors disabled
+[0;32mI (1180156) main: RX: ext=0x180020FD std=0x000 dlc=8 data=9A767FE47FFF0139[0m
+[0;32mI (1180156) main: FB: id=32 mode=24 status=0 ang=2.599 spd=-0.042 tq=-0.000 tmp=31.3[0m
+[0;32mI (1180356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F277FE47FFF0139[0m
+[0;32mI (1180356) main: FB: id=16 mode=24 status=0 ang=-3.226 spd=-0.042 tq=-0.000 tmp=31.3[0m
+[0;32mI (1180556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F2780067FFF0139[0m
+[0;32mI (1180556) main: FB: id=16 mode=24 status=0 ang=-3.226 spd=0.010 tq=-0.000 tmp=31.3[0m
+[0;32mI (1180756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F2780097FFF0139[0m
+[0;32mI (1180756) main: FB: id=16 mode=24 status=0 ang=-3.226 spd=0.014 tq=-0.000 tmp=31.3[0m
+[0;32mI (1180956) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F27801B7FFF0139[0m
+[0;32mI (1180956) main: FB: id=16 mode=24 status=0 ang=-3.226 spd=0.042 tq=-0.000 tmp=31.3[0m
+
+# CYCLE 2 START
+[0;32mI (1181156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F287FD57FFF0139[0m
+[0;32mI (1181156) main: FB: id=16 mode=24 status=0 ang=-3.225 spd=-0.065 tq=-0.000 tmp=31.3[0m
+[0;32mI (1181356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F287FFC7FFF0139[0m
+[0;32mI (1181356) main: FB: id=16 mode=24 status=0 ang=-3.225 spd=-0.005 tq=-0.000 tmp=31.3[0m
+[0;32mI (1181556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F2780327FFF0139[0m
+[0;32mI (1181556) main: FB: id=16 mode=24 status=0 ang=-3.226 spd=0.077 tq=-0.000 tmp=31.3[0m
+[0;32mI (1181616) impedance: Starting dual-motor impedance control...[0m
+[0;32mI (1181616) impedance:   Motors: 0x10 (anti-phase) + 0x20 (in-phase)[0m
+[0;32mI (1181616) impedance:   KP=0.200  KD=0.100  Amp=90°  Freq=0.5Hz  Ramp=3.0s[0m
+[0;32mI (1181756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5F277FBE7FFF0139[0m
+[0;32mI (1181756) main: FB: id=16 mode=24 status=0 ang=-3.226 spd=-0.100 tq=-0.000 tmp=31.3[0m
+[0;32mI (1181956) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5F2A803D7F2F0139[0m
+[0;32mI (1181956) main: FB: id=16 mode=24 status=2 ang=-3.224 spd=0.094 tq=-0.035 tmp=31.3[0m
+[0;32mI (1182156) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5F2A7FBB814F0139[0m
+[0;32mI (1182156) main: FB: id=16 mode=24 status=2 ang=-3.224 spd=-0.105 tq=0.056 tmp=31.3[0m
+[0;32mI (1182166) impedance: Center positions: A=-3.2244 rad (-184.75°), B=2.5972 rad (148.81°)[0m
+[0;32mI (1182166) impedance: Impedance control running @ 100 Hz[0m
+OK: dual-motor impedance control started
+[0;32mI (1182356) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5F2B801580A20139[0m
+[0;32mI (1182356) main: FB: id=16 mode=24 status=2 ang=-3.224 spd=0.033 tq=0.027 tmp=31.3[0m
+[0;32mI (1182556) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5F2A7FD980870139[0m
+[0;32mI (1182556) main: FB: id=16 mode=24 status=2 ang=-3.224 spd=-0.059 tq=0.023 tmp=31.3[0m
+[0;32mI (1182756) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5F2B80247FED0139[0m
+[0;32mI (1182756) main: FB: id=16 mode=24 status=2 ang=-3.224 spd=0.056 tq=-0.003 tmp=31.3[0m
+[0;32mI (1182956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A717FD88037013F[0m
+[0;32mI (1182956) main: FB: id=32 mode=24 status=2 ang=2.597 spd=-0.060 tq=0.009 tmp=31.9[0m
+[0;32mI (1183156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A707FCD7F85013F[0m
+[0;32mI (1183156) main: FB: id=32 mode=24 status=2 ang=2.596 spd=-0.077 tq=-0.021 tmp=31.9[0m
+[0;32mI (1183356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A6F800E7F81013F[0m
+[0;32mI (1183356) main: FB: id=32 mode=24 status=2 ang=2.596 spd=0.022 tq=-0.021 tmp=31.9[0m
+[0;32mI (1183556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A55800A7ECC013F[0m
+[0;32mI (1183556) main: FB: id=32 mode=24 status=2 ang=2.586 spd=0.016 tq=-0.052 tmp=31.9[0m
+
+# CYCLE 2 RUN
+[0;32mI (1183756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A357F547F84013F[0m
+[0;32mI (1183756) main: FB: id=32 mode=24 status=2 ang=2.574 spd=-0.262 tq=-0.021 tmp=31.9[0m
+[0;32mI (1183956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A0A80207F1F013F[0m
+[0;32mI (1183956) main: FB: id=32 mode=24 status=2 ang=2.557 spd=0.050 tq=-0.038 tmp=31.9[0m
+[0;32mI (1184156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A0D7FFC7F02013F[0m
+[0;32mI (1184156) main: FB: id=32 mode=24 status=2 ang=2.558 spd=-0.005 tq=-0.043 tmp=31.9[0m
+[0;32mI (1184356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A35803D8080013F[0m
+[0;32mI (1184356) main: FB: id=32 mode=24 status=2 ang=2.574 spd=0.094 tq=0.022 tmp=31.9[0m
+[0;32mI (1184556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9B1E827D8181013F[0m
+[0;32mI (1184556) main: FB: id=32 mode=24 status=2 ang=2.663 spd=0.973 tq=0.065 tmp=31.9[0m
+[0;32mI (1184756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9D65834381C7013F[0m
+[0;32mI (1184756) main: FB: id=32 mode=24 status=2 ang=2.887 spd=1.275 tq=0.076 tmp=31.9[0m
+[0;32mI (1184956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9F01816B8099013F[0m
+[0;32mI (1184956) main: FB: id=32 mode=24 status=2 ang=3.045 spd=0.555 tq=0.026 tmp=31.9[0m
+[0;32mI (1185156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9F0E800B7DEC013F[0m
+[0;32mI (1185156) main: FB: id=32 mode=24 status=2 ang=3.050 spd=0.018 tq=-0.089 tmp=31.9[0m
+[0;32mI (1185356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9EAD7E6D7EAF013F[0m
+[0;32mI (1185356) main: FB: id=32 mode=24 status=2 ang=3.013 spd=-0.614 tq=-0.056 tmp=31.9[0m
+[0;32mI (1185556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9C3D7B8D7F20013F[0m
+[0;32mI (1185556) main: FB: id=32 mode=24 status=2 ang=2.773 spd=-1.737 tq=-0.038 tmp=31.9[0m
+[0;32mI (1185756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=98B47AEB8000013F[0m
+[0;32mI (1185756) main: FB: id=32 mode=24 status=2 ang=2.426 spd=-1.984 tq=0.000 tmp=31.9[0m
+[0;32mI (1185956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=95D67E0E7F98013F[0m
+[0;32mI (1185956) main: FB: id=32 mode=24 status=2 ang=2.145 spd=-0.759 tq=-0.017 tmp=31.9[0m
+[0;32mI (1186156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=95787FF7802B013F[0m
+[0;32mI (1186156) main: FB: id=32 mode=24 status=2 ang=2.109 spd=-0.013 tq=0.007 tmp=31.9[0m
+[0;32mI (1186356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=959580848171013F[0m
+[0;32mI (1186356) main: FB: id=32 mode=24 status=2 ang=2.120 spd=0.202 tq=0.062 tmp=31.9[0m
+[0;32mI (1186556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=97E784E380DA013F[0m
+[0;32mI (1186556) main: FB: id=32 mode=24 status=2 ang=2.348 spd=1.910 tq=0.037 tmp=31.9[0m
+[0;32mI (1186756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9BAA85427F83013F[0m
+[0;32mI (1186756) main: FB: id=32 mode=24 status=2 ang=2.717 spd=2.055 tq=-0.021 tmp=31.9[0m
+[0;32mI (1186956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9EBD826D80B1013F[0m
+[0;32mI (1186956) main: FB: id=32 mode=24 status=2 ang=3.019 spd=0.948 tq=0.030 tmp=31.9[0m
+[0;32mI (1187156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9EFD7FF27F6C013F[0m
+[0;32mI (1187156) main: FB: id=32 mode=24 status=2 ang=3.043 spd=-0.021 tq=-0.025 tmp=31.9[0m
+[0;32mI (1187356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9EB97F337E31013F[0m
+[0;32mI (1187356) main: FB: id=32 mode=24 status=2 ang=3.017 spd=-0.312 tq=-0.078 tmp=31.9[0m
+[0;32mI (1187556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9C517B8A7F7F013F[0m
+[0;32mI (1187556) main: FB: id=32 mode=24 status=2 ang=2.781 spd=-1.742 tq=-0.022 tmp=31.9[0m
+[0;32mI (1187756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=98B47AB7807E013F[0m
+[0;32mI (1187756) main: FB: id=32 mode=24 status=2 ang=2.426 spd=-2.064 tq=0.021 tmp=31.9[0m
+[0;32mI (1187956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=95BE7E207F35013F[0m
+[0;32mI (1187956) main: FB: id=32 mode=24 status=2 ang=2.135 spd=-0.732 tq=-0.034 tmp=31.9[0m
+[0;32mI (1188156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=957880318119013F[0m
+[0;32mI (1188156) main: FB: id=32 mode=24 status=2 ang=2.109 spd=0.076 tq=0.047 tmp=31.9[0m
+[0;32mI (1188356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=959E80BF805F013F[0m
+[0;32mI (1188356) main: FB: id=32 mode=24 status=2 ang=2.123 spd=0.292 tq=0.016 tmp=31.9[0m
+[0;32mI (1188556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=97EF84AD80B4013F[0m
+[0;32mI (1188556) main: FB: id=32 mode=24 status=2 ang=2.351 spd=1.827 tq=0.030 tmp=31.9[0m
+[0;32mI (1188756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E0F7AF17F3F0139[0m
+[0;32mI (1188756) main: FB: id=16 mode=2 status=2 ang=-3.333 spd=-1.975 tq=-0.032 tmp=31.3[0m
+[0;32mI (1188956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5B437DA47FA10139[0m
+[0;32mI (1188956) main: FB: id=16 mode=2 status=2 ang=-3.608 spd=-0.921 tq=-0.016 tmp=31.3[0m
+[0;32mI (1189156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5B0C7FE680D20139[0m
+[0;32mI (1189156) main: FB: id=16 mode=2 status=2 ang=-3.629 spd=-0.039 tq=0.035 tmp=31.3[0m
+[0;32mI (1189356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5B2D810D81510139[0m
+[0;32mI (1189356) main: FB: id=16 mode=2 status=2 ang=-3.616 spd=0.411 tq=0.057 tmp=31.3[0m
+[0;32mI (1189556) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5D408452817E0139[0m
+[0;32mI (1189556) main: FB: id=16 mode=24 status=2 ang=-3.412 spd=1.688 tq=0.064 tmp=31.3[0m
+[0;32mI (1189756) main: RX: ext=0x188010FD std=0x000 dlc=8 data=609784FA80D10139[0m
+[0;32mI (1189756) main: FB: id=16 mode=24 status=2 ang=-3.084 spd=1.945 tq=0.035 tmp=31.3[0m
+[0;32mI (1189956) main: RX: ext=0x188010FD std=0x000 dlc=8 data=636582217F820139[0m
+[0;32mI (1189956) main: FB: id=16 mode=24 status=2 ang=-2.809 spd=0.832 tq=-0.021 tmp=31.3[0m
+[0;32mI (1190156) main: RX: ext=0x188010FD std=0x000 dlc=8 data=63AF7FED7ECA0139[0m
+[0;32mI (1190156) main: FB: id=16 mode=24 status=2 ang=-2.781 spd=-0.028 tq=-0.052 tmp=31.3[0m
+[0;32mI (1190356) main: RX: ext=0x188010FD std=0x000 dlc=8 data=63647F387E170139[0m
+[0;32mI (1190356) main: FB: id=16 mode=24 status=2 ang=-2.809 spd=-0.304 tq=-0.082 tmp=31.3[0m
+[0;32mI (1190556) main: RX: ext=0x188010FD std=0x000 dlc=8 data=612F7BAB7CCF0139[0m
+[0;32mI (1190556) main: FB: id=16 mode=24 status=2 ang=-3.026 spd=-1.691 tq=-0.137 tmp=31.3[0m
+[0;32mI (1190756) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5DF87B817FBA0139[0m
+[0;32mI (1190756) main: FB: id=16 mode=24 status=2 ang=-3.342 spd=-1.756 tq=-0.012 tmp=31.3[0m
+[0;32mI (1190956) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5B8E7E7980690139[0m
+[0;32mI (1190956) main: FB: id=16 mode=24 status=2 ang=-3.579 spd=-0.596 tq=0.018 tmp=31.3[0m
+[0;32mI (1191156) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5B52800980170139[0m
+[0;32mI (1191156) main: FB: id=16 mode=24 status=2 ang=-3.602 spd=0.014 tq=0.004 tmp=31.3[0m
+[0;32mI (1191356) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5B6B80C882740139[0m
+[0;32mI (1191356) main: FB: id=16 mode=24 status=2 ang=-3.592 spd=0.306 tq=0.105 tmp=31.3[0m
+[0;32mI (1191556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9C447B567F52013F[0m
+[0;32mI (1191556) main: FB: id=32 mode=24 status=2 ang=2.776 spd=-1.821 tq=-0.029 tmp=31.9[0m
+[0;32mI (1191756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=98D37B4B7EDC013F[0m
+[0;32mI (1191756) main: FB: id=32 mode=24 status=2 ang=2.438 spd=-1.838 tq=-0.049 tmp=31.9[0m
+[0;32mI (1191956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=96247DC27EA7013F[0m
+[0;32mI (1191956) main: FB: id=32 mode=24 status=2 ang=2.175 spd=-0.875 tq=-0.058 tmp=31.9[0m
+[0;32mI (1192156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=95F180078059013F[0m
+[0;32mI (1192156) main: FB: id=32 mode=24 status=2 ang=2.155 spd=0.011 tq=0.015 tmp=31.9[0m
+[0;32mI (1192356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9641810A8075013F[0m
+[0;32mI (1192356) main: FB: id=32 mode=24 status=2 ang=2.186 spd=0.407 tq=0.020 tmp=31.9[0m
+[0;32mI (1192556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=987D843B81EB013F[0m
+[0;32mI (1192556) main: FB: id=32 mode=24 status=2 ang=2.405 spd=1.653 tq=0.082 tmp=31.9[0m
+[0;32mI (1192756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9BEB850B828A013F[0m
+[0;32mI (1192756) main: FB: id=32 mode=24 status=2 ang=2.742 spd=1.971 tq=0.109 tmp=31.9[0m
+[0;32mI (1192956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9ED1825A80F7013F[0m
+[0;32mI (1192956) main: FB: id=32 mode=24 status=2 ang=3.027 spd=0.919 tq=0.042 tmp=31.9[0m
+[0;32mI (1193156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9F117FC78029013F[0m
+[0;32mI (1193156) main: FB: id=32 mode=24 status=2 ang=3.051 spd=-0.086 tq=0.007 tmp=31.9[0m
+[0;32mI (1193356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9E977DD47E80013F[0m
+[0;32mI (1193356) main: FB: id=32 mode=24 status=2 ang=3.004 spd=-0.848 tq=-0.064 tmp=31.9[0m
+[0;32mI (1193556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9C187B2A7ED7013F[0m
+[0;32mI (1193556) main: FB: id=32 mode=24 status=2 ang=2.759 spd=-1.888 tq=-0.050 tmp=31.9[0m
+
+# CYCLE 2 STATUS
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+[0;32mI (1193756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=98657A867ED8013F[0m
+[0;32mI (1193756) main: FB: id=32 mode=24 status=2 ang=2.396 spd=-2.139 tq=-0.050 tmp=31.9[0m
+[0;32mI (1193956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=95A17DD97F89013F[0m
+[0;32mI (1193956) main: FB: id=32 mode=24 status=2 ang=2.124 spd=-0.840 tq=-0.020 tmp=31.9[0m
+[0;32mI (1194156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=956280368070013F[0m
+[0;32mI (1194156) main: FB: id=32 mode=24 status=2 ang=2.100 spd=0.083 tq=0.019 tmp=31.9[0m
+[0;32mI (1194356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=95AA8152812B013F[0m
+[0;32mI (1194356) main: FB: id=32 mode=24 status=2 ang=2.128 spd=0.517 tq=0.050 tmp=31.9[0m
+[0;32mI (1194556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=980984A68172013F[0m
+[0;32mI (1194556) main: FB: id=32 mode=24 status=2 ang=2.361 spd=1.817 tq=0.062 tmp=31.9[0m
+[0;32mI (1194756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9BAA85308116013F[0m
+[0;32mI (1194756) main: FB: id=32 mode=24 status=2 ang=2.717 spd=2.027 tq=0.047 tmp=31.9[0m
+
+# CYCLE 2 STOP
+[0;32mI (1194846) impedance: Stopping impedance control...[0m
+[0;32mI (1194956) main: RX: ext=0x180020FD std=0x000 dlc=8 data=9E6284317FFF013F[0m
+[0;32mI (1194956) main: FB: id=32 mode=24 status=0 ang=2.984 spd=1.638 tq=-0.000 tmp=31.9[0m
+[0;32mI (1194986) impedance: Impedance control stopped, motors disabled[0m
+OK: impedance control stopped, motors disabled
+[0;32mI (1195156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C037FDC7FFF013F[0m
+[0;32mI (1195156) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=-0.054 tq=-0.000 tmp=31.9[0m
+[0;32mI (1195356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C03801D7FFF013F[0m
+[0;32mI (1195356) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=0.045 tq=-0.000 tmp=31.9[0m
+[0;32mI (1195556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C037FEC7FFF013F[0m
+[0;32mI (1195556) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=-0.030 tq=-0.000 tmp=31.9[0m
+[0;32mI (1195756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C037FF37FFF013F[0m
+[0;32mI (1195756) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=-0.019 tq=-0.000 tmp=31.9[0m
+[0;32mI (1195956) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C037FF07FFF013F[0m
+[0;32mI (1195956) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=-0.024 tq=-0.000 tmp=31.9[0m
+
+# CYCLE 3 START
+[0;32mI (1196156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C0380167FFF013F[0m
+[0;32mI (1196156) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1196356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C037FFB7FFF013F[0m
+[0;32mI (1196356) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1196556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5C0380047FFF013F[0m
+[0;32mI (1196556) main: FB: id=16 mode=24 status=0 ang=-3.534 spd=0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1196606) impedance: Starting dual-motor impedance control...[0m
+[0;32mI (1196606) impedance:   Motors: 0x10 (anti-phase) + 0x20 (in-phase)[0m
+[0;32mI (1196606) impedance:   KP=0.200  KD=0.100  Amp=90°  Freq=0.5Hz  Ramp=3.0s[0m
+[0;32mI (1196756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C037FE77FFF013F[0m
+[0;32mI (1196756) main: FB: id=16 mode=2 status=2 ang=-3.534 spd=-0.037 tq=-0.000 tmp=31.9[0m
+[0;32mI (1196956) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5C03805881D9013F[0m
+[0;32mI (1196956) main: FB: id=16 mode=24 status=2 ang=-3.534 spd=0.135 tq=0.079 tmp=31.9[0m
+[0;32mI (1197156) impedance: Center positions: A=-3.5340 rad (-202.48°), B=2.9832 rad (170.92°)[0m
+[0;32mI (1197156) impedance: Impedance control running @ 100 Hz[0m
+[0;32mI (1197156) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5C037FF88182013F[0m
+OK: dual-motor impedance control started
+[0;32mI (1197166) main: FB: id=16 mode=24 status=2 ang=-3.534 spd=-0.011 tq=0.065 tmp=31.9[0m
+[0;32mI (1197356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C0380028059013F[0m
+[0;32mI (1197356) main: FB: id=16 mode=2 status=2 ang=-3.534 spd=0.004 tq=0.015 tmp=31.9[0m
+[0;32mI (1197556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C0280277FFE013F[0m
+[0;32mI (1197556) main: FB: id=16 mode=2 status=2 ang=-3.534 spd=0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1197756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C02800C7F9D013F[0m
+[0;32mI (1197756) main: FB: id=16 mode=2 status=2 ang=-3.534 spd=0.019 tq=-0.017 tmp=31.9[0m
+[0;32mI (1197956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C027FF07F7B013F[0m
+[0;32mI (1197956) main: FB: id=16 mode=2 status=2 ang=-3.534 spd=-0.024 tq=-0.022 tmp=31.9[0m
+[0;32mI (1198156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C03801A7FF0013F[0m
+[0;32mI (1198156) main: FB: id=16 mode=2 status=2 ang=-3.534 spd=0.040 tq=-0.003 tmp=31.9[0m
+[0;32mI (1198356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C03800D82AC013F[0m
+[0;32mI (1198356) main: FB: id=16 mode=2 status=2 ang=-3.534 spd=0.021 tq=0.115 tmp=31.9[0m
+[0;32mI (1198556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C067FCD7FCF013F[0m
+[0;32mI (1198556) main: FB: id=16 mode=2 status=2 ang=-3.533 spd=-0.077 tq=-0.008 tmp=31.9[0m
+
+# CYCLE 3 RUN
+[0;32mI (1198756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C0A8000814E013F[0m
+[0;32mI (1198756) main: FB: id=16 mode=2 status=2 ang=-3.531 spd=0.001 tq=0.056 tmp=31.9[0m
+[0;32mI (1198956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C0B804D80B1013F[0m
+[0;32mI (1198956) main: FB: id=16 mode=2 status=2 ang=-3.531 spd=0.118 tq=0.030 tmp=31.9[0m
+[0;32mI (1199156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5C097FF57FDD013F[0m
+[0;32mI (1199156) main: FB: id=16 mode=2 status=2 ang=-3.532 spd=-0.016 tq=-0.006 tmp=31.9[0m
+[0;32mI (1199356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5BFF7FAE7ED2013F[0m
+[0;32mI (1199356) main: FB: id=16 mode=2 status=2 ang=-3.536 spd=-0.124 tq=-0.051 tmp=31.9[0m
+[0;32mI (1199556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9F0B82C381CF013F[0m
+[0;32mI (1199556) main: FB: id=32 mode=24 status=2 ang=3.049 spd=1.080 tq=0.078 tmp=31.9[0m
+[0;32mI (1199756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=A16883CC8084013F[0m
+[0;32mI (1199756) main: FB: id=32 mode=24 status=2 ang=3.281 spd=1.484 tq=0.022 tmp=31.9[0m
+[0;32mI (1199956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=A33E80E48043013F[0m
+[0;32mI (1199956) main: FB: id=32 mode=24 status=2 ang=3.461 spd=0.349 tq=0.011 tmp=31.9[0m
+[0;32mI (1200156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=A34580187E58013F[0m
+[0;32mI (1200156) main: FB: id=32 mode=24 status=2 ang=3.464 spd=0.037 tq=-0.071 tmp=31.9[0m
+[0;32mI (1200356) main: RX: ext=0x188020FD std=0x000 dlc=8 data=A2BF7E4D7D8A013F[0m
+[0;32mI (1200356) main: FB: id=32 mode=24 status=2 ang=3.412 spd=-0.663 tq=-0.106 tmp=31.9[0m
+[0;32mI (1200556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5A0D842A80FB013F[0m
+[0;32mI (1200556) main: FB: id=16 mode=2 status=2 ang=-3.727 spd=1.627 tq=0.042 tmp=31.9[0m
+[0;32mI (1200756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5D5284F78032013F[0m
+[0;32mI (1200756) main: FB: id=16 mode=2 status=2 ang=-3.406 spd=1.940 tq=0.008 tmp=31.9[0m
+[0;32mI (1200956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FC381CF823E013F[0m
+[0;32mI (1200956) main: FB: id=16 mode=2 status=2 ang=-3.166 spd=0.707 tq=0.096 tmp=31.9[0m
+[0;32mI (1201156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FDD80087EBB013F[0m
+[0;32mI (1201156) main: FB: id=16 mode=2 status=2 ang=-3.156 spd=0.013 tq=-0.054 tmp=31.9[0m
+[0;32mI (1201356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5F6D7E917D2A013F[0m
+[0;32mI (1201356) main: FB: id=16 mode=2 status=2 ang=-3.199 spd=-0.559 tq=-0.122 tmp=31.9[0m
+[0;32mI (1201556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5D5F7B807E75013F[0m
+[0;32mI (1201556) main: FB: id=16 mode=2 status=2 ang=-3.401 spd=-1.757 tq=-0.066 tmp=31.9[0m
+[0;32mI (1201756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5A157B917F17013F[0m
+[0;32mI (1201756) main: FB: id=16 mode=2 status=2 ang=-3.724 spd=-1.731 tq=-0.039 tmp=31.9[0m
+[0;32mI (1201956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=57F07E957F57013F[0m
+[0;32mI (1201956) main: FB: id=16 mode=2 status=2 ang=-3.934 spd=-0.553 tq=-0.028 tmp=31.9[0m
+[0;32mI (1202156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=57CD7FD880B8013F[0m
+[0;32mI (1202156) main: FB: id=16 mode=2 status=2 ang=-3.948 spd=-0.060 tq=0.031 tmp=31.9[0m
+[0;32mI (1202356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5809813782E9013F[0m
+[0;32mI (1202356) main: FB: id=16 mode=2 status=2 ang=-3.925 spd=0.475 tq=0.125 tmp=31.9[0m
+[0;32mI (1202556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5A6E845081F6013F[0m
+[0;32mI (1202556) main: FB: id=16 mode=2 status=2 ang=-3.689 spd=1.685 tq=0.084 tmp=31.9[0m
+[0;32mI (1202756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DA2845A8183013F[0m
+[0;32mI (1202756) main: FB: id=16 mode=2 status=2 ang=-3.375 spd=1.701 tq=0.065 tmp=31.9[0m
+[0;32mI (1202956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FF281988067013F[0m
+[0;32mI (1202956) main: FB: id=16 mode=2 status=2 ang=-3.148 spd=0.623 tq=0.017 tmp=31.9[0m
+[0;32mI (1203156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=600F7FD78183013F[0m
+[0;32mI (1203156) main: FB: id=16 mode=2 status=2 ang=-3.137 spd=-0.062 tq=0.065 tmp=31.9[0m
+[0;32mI (1203356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FF180057CF9013F[0m
+[0;32mI (1203356) main: FB: id=16 mode=2 status=2 ang=-3.148 spd=0.008 tq=-0.130 tmp=31.9[0m
+[0;32mI (1203556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5E207BE87DDB013F[0m
+[0;32mI (1203556) main: FB: id=16 mode=2 status=2 ang=-3.326 spd=-1.598 tq=-0.092 tmp=31.9[0m
+[0;32mI (1203756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5AE37BC37F80013F[0m
+[0;32mI (1203756) main: FB: id=16 mode=2 status=2 ang=-3.645 spd=-1.655 tq=-0.021 tmp=31.9[0m
+[0;32mI (1203956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=58817E787F42013F[0m
+[0;32mI (1203956) main: FB: id=16 mode=2 status=2 ang=-3.879 spd=-0.597 tq=-0.032 tmp=31.9[0m
+[0;32mI (1204156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=584A7FAC7FC0013F[0m
+[0;32mI (1204156) main: FB: id=16 mode=2 status=2 ang=-3.900 spd=-0.127 tq=-0.011 tmp=31.9[0m
+[0;32mI (1204356) main: RX: ext=0x188010FD std=0x000 dlc=8 data=586581248115013F[0m
+[0;32mI (1204356) main: FB: id=16 mode=24 status=2 ang=-3.889 spd=0.446 tq=0.047 tmp=31.9[0m
+[0;32mI (1204556) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5A878463813C013F[0m
+[0;32mI (1204556) main: FB: id=16 mode=24 status=2 ang=-3.680 spd=1.714 tq=0.053 tmp=31.9[0m
+[0;32mI (1204756) main: RX: ext=0x188010FD std=0x000 dlc=8 data=5DC884698156013F[0m
+[0;32mI (1204756) main: FB: id=16 mode=24 status=2 ang=-3.360 spd=1.724 tq=0.057 tmp=31.9[0m
+[0;32mI (1204956) main: RX: ext=0x188010FD std=0x000 dlc=8 data=604B819180AE013F[0m
+[0;32mI (1204956) main: FB: id=16 mode=24 status=2 ang=-3.114 spd=0.613 tq=0.029 tmp=31.9[0m
+[0;32mI (1205156) main: RX: ext=0x188010FD std=0x000 dlc=8 data=60707FD68054013F[0m
+[0;32mI (1205156) main: FB: id=16 mode=24 status=2 ang=-3.099 spd=-0.063 tq=0.014 tmp=31.9[0m
+[0;32mI (1205356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=600B7DE77FD9013F[0m
+[0;32mI (1205356) main: FB: id=16 mode=2 status=2 ang=-3.138 spd=-0.819 tq=-0.006 tmp=31.9[0m
+[0;32mI (1205556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5D9D7BAB7F41013F[0m
+[0;32mI (1205556) main: FB: id=16 mode=2 status=2 ang=-3.377 spd=-1.691 tq=-0.032 tmp=31.9[0m
+[0;32mI (1205756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5A697B5F7F75013F[0m
+[0;32mI (1205756) main: FB: id=16 mode=2 status=2 ang=-3.691 spd=-1.807 tq=-0.023 tmp=31.9[0m
+[0;32mI (1205956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=58117EB57DF6013F[0m
+[0;32mI (1205956) main: FB: id=16 mode=2 status=2 ang=-3.921 spd=-0.504 tq=-0.088 tmp=31.9[0m
+[0;32mI (1206156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=57E4801D8122013F[0m
+[0;32mI (1206156) main: FB: id=16 mode=2 status=2 ang=-3.939 spd=0.045 tq=0.049 tmp=31.9[0m
+[0;32mI (1206356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=582281D58256013F[0m
+[0;32mI (1206356) main: FB: id=16 mode=2 status=2 ang=-3.915 spd=0.716 tq=0.100 tmp=31.9[0m
+[0;32mI (1206556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5A7784768190013F[0m
+[0;32mI (1206556) main: FB: id=16 mode=2 status=2 ang=-3.686 spd=1.743 tq=0.067 tmp=31.9[0m
+[0;32mI (1206756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DA8840A8191013F[0m
+[0;32mI (1206756) main: FB: id=16 mode=2 status=2 ang=-3.373 spd=1.579 tq=0.067 tmp=31.9[0m
+[0;32mI (1206956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FCE81788153013F[0m
+[0;32mI (1206956) main: FB: id=16 mode=2 status=2 ang=-3.162 spd=0.575 tq=0.057 tmp=31.9[0m
+[0;32mI (1207156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FF580087F64013F[0m
+[0;32mI (1207156) main: FB: id=16 mode=2 status=2 ang=-3.147 spd=0.013 tq=-0.026 tmp=31.9[0m
+[0;32mI (1207356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FD07E767E6F013F[0m
+[0;32mI (1207356) main: FB: id=16 mode=2 status=2 ang=-3.161 spd=-0.600 tq=-0.067 tmp=31.9[0m
+[0;32mI (1207556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5D907B9F7DA6013F[0m
+[0;32mI (1207556) main: FB: id=16 mode=2 status=2 ang=-3.382 spd=-1.710 tq=-0.101 tmp=31.9[0m
+[0;32mI (1207756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5A547B457DFE013F[0m
+[0;32mI (1207756) main: FB: id=16 mode=2 status=2 ang=-3.699 spd=-1.847 tq=-0.086 tmp=31.9[0m
+[0;32mI (1207956) main: RX: ext=0x028010FD std=0x000 dlc=8 data=58027EC07F9D013F[0m
+[0;32mI (1207956) main: FB: id=16 mode=2 status=2 ang=-3.927 spd=-0.488 tq=-0.017 tmp=31.9[0m
+[0;32mI (1208156) main: RX: ext=0x028010FD std=0x000 dlc=8 data=57E780038113013F[0m
+[0;32mI (1208156) main: FB: id=16 mode=2 status=2 ang=-3.938 spd=0.005 tq=0.046 tmp=31.9[0m
+[0;32mI (1208356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=580480CC8151013F[0m
+[0;32mI (1208356) main: FB: id=16 mode=2 status=2 ang=-3.926 spd=0.312 tq=0.057 tmp=31.9[0m
+[0;32mI (1208556) main: RX: ext=0x188020FD std=0x000 dlc=8 data=A0887B507CE2013F[0m
+[0;32mI (1208556) main: FB: id=32 mode=24 status=2 ang=3.195 spd=-1.830 tq=-0.134 tmp=31.9[0m
+
+# CYCLE 3 STATUS
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+[0;32mI (1208756) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9D047ADC7EE3013F[0m
+[0;32mI (1208756) main: FB: id=32 mode=24 status=2 ang=2.850 spd=-2.007 tq=-0.048 tmp=31.9[0m
+[0;32mI (1208956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A517DF48075013F[0m
+[0;32mI (1208956) main: FB: id=32 mode=24 status=2 ang=2.585 spd=-0.799 tq=0.020 tmp=31.9[0m
+[0;32mI (1209156) main: RX: ext=0x188020FD std=0x000 dlc=8 data=9A287FD3815F013F[0m
+[0;32mI (1209156) main: FB: id=32 mode=24 status=2 ang=2.569 spd=-0.068 tq=0.059 tmp=31.9[0m
+[0;32mI (1209356) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5FE17EE87F13013F[0m
+[0;32mI (1209356) main: FB: id=16 mode=2 status=2 ang=-3.154 spd=-0.426 tq=-0.040 tmp=31.9[0m
+[0;32mI (1209556) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5DAB7B887EE5013F[0m
+[0;32mI (1209556) main: FB: id=16 mode=2 status=2 ang=-3.371 spd=-1.745 tq=-0.047 tmp=31.9[0m
+[0;32mI (1209756) main: RX: ext=0x028010FD std=0x000 dlc=8 data=5A6F7B407E2C013F[0m
+[0;32mI (1209756) main: FB: id=16 mode=2 status=2 ang=-3.689 spd=-1.855 tq=-0.078 tmp=31.9[0m
+
+# CYCLE 3 STOP
+[0;32mI (1209896) impedance: Stopping impedance control...[0m
+[0;32mI (1209956) main: RX: ext=0x188020FD std=0x000 dlc=8 data=A27D817780CF013F[0m
+[0;32mI (1209956) main: FB: id=32 mode=24 status=2 ang=3.387 spd=0.573 tq=0.035 tmp=31.9[0m
+[0;32mI (1210036) impedance: Impedance control stopped, motors disabled[0m
+OK: impedance control stopped, motors disabled
+[0;32mI (1210156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=586480017FFF013F[0m
+[0;32mI (1210156) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1210356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865801C7FFF013F[0m
+[0;32mI (1210356) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.043 tq=-0.000 tmp=31.9[0m
+[0;32mI (1210556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865806A7FFF013F[0m
+[0;32mI (1210556) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.163 tq=-0.000 tmp=31.9[0m
+[0;32mI (1210756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5865803B7FFF013F[0m
+[0;32mI (1210756) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=0.091 tq=-0.000 tmp=31.9[0m
+[0;32mI (1210956) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FF47FFF013F[0m
+[0;32mI (1210956) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.018 tq=-0.000 tmp=31.9[0m
+
+# FINAL CAN STATUS
+[0;32mI (1211156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FCC7FFF013F[0m
+[0;32mI (1211156) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.079 tq=-0.000 tmp=31.9[0m
+[0;32mI (1211356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FFB7FFF013F[0m
+[0;32mI (1211356) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.007 tq=-0.000 tmp=31.9[0m
+[0;32mI (1211556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF77FFF013F[0m
+[0;32mI (1211556) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.013 tq=-0.000 tmp=31.9[0m
+===== TWAI Status =====
+  State:             RUNNING
+  RX GPIO2 level:   1 (recessive/idle)
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  0
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   0
+  Arbitration lost:  0
+  RX missed:         0
+[0;32mI (1211756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FAA7FFF013F[0m
+[0;32mI (1211756) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.130 tq=-0.000 tmp=31.9[0m
+[0;32mI (1211956) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FD87FFF013F[0m
+[0;32mI (1211956) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.060 tq=-0.000 tmp=31.9[0m
+[0;32mI (1212156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=5864802B7FFF013F[0m
+[0;32mI (1212156) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=0.066 tq=-0.000 tmp=31.9[0m
+[0;32mI (1212356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FF57FFF013F[0m
+[0;32mI (1212356) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.016 tq=-0.000 tmp=31.9[0m
+[0;32mI (1212556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FE17FFF013F[0m
+[0;32mI (1212556) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.047 tq=-0.000 tmp=31.9[0m
+[0;32mI (1212756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FAF7FFF013F[0m
+[0;32mI (1212756) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.123 tq=-0.000 tmp=31.9[0m
+
+# FINAL STOP/DISABLE
+ERROR: impedance control not running.
+[0;32mI (1212956) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FFD7FFF013F[0m
+[0;32mI (1212956) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.004 tq=-0.000 tmp=31.9[0m
+[0;32mI (1213156) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58657FF97FFF013F[0m
+[0;32mI (1213156) main: FB: id=16 mode=24 status=0 ang=-3.889 spd=-0.010 tq=-0.000 tmp=31.9[0m
+[0;32mI (1213356) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FFE7FFF013F[0m
+[0;32mI (1213356) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.002 tq=-0.000 tmp=31.9[0m
+[0;32mI (1213556) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDA7FFF013F[0m
+[0;32mI (1213556) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.057 tq=-0.000 tmp=31.9[0m
+
+OK: target motor set to 0x10 (16)
+[0;32mI (1213756) main: RX: ext=0x180010FD std=0x000 dlc=8 data=58647FDA7FFF013F[0m
+[0;32mI (1213756) main: FB: id=16 mode=24 status=0 ang=-3.890 spd=-0.057 tq=-0.000 tmp=31.9[0m
+
+[0;32mI (1213956) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580167FFF013F[0m
+OK: motor 0x10 proactive report OFF
+[0;32mI (1213956) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1214156) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580077FFF013F[0m
+[0;32mI (1214156) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.011 tq=-0.000 tmp=31.9[0m
+
+OK: motor 0x10 disable sent
+[0;32mI (1214356) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580167FFF013F[0m
+[0;32mI (1214356) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.034 tq=-0.000 tmp=31.9[0m
+[0;32mI (1214556) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A28580177FFF013F[0m
+[0;32mI (1214556) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.036 tq=-0.000 tmp=31.9[0m
+[0;32mI (1214756) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A285803E7FFF013F[0m
+[0;32mI (1214756) main: FB: id=32 mode=24 status=0 ang=3.390 spd=0.095 tq=-0.000 tmp=31.9[0m
+
+OK: target motor set to 0x20 (32)
+[0;32mI (1214956) main: RX: ext=0x180020FD std=0x000 dlc=8 data=A2847FC57FFF013F[0m
+[0;32mI (1214956) main: FB: id=32 mode=24 status=0 ang=3.390 spd=-0.089 tq=-0.000 tmp=31.9[0m
+
+OK: motor 0x20 proactive report OFF
+
+OK: motor 0x20 disable sent
+[0;32mI (1215356) main: RX: ext=0x020020FD std=0x000 dlc=8 data=A285800A7FFF013F[0m
+[0;32mI (1215356) main: FB: id=32 mode=2 status=0 ang=3.390 spd=0.016 tq=-0.000 tmp=31.9[0m
