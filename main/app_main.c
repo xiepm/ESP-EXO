@@ -8,16 +8,17 @@
  * Features:
  *  - Dual protocol: Lingzu private protocol + MIT protocol
  *  - One application-wide 100 Hz control loop
- *  - Interactive BLE/UART console for development commands
+ *  - Product BLE binary protocol and UART-only engineering console
  *  - CAN bus feedback parsing (angle, speed, torque, temperature, faults)
  */
 
-#include "ble_console.h"
+#include "debug_console.h"
 #include "driver/twai.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "exo_config.h"
 #include "exo_control_loop.h"
+#include "exo_ble.h"
 #include "exo_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -150,9 +151,11 @@ void app_main(void) {
 	 * until a START/STOP request and does not provide a periodic time base. */
 	ESP_ERROR_CHECK(exo_system_init());
 
-	/* Finish the heavyweight NimBLE/NVS initialization before starting the
-	 * timing diagnostics of the permanent control task. */
-	ESP_ERROR_CHECK(ble_console_init());
+	/* Keep engineering text commands on UART. Product BLE owns the only
+	 * NimBLE host and accepts only the bounded binary protocol. Finish the
+	 * heavyweight initialization before starting control-loop diagnostics. */
+	ESP_ERROR_CHECK(debug_console_init());
+	ESP_ERROR_CHECK(exo_ble_init());
 
 	/* Create the permanent control task after all heavyweight subsystem
 	 * initialization, then release the system from INIT. app_main returns and

@@ -2,7 +2,7 @@
 
 ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 ESP-IDF 开发。
 
-当前仓库已完成阶段 5“系统状态机和 START/STOP 执行器”，主要包括：
+当前仓库已完成阶段 6“产品 BLE 协议”。主要包括：
 
 - ESP32-S3；
 - 1 Mbps TWAI/CAN 总线；
@@ -13,10 +13,10 @@ ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 E
 - LEFT/RIGHT 同周期读取、零等待实时运动发送和按需时序诊断；
 - 六态整机状态机、派生启动就绪条件及异步 START/STOP 执行器；
 - 唯一周期运动输出门，以及调试维护命令与启停序列的互斥；
-- NimBLE BLE 串口控制台；
+- 产品 BLE v1 二进制协议，以及 UART-only 工程调试台；
 - 100 Hz 双电机正弦参考与阻抗控制示例。
 
-> 当前代码仍处于分阶段重构期，不代表最终产品架构。公共类型、硬件配置、RS01 驱动、髋关节对象、唯一 100 Hz 控制任务和整机启停状态机已经集中；产品 BLE 二进制协议和步态控制仍将按后续阶段实现。左右映射与方向已经通过两侧独立运动采集确定，固件不会依据 CAN ID 猜测人体侧别。
+> 当前代码仍处于分阶段重构期，不代表最终产品架构。公共类型、硬件配置、RS01 驱动、髋关节对象、唯一 100 Hz 控制任务、整机启停状态机和产品 BLE v1 已经集中；正弦阻抗迁移、五元命令、步态估计和遥测仍按后续阶段实现。左右映射与方向已经通过两侧独立运动采集确定，固件不会依据 CAN ID 猜测人体侧别。
 
 阶段 0 的软件基线、构建证据和硬件验收边界见
 [阶段 0 基线](docs/baseline/PHASE_0_BASELINE.md)。连接开发板后的逐项验证见
@@ -46,6 +46,11 @@ BLE 及运动回归结果见 [阶段 3 验收](docs/phase3/PHASE_3_ACCEPTANCE.md
 无运动门控、BLE 归零、状态竞争及 3 轮运动证据见
 [阶段 5 验收](docs/phase5/PHASE_5_ACCEPTANCE.md)。
 
+阶段 6 已于 2026-08-07 完成，正式标签为 `phase6-product-ble-protocol`。协议、任务边界和
+手机流程见 [阶段 6 设计](docs/phase6/PHASE_6_DESIGN.md) 与
+[BLE 协议 v1](docs/phase6/BLE_PROTOCOL_V1.md)；构建、烧录、畸形帧、归零、幂等、断连语义
+及 START/STOP 运动结果见 [阶段 6 验收](docs/phase6/PHASE_6_ACCEPTANCE.md)。
+
 ## 目录
 
 ```text
@@ -57,10 +62,11 @@ ESP-EXO/
 ├── docs/phase3/          # 阶段 3 髋关节对象、软件零位设计和验收记录
 ├── docs/phase4/          # 阶段 4 唯一 100 Hz 控制任务设计和验收记录
 ├── docs/phase5/          # 阶段 5 状态机、启停执行器设计和验收记录
-├── tools/                # 阶段 0 构建验证脚本
+├── docs/phase6/          # 阶段 6 产品 BLE 协议、设计和验收记录
+├── tools/                # 构建验证和阶段 6 BLE 验收脚本
 ├── CMakeLists.txt        # 工程构建入口
 ├── sdkconfig             # 当前 ESP32-S3 工程配置
-└── CONSOLE_COMMANDS.md   # 当前串口/BLE 控制台命令说明
+└── CONSOLE_COMMANDS.md   # UART-only 工程调试命令说明
 ```
 
 ## 当前硬件配置
@@ -110,7 +116,7 @@ idf.py -p COMx flash monitor
 3. 建立髋关节对象和软件零位（已完成）；
 4. 建立唯一 100 Hz 控制任务（已完成：`phase4-single-100hz-control-task`）；
 5. 建立状态机及 START/STOP 执行器（已完成：`phase5-system-state-start-stop`）；
-6. 建立产品 BLE 协议；
+6. 建立产品 BLE 协议（已完成：`phase6-product-ble-protocol`）；
 7. 迁移正弦参考和阻抗控制；
 8. 加入五元命令和基础模式；
 9. 加入传感快照和步态估计；

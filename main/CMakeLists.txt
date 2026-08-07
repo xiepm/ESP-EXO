@@ -6,7 +6,9 @@ idf_component_register(
         "hip_joint.c"
         "exo_control_loop.c"
         "exo_system.c"
-        "ble_console.c"
+        "exo_ble_protocol.c"
+        "exo_ble.c"
+        "debug_console.c"
         "impedance_control.c"
     INCLUDE_DIRS "." "include"
     REQUIRES driver

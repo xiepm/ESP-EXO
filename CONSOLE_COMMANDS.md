@@ -1,15 +1,13 @@
-# ESP-EXO RS01 与髋关节调试控制台命令手册
+# ESP-EXO RS01 与髋关节 UART 调试控制台命令手册
 
-> 这是阶段 5 使用的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
-> A/B 两台 RS01 写入 10 ms 上报周期并请求开启主动反馈；该操作不会使能电机。
+> 这是仅通过烧录 UART 使用的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
+> A/B 两台 RS01 写入 10 ms 上报周期并请求开启主动反馈；该操作不会使能电机。手机 BLE
+> 接口见 `docs/phase6/BLE_PROTOCOL_V1.md`，不接受本页的 ASCII 命令。
 
 ## 命令通道
 
-同一套命令同时支持：
-
-1. **烧录串口（推荐调试方式）**：115200 baud，发送 ASCII 命令并以 `\r` 或
-   `\n` 结束。可直接在 ESP-IDF monitor 中输入命令后按 Enter。
-2. **BLE NUS**：配置见下节。
+调试命令只支持**烧录串口**：115200 baud，发送 ASCII 命令并以 `\r` 或
+`\n` 结束。可直接在 ESP-IDF monitor 中输入命令后按 Enter。
 
 烧录串口示例：
 
@@ -28,22 +26,13 @@ status
 
 > 实际端口号以设备管理器或 `idf.py -p <PORT>` 使用的烧录端口为准。
 
-## BLE NUS 配置
+## 与产品 BLE 的边界
 
-| 参数 | 值 |
-|------|-----|
-| 广播名称 | `RobStride-CAN` |
-| Service UUID | `6E400001-B5A3-F393-E0A9-E50E24DCCA9E` |
-| RX UUID（客户端写入） | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` |
-| TX UUID（客户端订阅 Notify） | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` |
-| 命令编码 | UTF-8 / ASCII 文本 |
-| 命令结束符 | `\r` 或 `\n` |
-
-使用支持 Nordic UART Service 的 BLE 客户端连接 `RobStride-CAN`，先订阅 TX
-特征通知，再向 RX 特征写入命令。例如发送 `help\r\n`。
-
-当前调试固件不主动向 BLE 连续推送 100 Hz 电机反馈，以免阻塞 CAN 接收。手机调试时
-使用 `motor A`/`motor B` 后发送 `status`；产品化连续遥测在阶段 10 加入。
+- UART 保留全部工程维护、原始 RS01 和诊断命令；
+- 产品 BLE 只开放 `GET_INFO`、系统/关节状态、`START`、`STOP` 和髋关节 RAM
+  软件零位命令；
+- 产品 BLE 不支持 Nordic UART Service，也不传输 ASCII 文本；
+- 阶段 6 仅按请求返回快照，不连续推送 100 Hz 反馈；连续遥测在阶段 10 加入。
 
 烧录串口同时用于固件烧录、ESP-IDF 日志和命令控制：
 
@@ -59,8 +48,8 @@ idf.py -p COMx monitor
 
 ## 基本用法
 
-连接并订阅 TX 通知后会收到欢迎信息。所有命令通过 RX 特征写入，使用回车
-或换行执行。运动控制命令按一次写入发送一次，不会在后台周期重发。
+连接烧录串口后输入命令并按 Enter。运动控制命令按一次输入发送一次，不会在后台
+周期重发。
 
 未接电机时可验证 `help`、`motor A`、`motor_type`、`status` 和
 `can_status`；此时 `status` 应显示 `Valid: no`、`Online: no`，而
@@ -437,7 +426,7 @@ control_status
 
 按需输出常驻 100 Hz 控制任务的任务身份、周期数、目标及实测周期、执行时间、
 超期和跳周期数、输出错误、栈最低余量，以及 LEFT/RIGHT 本周期反馈来源与
-`joint_valid`。该命令只是 UART/BLE 共用的文本诊断，不是连续遥测，也不会
+`joint_valid`。该命令只是 UART 文本诊断，不是连续遥测，也不会
 启动、停止或修改控制任务。
 
 ### can_status — 显示 CAN 控制器状态
@@ -447,6 +436,17 @@ can_status
 输出 TWAI 运行状态、TX/RX 队列、错误计数、发送失败、总线错误和仲裁丢失
 计数。若 `TX error counter`/`Bus error count` 持续增加或进入
 `BUS_OFF`，应检查收发器使能、CAN_H/CAN_L、共地、终端电阻和波特率。
+
+### ble_status — 显示产品 BLE 传输状态
+
+```text
+ble_status
+```
+
+输出产品 BLE 是否初始化、Host 是否同步、手机是否连接并订阅 Response Notify、连接
+代际、协商 MTU、BLE 命令任务栈余量，以及接收、排队、畸形帧、重复请求、请求号冲突、
+队列满、过期请求、通知同步提交成功/失败和异步 TX 失败计数。该命令只读，不发送产品 BLE
+命令，也不影响电机。
 
 ### motor_type — 查看电机型号参数
 ```
