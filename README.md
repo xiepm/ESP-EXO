@@ -2,7 +2,7 @@
 
 ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 ESP-IDF 开发。
 
-当前仓库已完成阶段 4，并正在验收阶段 5“系统状态机和 START/STOP 执行器”，主要包括：
+当前仓库已完成阶段 5“系统状态机和 START/STOP 执行器”，主要包括：
 
 - ESP32-S3；
 - 1 Mbps TWAI/CAN 总线；
@@ -41,10 +41,10 @@ BLE 及运动回归结果见 [阶段 3 验收](docs/phase3/PHASE_3_ACCEPTANCE.md
 审计、5 分钟空闲、BLE 重连及 3x10 秒运动结果见
 [阶段 4 验收](docs/phase4/PHASE_4_ACCEPTANCE.md)。
 
-阶段 5 的状态模型、请求语义和执行序列见
-[阶段 5 设计](docs/phase5/PHASE_5_DESIGN.md)；静态、构建和实机证据持续记录在
-[阶段 5 验收](docs/phase5/PHASE_5_ACCEPTANCE.md)。在用户重新确认双髋中立位并完成
-运动回归前，阶段 5 保持 `IN PROGRESS`，不提前创建正式标签。
+阶段 5 已于 2026-08-07 完成，正式标签为 `phase5-system-state-start-stop`。状态模型、
+请求语义和执行序列见 [阶段 5 设计](docs/phase5/PHASE_5_DESIGN.md)；静态、构建、
+无运动门控、BLE 归零、状态竞争及 3 轮运动证据见
+[阶段 5 验收](docs/phase5/PHASE_5_ACCEPTANCE.md)。
 
 ## 目录
 
@@ -109,7 +109,7 @@ idf.py -p COMx flash monitor
 2. 重构 RS01 驱动及主动反馈（已完成）；
 3. 建立髋关节对象和软件零位（已完成）；
 4. 建立唯一 100 Hz 控制任务（已完成：`phase4-single-100hz-control-task`）；
-5. 建立状态机及 START/STOP 执行器（代码、静态、构建及未归零门控已验收；双侧归零和运动验收待确认）；
+5. 建立状态机及 START/STOP 执行器（已完成：`phase5-system-state-start-stop`）；
 6. 建立产品 BLE 协议；
 7. 迁移正弦参考和阻抗控制；
 8. 加入五元命令和基础模式；
