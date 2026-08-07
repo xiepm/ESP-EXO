@@ -388,9 +388,20 @@ static start_sequence_result_t execute_start_sequence(void) {
 	}
 
 	set_active_step(EXO_SYSTEM_STEP_ARM_CONTROLLER);
-	err = impedance_control_arm(feedback_a.sample.position_rad,
-								feedback_b.sample.position_rad,
-								(int64_t)now_us());
+	hip_joint_snapshot_t left;
+	hip_joint_snapshot_t right;
+	if (!hip_joint_get_snapshot(EXO_HIP_JOINT_LEFT, &left) ||
+		!hip_joint_get_snapshot(EXO_HIP_JOINT_RIGHT, &right) ||
+		!left.joint_valid || !right.joint_valid ||
+		!isfinite(left.joint_sample.position_rad) ||
+		!isfinite(right.joint_sample.position_rad)) {
+		return failed_start(ESP_ERR_INVALID_STATE);
+	}
+	const impedance_control_centers_t centers = {
+		.center_left_rad = left.joint_sample.position_rad,
+		.center_right_rad = right.joint_sample.position_rad,
+	};
+	err = impedance_control_arm(&centers, (int64_t)now_us());
 	if (err != ESP_OK) {
 		return failed_start(err);
 	}

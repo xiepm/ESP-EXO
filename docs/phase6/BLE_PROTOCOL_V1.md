@@ -111,7 +111,8 @@ firmware_major:u8, firmware_minor:u8, firmware_patch:u8,
 capabilities:u16_le, max_frame_size:u8, boot_id:u32_le
 ```
 
-当前固件版本字段为 `0.6.0`。capabilities：
+阶段 6 基线固件版本字段为 `0.6.0`；后续阶段可以在保持协议 v1 的同时更新该版本字段。
+capabilities：
 
 | bit | 含义 |
 |---:|---|

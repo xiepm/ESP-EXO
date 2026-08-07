@@ -6,6 +6,13 @@
 #define EXO_CONFIG_TWAI_BITRATE_BPS 1000000U
 #define EXO_CONFIG_DEFAULT_ACTUATOR EXO_ACTUATOR_A
 
+/* Parameters retained exactly from the phase-6 demo behavior. */
+#define EXO_CONFIG_IMPEDANCE_KP 0.2f
+#define EXO_CONFIG_IMPEDANCE_KD 0.10f
+#define EXO_CONFIG_SINE_AMPLITUDE_RAD 1.570796327f
+#define EXO_CONFIG_SINE_FREQUENCY_HZ 0.5f
+#define EXO_CONFIG_SINE_RAMP_TIME_S 3.0f
+
 /*
  * Phase 3 physical calibration (2026-08-06):
  *   LEFT  -> actuator B / CAN 0x20, raw angle increases during hip flexion.
@@ -138,4 +145,14 @@ const exo_hardware_config_t g_exo_hardware_config = {
     .rs01_report_interval_ms = EXO_CONFIG_RS01_REPORT_INTERVAL_MS,
     .rs01_feedback_timeout_ms = EXO_CONFIG_RS01_FEEDBACK_TIMEOUT_MS,
     .ble_device_name = EXO_CONFIG_BLE_DEVICE_NAME,
+};
+
+const exo_sine_impedance_config_t g_exo_sine_impedance_config = {
+    .reference = {
+        .amplitude_rad = EXO_CONFIG_SINE_AMPLITUDE_RAD,
+        .frequency_hz = EXO_CONFIG_SINE_FREQUENCY_HZ,
+        .ramp_time_s = EXO_CONFIG_SINE_RAMP_TIME_S,
+    },
+    .kp = EXO_CONFIG_IMPEDANCE_KP,
+    .kd = EXO_CONFIG_IMPEDANCE_KD,
 };

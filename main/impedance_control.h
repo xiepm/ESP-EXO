@@ -14,7 +14,12 @@ extern "C" {
  * Arms only the retained sinusoidal controller state. Motor lifecycle and
  * feedback validation belong to exo_system, not this algorithm module.
  */
-esp_err_t impedance_control_arm(float center_a_rad, float center_b_rad,
+typedef struct {
+	float center_left_rad;
+	float center_right_rad;
+} impedance_control_centers_t;
+
+esp_err_t impedance_control_arm(const impedance_control_centers_t *centers,
 								int64_t start_us);
 
 /**

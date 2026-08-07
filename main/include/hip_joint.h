@@ -54,6 +54,15 @@ esp_err_t hip_joint_set_zero_from_current(exo_hip_joint_id_t joint);
 /* Clears only the selected joint's RAM offset. */
 esp_err_t hip_joint_clear_zero(exo_hip_joint_id_t joint);
 
+/*
+ * Resolves one human-coordinate joint position into the configured actuator
+ * coordinate. This performs no feedback read and transmits no CAN frame.
+ */
+esp_err_t hip_joint_to_actuator_position(exo_hip_joint_id_t joint,
+										 float joint_position_rad,
+										 exo_actuator_id_t *actuator,
+										 float *actuator_position_rad);
+
 #ifdef __cplusplus
 }
 #endif

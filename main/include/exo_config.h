@@ -7,6 +7,7 @@
 #include "driver/gpio.h"
 #include "driver/twai.h"
 #include "exo_types.h"
+#include "sine_reference.h"
 
 typedef struct {
     gpio_num_t tx_gpio;
@@ -42,7 +43,16 @@ typedef struct {
     const char *ble_device_name;
 } exo_hardware_config_t;
 
+typedef struct {
+    sine_reference_config_t reference;
+    float kp;
+    float kd;
+} exo_sine_impedance_config_t;
+
 /* The only runtime-readable hardware configuration object. */
 extern const exo_hardware_config_t g_exo_hardware_config;
+
+/* Fixed stage-7 controller configuration; BLE/NVS adjustment is out of scope. */
+extern const exo_sine_impedance_config_t g_exo_sine_impedance_config;
 
 #endif /* EXO_CONFIG_H */

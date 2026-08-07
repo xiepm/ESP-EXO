@@ -220,3 +220,43 @@ esp_err_t hip_joint_clear_zero(exo_hip_joint_id_t joint) {
 	portEXIT_CRITICAL(&s_joint_lock);
 	return ESP_OK;
 }
+
+esp_err_t hip_joint_to_actuator_position(exo_hip_joint_id_t joint,
+										 float joint_position_rad,
+										 exo_actuator_id_t *actuator,
+										 float *actuator_position_rad) {
+	if (actuator == NULL || actuator_position_rad == NULL) {
+		return ESP_ERR_INVALID_ARG;
+	}
+	*actuator = EXO_ACTUATOR_COUNT;
+	*actuator_position_rad = 0.0f;
+	if (!joint_id_is_valid(joint) || !isfinite(joint_position_rad)) {
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	hip_joint_t state;
+	portENTER_CRITICAL(&s_joint_lock);
+	if (!s_initialized) {
+		portEXIT_CRITICAL(&s_joint_lock);
+		return ESP_ERR_INVALID_STATE;
+	}
+	state = s_joints[joint];
+	portEXIT_CRITICAL(&s_joint_lock);
+
+	if (!state.mapping_valid || !actuator_id_is_valid(state.actuator) ||
+		!state.direction_valid || !direction_is_valid(state.direction) ||
+		!state.zero_valid) {
+		return ESP_ERR_INVALID_STATE;
+	}
+
+	const float motor_position_rad =
+		state.software_zero_motor_rad +
+		(float)state.direction * joint_position_rad;
+	if (!isfinite(motor_position_rad)) {
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	*actuator = state.actuator;
+	*actuator_position_rad = motor_position_rad;
+	return ESP_OK;
+}

@@ -9,6 +9,7 @@ idf_component_register(
         "exo_ble_protocol.c"
         "exo_ble.c"
         "debug_console.c"
+        "sine_reference.c"
         "impedance_control.c"
     INCLUDE_DIRS "." "include"
     REQUIRES driver
