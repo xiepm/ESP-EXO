@@ -1,5 +1,8 @@
+# 本文件向 `idf.py menuconfig` 增加项目专用选项。保存后，ESP-IDF 会把选择结果
+# 生成为 sdkconfig.h 中的 CONFIG_EXAMPLE_* 宏，再由 exo_config.c 统一读取。
 menu "Example Configuration"
 
+    # TX 是 ESP32 输出到外部 CAN 收发器 TXD 的逻辑信号，不可直接接 CANH/CANL。
     config EXAMPLE_TX_GPIO_NUM
         int "TX GPIO number"
         default 21 if IDF_TARGET_ESP32
@@ -8,6 +11,7 @@ menu "Example Configuration"
             This option selects the GPIO pin used for the TX signal. Connect the
             TX signal to your transceiver.
 
+    # RX 是外部 CAN 收发器 RXD 输出到 ESP32 的逻辑信号。
     config EXAMPLE_RX_GPIO_NUM
         int "RX GPIO number"
         default 22 if IDF_TARGET_ESP32

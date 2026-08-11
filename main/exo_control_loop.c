@@ -1,13 +1,28 @@
+/*
+ * 文件导读：本文件只创建一个永久周期任务，为整个产品提供唯一 100 Hz 时间基准。
+ * 控制任务每次用 FreeRTOS 的绝对节拍延时 API 按计划时刻唤醒，读取左右髋关节
+ * 快照，通过
+ * exo_system_process_control_tick()
+ * 的状态输出门决定是否执行控制，最后发布诊断。
+ *
+ * FreeRTOS 初学者需要区分：任务是可被调度的长期执行单元；临界区只用于保护很短
+ * 的内存复制，期间不能阻塞；StaticTask_t 和静态栈表示创建任务时不使用运行期堆。
+ * s_published_snapshot 只是给 UART/BLE 看的诊断副本，不参与下一周期的控制计算。
+ */
+
 #include "exo_control_loop.h"
 
 #include <limits.h>
 #include <string.h>
 
 #include "esp_timer.h"
+#include "exo_assist.h"
 #include "exo_config.h"
+#include "exo_sensor_snapshot.h"
 #include "exo_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "gait_estimator.h"
 #include "hip_joint.h"
 
 #define EXO_CONTROL_TASK_STACK_BYTES 4096U
@@ -15,12 +30,14 @@
 #define EXO_CONTROL_TASK_CORE 1
 #define EXO_CONTROL_PERIOD_TOLERANCE_US 1000U
 
+/* 防止两个调用者同时初始化；INITIALIZING 表示第一个调用者正在创建静态任务。 */
 typedef enum {
 	CONTROL_LOOP_NOT_INITIALIZED = 0,
 	CONTROL_LOOP_INITIALIZING,
 	CONTROL_LOOP_INITIALIZED,
 } control_loop_init_state_t;
 
+/* 仅由控制任务持有的累计量，周期结束时才整理成可公开的完整快照。 */
 typedef struct {
 	exo_control_loop_snapshot_t snapshot;
 	uint64_t period_total_us;
@@ -28,13 +45,27 @@ typedef struct {
 	int64_t previous_cycle_start_us;
 } control_loop_diagnostics_t;
 
+/*
+ * 任务控制块和栈均为静态存储。s_diagnostics_lock
+ * 只保护初始化状态及完整快照复制， 不包围关节读取、控制计算或 CAN
+ * 发送，因此不会把 100 Hz 工作放进长临界区。
+ */
 static StaticTask_t s_control_task_buffer;
 static StackType_t
 	s_control_task_stack[EXO_CONTROL_TASK_STACK_BYTES / sizeof(StackType_t)];
 static control_loop_init_state_t s_init_state;
-static exo_control_loop_snapshot_t s_published_snapshot;
+/*
+ * 控制任务把完整快照先复制到非活动缓冲区，最后只在临界区切换1-byte索引。
+ * 这样BLE/UART读取大结构时不会与控制任务在同一块内存上互相撕裂。
+ */
+static exo_control_loop_snapshot_t s_published_snapshots[2];
+static uint8_t s_active_snapshot_index;
 static portMUX_TYPE s_diagnostics_lock = portMUX_INITIALIZER_UNLOCKED;
+/* 下面两个上下文只由永久控制任务读写，静态分配且不需要运行期互斥。 */
+static exo_sensor_snapshot_builder_t s_sensor_builder;
+static exo_gait_estimator_t s_gait_estimator;
 
+/* 诊断字段宽度有限；极端或异常时间值采用饱和表示，避免转换后回绕。 */
 static uint32_t clamp_duration_us(int64_t duration_us) {
 	if (duration_us <= 0) {
 		return 0U;
@@ -45,6 +76,7 @@ static uint32_t clamp_duration_us(int64_t duration_us) {
 	return (uint32_t)duration_us;
 }
 
+/* 周期误差保留正负号，并在超出 int32_t 诊断范围时饱和。 */
 static int32_t clamp_period_error_us(int64_t error_us) {
 	if (error_us > INT32_MAX) {
 		return INT32_MAX;
@@ -55,6 +87,7 @@ static int32_t clamp_period_error_us(int64_t error_us) {
 	return (int32_t)error_us;
 }
 
+/* 从完整关节快照中只提取诊断所需的来源计数、时间戳和最终有效位。 */
 static exo_control_loop_joint_status_t
 joint_status_from_snapshot(const hip_joint_snapshot_t *snapshot,
 						   bool snapshot_available) {
@@ -67,11 +100,51 @@ joint_status_from_snapshot(const hip_joint_snapshot_t *snapshot,
 	return status;
 }
 
+/*
+ * 把阶段3髋关节对象复制成阶段9通用传感输入。这里不重新读取RS01：调用者传入的
+ * hip快照正是本控制周期在同一位置取得的那一份。不存在的快照用available=false
+ * 表示，后续算法不会把全零结构误当成真实0度。
+ */
+static exo_sensor_joint_snapshot_t
+sensor_joint_from_hip(const hip_joint_snapshot_t *snapshot,
+					 bool snapshot_available) {
+	exo_sensor_joint_snapshot_t sensor = {0};
+	sensor.age_us = UINT32_MAX;
+	sensor.snapshot_available = snapshot_available;
+	if (!snapshot_available || snapshot == NULL) {
+		return sensor;
+	}
+	sensor.joint_sample = snapshot->joint_sample;
+	sensor.source_timestamp_us = snapshot->feedback_timestamp_us;
+	sensor.source_feedback_count = snapshot->source_feedback_count;
+	sensor.position_epoch = snapshot->actuator_position_epoch;
+	sensor.zero_source_timestamp_us = snapshot->zero_source_timestamp_us;
+	sensor.zero_source_feedback_count = snapshot->zero_source_feedback_count;
+	sensor.zero_source_position_epoch = snapshot->zero_source_position_epoch;
+	sensor.mapping_valid = snapshot->mapping_valid;
+	sensor.direction_valid = snapshot->direction_valid;
+	sensor.zero_valid = snapshot->zero_valid && snapshot->zero_epoch_matches;
+	sensor.feedback_valid = snapshot->feedback_valid &&
+						 snapshot->continuous_position_valid;
+	sensor.online = snapshot->online;
+	sensor.joint_valid = snapshot->joint_valid;
+	return sensor;
+}
+
+/*
+ * 更新“周期从何时开始、输入来自哪里、输出是否报错”等主体统计。
+ * period 是相邻两次实际唤醒时刻之差；第一次循环没有前一时刻，因此不产生样本。
+ * 本函数只改任务私有副本，尚未让其他任务看到半成品。
+ */
 static void update_cycle_diagnostics(
 	control_loop_diagnostics_t *diagnostics, int64_t cycle_start_us,
 	esp_err_t output_result, const hip_joint_snapshot_t *left_snapshot,
 	bool left_available, const hip_joint_snapshot_t *right_snapshot,
-	bool right_available, bool stack_sample_available,
+	bool right_available, const exo_sensor_snapshot_t *sensor_snapshot,
+	const exo_gait_estimate_t *gait_estimate, uint32_t snapshot_build_us,
+	uint32_t gait_update_us, uint32_t assist_update_us,
+	const exo_assist_result_t *assist_result, esp_err_t algorithm_result,
+	bool stack_sample_available,
 	uint32_t stack_high_water_mark_bytes) {
 	exo_control_loop_snapshot_t *snapshot = &diagnostics->snapshot;
 	if (diagnostics->previous_cycle_start_us > 0) {
@@ -114,15 +187,44 @@ static void update_cycle_diagnostics(
 	snapshot->left = joint_status_from_snapshot(left_snapshot, left_available);
 	snapshot->right =
 		joint_status_from_snapshot(right_snapshot, right_available);
+	if (sensor_snapshot != NULL) {
+		snapshot->sensor_snapshot = *sensor_snapshot;
+	}
+	if (gait_estimate != NULL) {
+		snapshot->gait_estimate = *gait_estimate;
+	}
+	if (assist_result != NULL) {
+		snapshot->assist_result = *assist_result;
+	}
+	snapshot->last_snapshot_build_us = snapshot_build_us;
+	if (snapshot_build_us > snapshot->max_snapshot_build_us) {
+		snapshot->max_snapshot_build_us = snapshot_build_us;
+	}
+	snapshot->last_gait_update_us = gait_update_us;
+	if (gait_update_us > snapshot->max_gait_update_us) {
+		snapshot->max_gait_update_us = gait_update_us;
+	}
+	snapshot->last_assist_update_us = assist_update_us;
+	if (assist_update_us > snapshot->max_assist_update_us) {
+		snapshot->max_assist_update_us = assist_update_us;
+	}
+	snapshot->last_algorithm_error = algorithm_result;
+	if (algorithm_result != ESP_OK) {
+		++snapshot->algorithm_error_count;
+	}
 	if (stack_sample_available) {
 		snapshot->stack_high_water_mark_bytes = stack_high_water_mark_bytes;
 	}
 }
 
-static void update_timing_diagnostics(control_loop_diagnostics_t *diagnostics,
-									  uint32_t execution_us,
-									  uint64_t deadline_misses,
-									  uint64_t skipped_cycles) {
+/*
+ * 补齐本周期执行时间及超期统计，然后一次性发布完整副本。临界区内只有结构体复制，
+ * 所以 UART/BLE 读取诊断不会看到撕裂字段，也不会长时间阻塞控制任务。
+ */
+static void update_timing_fields(control_loop_diagnostics_t *diagnostics,
+								 uint32_t execution_us,
+								 uint64_t deadline_misses,
+								 uint64_t skipped_cycles) {
 	exo_control_loop_snapshot_t *snapshot = &diagnostics->snapshot;
 	snapshot->last_execution_us = execution_us;
 	if (execution_us > snapshot->max_execution_us) {
@@ -130,15 +232,62 @@ static void update_timing_diagnostics(control_loop_diagnostics_t *diagnostics,
 	}
 	snapshot->deadline_miss_count += deadline_misses;
 	snapshot->skipped_cycle_count += skipped_cycles;
+}
 
-	/* The task prepares a complete cycle locally. Readers therefore see either
-	 * the previous complete cycle or this complete cycle, never mixed fields.
+/*
+ * 发布成本必须属于本轮execution/deadline：先把主体复制到非活动缓冲区，再取得
+ * 最终切换锁；等待读者、完整结构复制和时间统计都发生在cycle_end采样之前。
+ */
+static void publish_cycle_snapshot(control_loop_diagnostics_t *diagnostics,
+								   int64_t cycle_start_us,
+								   TickType_t period_ticks,
+								   TickType_t *last_wake_tick) {
+	uint8_t inactive_index;
+	portENTER_CRITICAL(&s_diagnostics_lock);
+	inactive_index = (uint8_t)(s_active_snapshot_index ^ 1U);
+	portEXIT_CRITICAL(&s_diagnostics_lock);
+
+	/* 此时inactive不被读取者使用，较大的结构复制无需关中断。 */
+	s_published_snapshots[inactive_index] = diagnostics->snapshot;
+
+	/*
+	 * 取得切换锁的等待也应计时；持锁后只计算几个整数并切换索引，不做算法/CAN。
+	 * 读取者只能看到上一个完整缓冲区，或本轮已经补齐timing字段的新缓冲区。
 	 */
 	portENTER_CRITICAL(&s_diagnostics_lock);
-	s_published_snapshot = *snapshot;
+	const int64_t cycle_end_us = esp_timer_get_time();
+	const TickType_t after_cycle_tick = xTaskGetTickCount();
+	const uint32_t execution_us =
+		clamp_duration_us(cycle_end_us - cycle_start_us);
+	const TickType_t lag_ticks = after_cycle_tick - *last_wake_tick;
+	uint64_t deadline_misses = 0U;
+	uint64_t skipped_cycles = 0U;
+	if (lag_ticks >= period_ticks) {
+		deadline_misses = 1U;
+		skipped_cycles = (uint64_t)(lag_ticks / period_ticks);
+		*last_wake_tick = after_cycle_tick;
+	}
+	update_timing_fields(diagnostics, execution_us, deadline_misses,
+						 skipped_cycles);
+
+	/* 主体已复制，只补写刚刚测得的少量周期末字段。 */
+	s_published_snapshots[inactive_index].last_execution_us =
+		diagnostics->snapshot.last_execution_us;
+	s_published_snapshots[inactive_index].max_execution_us =
+		diagnostics->snapshot.max_execution_us;
+	s_published_snapshots[inactive_index].deadline_miss_count =
+		diagnostics->snapshot.deadline_miss_count;
+	s_published_snapshots[inactive_index].skipped_cycle_count =
+		diagnostics->snapshot.skipped_cycle_count;
+	s_active_snapshot_index = inactive_index;
 	portEXIT_CRITICAL(&s_diagnostics_lock);
 }
 
+/*
+ * 唯一控制任务入口，创建后永不退出。绝对节拍延时使用上一次计划唤醒点计算
+ * 下一点，避免普通“执行完再延时”造成周期随计算时间不断漂移。系统处于 IDLE 时
+ * 循环仍运行；是否产生控制 I/O 完全由 exo_system 的输出门决定。
+ */
 static void control_task(void *arg) {
 	const TickType_t period_ticks = (TickType_t)(uintptr_t)arg;
 	const uint32_t stack_sample_period_cycles =
@@ -150,11 +299,15 @@ static void control_task(void *arg) {
 	control_loop_diagnostics_t diagnostics = {0};
 
 	portENTER_CRITICAL(&s_diagnostics_lock);
-	diagnostics.snapshot = s_published_snapshot;
+	diagnostics.snapshot = s_published_snapshots[s_active_snapshot_index];
 	portEXIT_CRITICAL(&s_diagnostics_lock);
 	diagnostics.snapshot.task_alive = true;
 	diagnostics.snapshot.task_handle_identity = (uintptr_t)current_task;
 
+	/*
+	 * 每个周期固定执行四步：定时唤醒 -> 读取左右关节快照 -> 经过系统输出门
+	 * 执行一次控制 -> 更新诊断。工程中不允许再创建第二个周期运动任务。
+	 */
 	for (;;) {
 		xTaskDelayUntil(&last_wake_tick, period_ticks);
 		const int64_t cycle_start_us = esp_timer_get_time();
@@ -165,6 +318,49 @@ static void control_task(void *arg) {
 			hip_joint_get_snapshot(EXO_HIP_JOINT_LEFT, &left_snapshot);
 		const bool right_available =
 			hip_joint_get_snapshot(EXO_HIP_JOINT_RIGHT, &right_snapshot);
+
+		/*
+		 * 阶段9算法链在系统输出门之前运行，所以即使整机仍在IDLE，也能观察站立、
+		 * 起步和步态锁定；但它只产生诊断与SHADOW建议，不拥有真实输出许可。
+		 */
+		exo_sensor_joint_snapshot_t left_sensor =
+			sensor_joint_from_hip(&left_snapshot, left_available);
+		exo_sensor_joint_snapshot_t right_sensor =
+			sensor_joint_from_hip(&right_snapshot, right_available);
+		exo_sensor_snapshot_t sensor_snapshot = {0};
+		exo_gait_estimate_t gait_estimate = {0};
+		exo_assist_result_t assist_tick_result = {0};
+		esp_err_t algorithm_result = ESP_OK;
+
+		int64_t stage_start_us = esp_timer_get_time();
+		if (!exo_sensor_snapshot_build(
+				&s_sensor_builder, cycle_start_us, &left_sensor, &right_sensor,
+				&sensor_snapshot)) {
+			algorithm_result = ESP_FAIL;
+		}
+		const uint32_t snapshot_build_us = clamp_duration_us(
+			esp_timer_get_time() - stage_start_us);
+
+		stage_start_us = esp_timer_get_time();
+		if (algorithm_result == ESP_OK &&
+			!exo_gait_estimator_update(&s_gait_estimator, &sensor_snapshot,
+								   &gait_estimate)) {
+			algorithm_result = ESP_FAIL;
+		}
+		const uint32_t gait_update_us = clamp_duration_us(
+			esp_timer_get_time() - stage_start_us);
+
+		stage_start_us = esp_timer_get_time();
+		if (algorithm_result == ESP_OK) {
+			const esp_err_t assist_result =
+				exo_assist_process_tick(&sensor_snapshot, &gait_estimate,
+									&assist_tick_result);
+			if (assist_result != ESP_OK) {
+				algorithm_result = assist_result;
+			}
+		}
+		const uint32_t assist_update_us = clamp_duration_us(
+			esp_timer_get_time() - stage_start_us);
 
 		const esp_err_t output_result =
 			exo_system_process_control_tick(cycle_start_us);
@@ -177,32 +373,28 @@ static void control_task(void *arg) {
 			--stack_sample_countdown;
 		}
 
-		/* Include joint reads, control output, the periodic stack scan, and the
-		 * main diagnostic update in the measured control workload. */
-		update_cycle_diagnostics(&diagnostics, cycle_start_us, output_result,
-								 &left_snapshot, left_available,
-								 &right_snapshot, right_available, sample_stack,
-								 stack_high_water_mark_bytes);
-		const int64_t cycle_end_us = esp_timer_get_time();
-		const TickType_t after_cycle_tick = xTaskGetTickCount();
-		const uint32_t execution_us =
-			clamp_duration_us(cycle_end_us - cycle_start_us);
-		const TickType_t lag_ticks = after_cycle_tick - last_wake_tick;
-		uint64_t deadline_misses = 0U;
-		uint64_t skipped_cycles = 0U;
-		if (lag_ticks >= period_ticks) {
-			deadline_misses = 1U;
-			skipped_cycles = (uint64_t)(lag_ticks / period_ticks);
-			last_wake_tick = after_cycle_tick;
-		}
+		/*
+		 * 执行时间覆盖关节读取、控制输出、低频栈检查和主体诊断更新，不能只测算法
+		 * 公式而漏掉实际周期负担。最后一次快照发布在计时结束后单独完成。
+		 */
+		update_cycle_diagnostics(
+			&diagnostics, cycle_start_us, output_result, &left_snapshot,
+			left_available, &right_snapshot, right_available, &sensor_snapshot,
+			&gait_estimate, snapshot_build_us, gait_update_us,
+			assist_update_us, &assist_tick_result, algorithm_result, sample_stack,
+			stack_high_water_mark_bytes);
 
-		/* This final bounded publication is intentionally the only operation
-		 * after the full-workload timing sample. */
-		update_timing_diagnostics(&diagnostics, execution_us, deadline_misses,
-								  skipped_cycles);
+		/* 最后发布双缓冲；它自身的复制和锁等待也计入本周期execution。 */
+		publish_cycle_snapshot(&diagnostics, cycle_start_us, period_ticks,
+							   &last_wake_tick);
 	}
 }
 
+/*
+ * 验证配置可由 FreeRTOS tick 精确整除，初始化公开快照，再用静态内存创建任务。
+ * 初始化状态在短临界区内变化；若另一个调用者看见 INITIALIZING，它不会再次创建
+ * 任务，真正的启动就绪仍由 task_alive 快照字段判断。
+ */
 esp_err_t exo_control_loop_init(void) {
 	const uint32_t frequency_hz = g_exo_hardware_config.control_frequency_hz;
 	if (frequency_hz == 0U || frequency_hz > (uint32_t)configTICK_RATE_HZ ||
@@ -220,13 +412,32 @@ esp_err_t exo_control_loop_init(void) {
 		return ESP_OK;
 	}
 	s_init_state = CONTROL_LOOP_INITIALIZING;
-	memset(&s_published_snapshot, 0, sizeof(s_published_snapshot));
-	s_published_snapshot.initialized = true;
-	s_published_snapshot.configured_frequency_hz = frequency_hz;
-	s_published_snapshot.target_period_us = 1000000U / frequency_hz;
-	s_published_snapshot.period_tolerance_us = EXO_CONTROL_PERIOD_TOLERANCE_US;
-	s_published_snapshot.last_output_error = ESP_OK;
+	memset(s_published_snapshots, 0, sizeof(s_published_snapshots));
+	s_active_snapshot_index = 0U;
+	s_published_snapshots[0].initialized = true;
+	s_published_snapshots[0].configured_frequency_hz = frequency_hz;
+	s_published_snapshots[0].target_period_us = 1000000U / frequency_hz;
+	s_published_snapshots[0].period_tolerance_us =
+		EXO_CONTROL_PERIOD_TOLERANCE_US;
+	s_published_snapshots[0].last_output_error = ESP_OK;
+	s_published_snapshots[0].last_algorithm_error = ESP_OK;
+	s_published_snapshots[1] = s_published_snapshots[0];
 	portEXIT_CRITICAL(&s_diagnostics_lock);
+
+	/*
+	 * 纯内存算法对象必须在任务创建前一次性校验。若静态配置无效，拒绝启动控制
+	 * 任务，比让一个永久任务每10 ms重复报错更容易定位，也不会留下半初始化对象。
+	 */
+	if (!exo_sensor_snapshot_builder_init(&s_sensor_builder,
+									   &g_exo_sensor_snapshot_config) ||
+		!exo_gait_estimator_init(&s_gait_estimator,
+							 &g_exo_gait_estimator_config)) {
+		portENTER_CRITICAL(&s_diagnostics_lock);
+		s_init_state = CONTROL_LOOP_NOT_INITIALIZED;
+		memset(s_published_snapshots, 0, sizeof(s_published_snapshots));
+		portEXIT_CRITICAL(&s_diagnostics_lock);
+		return ESP_ERR_INVALID_ARG;
+	}
 
 	const TickType_t period_ticks =
 		(TickType_t)((uint32_t)configTICK_RATE_HZ / frequency_hz);
@@ -237,18 +448,20 @@ esp_err_t exo_control_loop_init(void) {
 	if (task_handle == NULL) {
 		portENTER_CRITICAL(&s_diagnostics_lock);
 		s_init_state = CONTROL_LOOP_NOT_INITIALIZED;
-		memset(&s_published_snapshot, 0, sizeof(s_published_snapshot));
+		memset(s_published_snapshots, 0, sizeof(s_published_snapshots));
 		portEXIT_CRITICAL(&s_diagnostics_lock);
 		return ESP_ERR_NO_MEM;
 	}
 
 	portENTER_CRITICAL(&s_diagnostics_lock);
 	s_init_state = CONTROL_LOOP_INITIALIZED;
-	s_published_snapshot.task_handle_identity = (uintptr_t)task_handle;
+	s_published_snapshots[0].task_handle_identity = (uintptr_t)task_handle;
+	s_published_snapshots[1].task_handle_identity = (uintptr_t)task_handle;
 	portEXIT_CRITICAL(&s_diagnostics_lock);
 	return ESP_OK;
 }
 
+/* 在短临界区内复制最近完整发布的快照；未完成初始化时清零输出并返回 false。 */
 bool exo_control_loop_get_snapshot(exo_control_loop_snapshot_t *snapshot) {
 	if (snapshot == NULL) {
 		return false;
@@ -260,7 +473,7 @@ bool exo_control_loop_get_snapshot(exo_control_loop_snapshot_t *snapshot) {
 		memset(snapshot, 0, sizeof(*snapshot));
 		return false;
 	}
-	*snapshot = s_published_snapshot;
+	*snapshot = s_published_snapshots[s_active_snapshot_index];
 	portEXIT_CRITICAL(&s_diagnostics_lock);
 	return true;
 }
