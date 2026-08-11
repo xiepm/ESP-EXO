@@ -4,6 +4,11 @@
 > A/B 两台 RS01 写入 10 ms 上报周期并请求开启主动反馈；该操作不会使能电机。手机 BLE
 > 接口见 `docs/phase6/BLE_PROTOCOL_V1.md`，不接受本页的 ASCII 命令。
 
+本控制台从固件 `0.8.0` 起，运动控制命令和状态快照中的角度、角速度、角加速度
+输入/显示统一使用 `deg`、`deg/s`、`deg/s²`。RS01 驱动内部仍按电机手册使用
+弧度，并在 UART 边界后立即显式换算；旧的弧度制运动参数不能直接复用。裸寄存器
+读写（`read_param`、`mit_read`、`mit_write`）仍透传手册原始值，不做单位推断或换算。
+
 ## 命令通道
 
 调试命令只支持**烧录串口**：115200 baud，发送 ASCII 命令并以 `\r` 或
@@ -29,8 +34,8 @@ status
 ## 与产品 BLE 的边界
 
 - UART 保留全部工程维护、原始 RS01 和诊断命令；
-- 产品 BLE 只开放 `GET_INFO`、系统/关节状态、`START`、`STOP` 和髋关节 RAM
-  软件零位命令；
+- 产品 BLE 开放 `GET_INFO`、系统/关节/步态/助力状态、静态配置、`START`、`STOP`
+  和髋关节 RAM 软件零位命令；
 - 产品 BLE 不支持 Nordic UART Service，也不传输 ASCII 文本；
 - 阶段 6 仅按请求返回快照，不连续推送 100 Hz 反馈；连续遥测在阶段 10 加入。
 
@@ -107,8 +112,8 @@ move <torque> <position> <speed> <kp> <kd>
 | 参数 | 范围 | 单位 | 说明 |
 |------|------|------|------|
 | torque | -17 ~ 17 | Nm | 目标力矩 |
-| position | -12.57 ~ 12.57 | rad | 目标位置 |
-| speed | -44 ~ 44 | rad/s | 目标速度 |
+| position | -720.21 ~ 720.21 | deg | 目标位置 |
+| speed | -2521.01 ~ 2521.01 | deg/s | 目标速度 |
 | kp | 0 ~ 500 | - | 比例增益 |
 | kd | 0 ~ 5 | - | 微分增益 |
 
@@ -121,8 +126,8 @@ speed <cur_limit> <acc> <speed>
 | 参数 | 范围 | 单位 | 说明 |
 |------|------|------|------|
 | cur_limit | 0 ~ 23 | A | 电流限制 |
-| acc | - | rad/s² | 加速度 |
-| speed | -44 ~ 44 | rad/s | 目标速度 |
+| acc | - | deg/s² | 加速度 |
+| speed | -2521.01 ~ 2521.01 | deg/s | 目标速度 |
 
 示例：`speed 1 1 2`
 
@@ -132,11 +137,11 @@ pos_pp <speed> <acc> <angle>
 ```
 | 参数 | 范围 | 单位 | 说明 |
 |------|------|------|------|
-| speed | -44 ~ 44 | rad/s | 目标速度 |
-| acc | - | rad/s² | 加速度 |
-| angle | -12.57 ~ 12.57 | rad | 目标角度 |
+| speed | -2521.01 ~ 2521.01 | deg/s | 目标速度 |
+| acc | - | deg/s² | 加速度 |
+| angle | -720.21 ~ 720.21 | deg | 目标角度 |
 
-示例：`pos_pp 6 1 2`
+示例：`pos_pp 180 60 30`
 
 ### pos_csp — CSP 位置控制模式
 ```
@@ -144,10 +149,10 @@ pos_csp <speed> <angle>
 ```
 | 参数 | 范围 | 单位 | 说明 |
 |------|------|------|------|
-| speed | 0 ~ 44 | rad/s | 速度限制 |
-| angle | -12.57 ~ 12.57 | rad | 目标角度 |
+| speed | 0 ~ 2521.01 | deg/s | 速度限制 |
+| angle | -720.21 ~ 720.21 | deg | 目标角度 |
 
-示例：`pos_csp 4 1`
+示例：`pos_csp 180 30`
 
 ### current — 电流（力矩）控制模式
 ```
@@ -243,13 +248,13 @@ mit_control <angle> <speed> <kp> <kd> <torque>
 ```
 | 参数 | 范围 | 说明 |
 |------|------|------|
-| angle | -12.57 ~ 12.57 rad | 目标角度 |
-| speed | -44 ~ 44 rad/s | 目标速度 |
+| angle | -720.21 ~ 720.21 deg | 目标角度 |
+| speed | -2521.01 ~ 2521.01 deg/s | 目标速度 |
 | kp | 0 ~ 500 | 比例增益 |
 | kd | 0 ~ 5 | 微分增益 |
 | torque | -17 ~ 17 Nm | 目标力矩 |
 
-示例：`mit_control 1 0 1 0.1 0.1`
+示例：`mit_control 30 0 1 0.1 0.1`
 
 ### mit_pos — MIT 位置模式
 ```
@@ -257,10 +262,10 @@ mit_pos <position> <speed>
 ```
 | 参数 | 单位 | 说明 |
 |------|------|------|
-| position | rad | 目标位置 |
-| speed | rad/s | 目标速度 |
+| position | deg | 目标位置 |
+| speed | deg/s | 目标速度 |
 
-示例：`mit_pos 0 1`
+示例：`mit_pos 0 60`
 
 ### mit_speed — MIT 速度模式
 ```
@@ -268,10 +273,10 @@ mit_speed <speed> <current_limit>
 ```
 | 参数 | 单位 | 说明 |
 |------|------|------|
-| speed | rad/s | 目标速度 |
+| speed | deg/s | 目标速度 |
 | current_limit | A | 电流限制 |
 
-示例：`mit_speed 10 2`
+示例：`mit_speed 600 2`
 
 ### mit_set_zero — MIT 设置零位
 ```
@@ -390,6 +395,7 @@ status
 type 2/type 24 分项计数、
 最近帧间隔和估算频率、反馈年龄、角度、速度、力矩、温度、运行模式及故障标志。
 `Online` 只在最近 100 ms 内收到该执行器的有效反馈时为 `YES`。
+角度和角速度显示为 `deg`、`deg/s`；这是显示层换算，不改变 RS01 原始帧编码。
 
 ### joint_status — 显示髋关节快照
 
@@ -400,6 +406,7 @@ joint_status <left|right>
 输出左/右髋到执行器 A/B 的映射、安装方向、RAM 软件零位、原始执行器采样、换算后的关节采样、
 反馈时间戳和最终 `Joint valid`。只有映射、方向、软件零位、反馈有效和在线状态全部成立时，
 `Joint valid` 才为 `YES`。
+软件零位、原始执行器角和人体关节角均以 `deg` 显示。
 
 ### joint_zero — 捕获软件零位
 
@@ -418,6 +425,36 @@ joint_zero_clear <left|right>
 
 只清除所选髋关节的 RAM 软件零位，不影响另一侧，也不修改电机反馈或机械零位。
 
+### motion_mode — 选择基础控制模式
+
+```text
+motion_mode <hold|position|velocity|torque|damping|impedance> [constant|sine]
+```
+
+只修改下一次 START 要锁存的 `selected` 配置，不使能电机、不发送周期 CAN。参数只
+能在整机 `IDLE` 时修改；RUNNING 中应先 `stop` 并等待回到 IDLE。`sine` 当前只允许
+与 `impedance` 搭配，例如复现阶段 7：
+
+```text
+motion_mode impedance sine
+```
+
+六种产品模式底层仍全部使用 RS01 Motion 五元帧，不会在 100 Hz 路径切换 PP、
+CSP、速度或电流模式。SINE 是参考源，不是第七种产品模式。
+
+### joint_command — 设置单侧五元命令
+
+```text
+joint_command <left|right> <position_deg> <velocity_deg_s> <torque_nm> <kp> <kd>
+```
+
+在 IDLE 中写入下一次 START 使用的一侧五元参数。位置、速度和前馈力矩采用人体
+关节坐标，正方向为髋屈曲；左右安装方向和软件零位由 `hip_joint` 统一映射。KP/KD
+是 RS01 Motion 协议增益，不随右腿方向翻转，也不宣称是已经标定的物理刚度。
+
+该命令不会直接发 CAN。推荐流程是分别设置 LEFT/RIGHT 后先执行 `control_status`
+读回，确认无误再执行 `start`。
+
 ### control_status — 显示唯一控制循环状态
 
 ```text
@@ -426,8 +463,60 @@ control_status
 
 按需输出常驻 100 Hz 控制任务的任务身份、周期数、目标及实测周期、执行时间、
 超期和跳周期数、输出错误、栈最低余量，以及 LEFT/RIGHT 本周期反馈来源与
-`joint_valid`。该命令只是 UART 文本诊断，不是连续遥测，也不会
-启动、停止或修改控制任务。
+`joint_valid`。阶段 8 还会显示 selected/active 模式、参考源、左右 selected 五元
+参数和最近实际输出。该命令只是 UART 文本诊断，不是连续遥测，也不会启动、停止
+或修改控制任务。
+
+### sensor_status — 显示统一传感快照
+
+```text
+sensor_status
+```
+
+读取唯一 100 Hz 任务最近发布的 sensor snapshot，包括 sequence、captured time、
+reset epoch、available/valid mask、质量位、左右来源时间差，以及 LEFT/RIGHT 的人体
+髋角（deg）、角速度（deg/s）和 RS01 电机估算力矩。它不会重新采样，也不会创建任务。
+电机估算力矩不能当作已经标定的人机交互力矩。
+
+### gait_status — 显示步态估计
+
+```text
+gait_status
+```
+
+显示 HIP_EVENT_TBE 的 RESET/STANDING/ACQUIRING/LOCKED/DEGRADED 状态、左右连续
+相位、周期、步频、置信度、事件和质量位，以及 snapshot/gait/assist 分项 last/max
+耗时。当前相位原点明确是 `HIP_FLEXION_PEAK (not heel strike)`；没有足底或外部真值
+时，只能把它称为髋角代理相位，不能声称足跟着地检测或论文级误差。
+
+### assist_status — 显示高层助力策略状态
+
+```text
+assist_status
+```
+
+显示 selected/requested 与 active/effective 配置、策略版本、START activation epoch、
+所需传感器/步态条件、SHADOW 结果绑定的 sensor/gait sequence，以及不可用原因。
+阶段 9 的 `REAL OUTPUT` 必须始终为 `DISABLED`。
+
+### assist_config — 设置下一次 START 的高层策略
+
+```text
+assist_config <transparent|active_phase|aan> <disabled|shadow> \
+              <transparent|phase_profile|aan_residual> \
+              <profile 0..255> <left 0..100> <right 0..100>
+```
+
+只允许整机 IDLE 时修改。阶段 9 只有 `transparent + transparent` 已实现；
+`phase_profile` 与 `aan_residual` 是为后续算法保留的静态接口，当前会明确显示
+`STRATEGY_NOT_IMPLEMENTED`。UART 不提供 ACTIVE 参数，SHADOW 建议也不会进入 CAN。
+
+示例：
+
+```text
+assist_config transparent shadow transparent 0 0 0
+assist_status
+```
 
 ### can_status — 显示 CAN 控制器状态
 ```
@@ -466,14 +555,14 @@ help
 
 | 参数 | 最小值 | 最大值 |
 |------|--------|--------|
-| 位置 (P) | -12.57 rad | 12.57 rad |
-| 速度 (V) | -44.0 rad/s | 44.0 rad/s |
+| 位置 (P) | -720.21 deg | 720.21 deg |
+| 速度 (V) | -2521.01 deg/s | 2521.01 deg/s |
 | KP | 0.0 | 500.0 |
 | KD | 0.0 | 5.0 |
 | 力矩 (T) | -17.0 Nm | 17.0 Nm |
 
-这些量程来自 RS01 手册并封装在 `rs01_driver.c`，不再使用通用
-`MOTOR_TYPE` 宏。
+这些显示值由 RS01 手册的 `±12.57 rad`、`±44 rad/s` 换算而来；驱动内部仍保留
+手册原单位并封装在 `rs01_driver.c`，不再使用通用 `MOTOR_TYPE` 宏。
 
 ---
 

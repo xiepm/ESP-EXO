@@ -8,6 +8,11 @@
 本阶段只改变算法组织和坐标边界，不改变运动波形、状态机、产品 BLE v1、RS01
 协议或 100 Hz 调度方式。固件版本字段更新为 `0.7.0`，BLE 协议版本仍为 v1。
 
+2026-08-10 的 `0.7.1` 后续整理只改变单位表达：人体关节、正弦参考和 UART/手机
+显示使用 `deg`，RS01 驱动继续使用手册的 `rad`。`90 deg` 在关节到执行器边界
+转换为 `pi/2 rad`，因此不改变本阶段已经验收的物理目标。BLE v1 的 `mrad` 线格式
+也保持不变，客户端解码后转换为度显示。
+
 工程问题是：能否在不改变既有电机目标的前提下，把参考生成、关节坐标和硬件
 发送职责分开？
 
@@ -22,12 +27,12 @@
 
 | 参数 | 值 |
 |---|---:|
-| 幅值 | `pi/2 rad` |
+| 幅值 | `90 deg`（等价于 `pi/2 rad`） |
 | 频率 | `0.5 Hz` |
 | 五次渐入时间 | `3.0 s` |
 | RS01 Motion KP | `0.2` |
 | RS01 Motion KD | `0.10` |
-| 目标速度 | `0 rad/s` |
+| 目标速度 | `0 deg/s`（发送给 RS01 时为 `0 rad/s`） |
 | 前馈转矩 | `0 Nm` |
 
 参考偏移为：
@@ -35,7 +40,7 @@
 ```text
 s(t) = clamp(t / 3.0, 0, 1)
 r(t) = 10s^3 - 15s^4 + 6s^5
-delta(t) = (pi/2) * r(t) * sin(2*pi*0.5*t)
+delta_deg(t) = 90 * r(t) * sin(2*pi*0.5*t)
 ```
 
 当前物理映射为 LEFT→B/`+1`、RIGHT→A/`-1`。因此关节空间和电机空间的
@@ -69,7 +74,7 @@ impedance_control
           │
           ▼
 hip_joint_to_actuator_position
-  └─ software_zero + direction * joint_position
+  └─ deg_to_rad(software_zero_deg + direction * joint_position_deg)
           │
           ▼
 按 actuator A、B 顺序调用 rs01_try_send_motion
@@ -95,7 +100,7 @@ hip_joint_to_actuator_position
 ```c
 esp_err_t hip_joint_to_actuator_position(
     exo_hip_joint_id_t joint,
-    float joint_position_rad,
+    float joint_position_deg,
     exo_actuator_id_t *actuator,
     float *actuator_position_rad);
 ```
@@ -109,8 +114,8 @@ esp_err_t hip_joint_to_actuator_position(
 
 ```c
 typedef struct {
-    float center_left_rad;
-    float center_right_rad;
+    float center_left_deg;
+    float center_right_deg;
 } impedance_control_centers_t;
 ```
 
@@ -156,6 +161,10 @@ STOP 仍在请求线性化点先清除 `run_requested/output_allowed`，执行�
 RS01 所谓阻抗控制仍指电机 Motion 模式：ESP32 发送位置、速度、前馈转矩、KP、KD，
 闭环由 RS01 执行；本阶段不宣称 ESP32 显式计算关节阻抗转矩。
 
+单位边界固定为：`sine_reference`、`impedance_control` 和 `joint_sample` 使用度；
+`hip_joint_to_actuator_position()` 是唯一关节目标 `deg -> rad` 边界；RS01 原始反馈
+和驱动 API 保持弧度制。工程代码不允许依赖无单位字段名猜测单位。
+
 ## 6. 文件变化
 
 | 文件 | 变化 |
@@ -166,11 +175,11 @@ RS01 所谓阻抗控制仍指电机 Motion 模式：ESP32 发送位置、速度�
 | `main/include/hip_joint.h`、`main/hip_joint.c` | 新增关节位置反向转换 |
 | `main/impedance_control.h/.c` | 迁移到 LEFT/RIGHT，并保留 A/B 发送顺序 |
 | `main/exo_system.c` | START 使用 LEFT/RIGHT 快照 arm |
-| `main/exo_ble.c` | 固件版本字段更新为 `0.7.0` |
+| `main/exo_ble.c` | 阶段标签版本为 `0.7.0`；单位整理后为 `0.7.1` |
 | `main/CMakeLists.txt` | 注册纯参考源文件 |
 
 `app_main.c`、`exo_control_loop.c`、`exo_ble_protocol.c/.h` 和 `rs01_driver.c/.h`
-不需要改变。
+的控制行为或线格式不需要改变；`0.7.1` 后续整理只补充了单位边界中文注释。
 
 ## 7. 实时和资源约束
 

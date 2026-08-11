@@ -2,7 +2,7 @@
 
 ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 ESP-IDF 开发。
 
-当前仓库已完成阶段 7“迁移正弦参考和阻抗控制”。主要包括：
+当前仓库已完成阶段 9 的软件实现与 `0.9.0` 工程功能真机验收。主要包括：
 
 - ESP32-S3；
 - 1 Mbps TWAI/CAN 总线；
@@ -15,9 +15,17 @@ ESP-EXO 是基于 ESP32-S3 的双侧髋关节外骨骼控制器工程，使用 E
 - 唯一周期运动输出门，以及调试维护命令与启停序列的互斥；
 - 产品 BLE v1 二进制协议，以及 UART-only 工程调试台；
 - 独立的纯 C 正弦参考生成器，以及 LEFT/RIGHT 关节语义的 100 Hz 阻抗控制示例；
-- LEFT/RIGHT 关节目标到 A/B 执行器坐标的集中转换，保持原 A-/B+ 电机行为。
+- 统一的 LEFT/RIGHT 五元关节命令、六种基础模式和通用控制器；
+- LEFT/RIGHT 五元目标到 A/B 执行器坐标的集中转换，保持原 A-/B+ 电机行为；
+- BLE v1 的 IDLE 静态控制配置扩展和网页模式/五元参数读写，不使用 BLE 100 Hz 命令流。
+- 人体关节、参考轨迹、UART 和手机显示统一使用度，RS01/BLE v1 线格式在边界显式换算；
+- 每周期统一传感快照，显式记录来源序号/时间、新鲜度、左右 skew、能力/有效 mask 和 reset epoch；
+- 可回放的 HIP_EVENT_TBE 髋角代理步态估计，提供连续相位、周期、步频、置信度和质量位；
+- 面向 ESP32 的编译期静态助力策略 ops、固定 64-byte 最大工作区和传感/步态依赖声明；
+- 阶段 9 仅生成绑定输入序号和 START 代次的 SHADOW 建议，真实助力输出恒关闭；
+- BLE/网页与 UART 可读取步态/助力状态，手机仍不参与 100 Hz 实时控制。
 
-> 当前代码仍处于分阶段重构期，不代表最终产品架构。公共类型、硬件配置、RS01 驱动、髋关节对象、唯一 100 Hz 控制任务、整机启停状态机、产品 BLE v1 和正弦阻抗关节语义迁移已经集中；五元命令、步态估计和遥测仍按后续阶段实现。左右映射与方向已经通过两侧独立运动采集确定，固件不会依据 CAN ID 猜测人体侧别。
+> 当前代码仍处于分阶段重构期，不代表最终产品架构。传感快照和第一版髋角代理步态估计已经集中，但 phase profile、AAN residual 仍是 `implemented=false` 的接口占位；相位曲线真实助力和连续遥测属于阶段 10。左右映射与方向已经通过两侧独立运动采集确定，固件不会依据 CAN ID 猜测人体侧别。
 
 阶段 0 的软件基线、构建证据和硬件验收边界见
 [阶段 0 基线](docs/baseline/PHASE_0_BASELINE.md)。连接开发板后的逐项验证见
@@ -57,6 +65,30 @@ LEFT/RIGHT 坐标边界和等价迁移见 [阶段 7 设计](docs/phase7/PHASE_7_
 干净构建、BLE 归零、三轮运动、0.5 Hz 同相关节反馈、BLE 重连及 100 Hz/TWAI 结果见
 [阶段 7 验收](docs/phase7/PHASE_7_ACCEPTANCE.md)。
 
+2026-08-10 在不改变阶段 7 物理波形的前提下完成阶段 8 软件迁移，当前固件版本为
+`0.8.0`：
+
+- 人体髋关节采样、RAM 软件零位、正弦幅值和控制中心使用 `deg`、`deg/s`；
+- UART 角度类命令参数和状态输出使用 `deg`、`deg/s`、`deg/s²`；
+- RS01 驱动继续使用手册规定的 `rad`、`rad/s`、`rad/s²`；
+- 已发布的 BLE v1 载荷继续使用 `mrad`、`mrad/s`，避免破坏旧客户端；验收客户端和
+  手机界面将其换算为 `deg`、`deg/s` 后显示；
+- 新增 `HOLD/POSITION/VELOCITY/TORQUE/DAMPING/IMPEDANCE` 六种产品模式，底层
+  仍统一使用 RS01 Motion 五元帧；
+- 模式和五元参数只允许在 IDLE 设置，START 时锁存，RUNNING 中拒绝修改；
+- 默认 `IMPEDANCE + SINE` 继续保持阶段 7 的数值行为。
+
+阶段 8 的控制合同见 [阶段 8 设计](docs/phase8/PHASE_8_DESIGN.md)，软件和真机结果见
+[阶段 8 验收](docs/phase8/PHASE_8_ACCEPTANCE.md)。
+
+阶段 9 固件版本为 `0.9.0`。架构、文献算法映射和验收边界分别见
+[阶段 9 设计](docs/phase9/PHASE_9_DESIGN.md)、
+[文献映射](docs/phase9/PHASE_9_LITERATURE_MAP.md) 与
+[阶段 9 验收](docs/phase9/PHASE_9_ACCEPTANCE.md)。主机真实 C 回放入口为
+`tools/phase9_replay.ps1`；阶段 9 BLE 默认只读/可恢复配置验收入口为
+`tools/phase9_ble_acceptance.py`。阶段 9 已于 2026-08-11 完成正常人体左右交替步态、变速、停止退锁和
+静止补测，工程功能结论为 COMPLETE / PASS；没有外部 gait event 真值，因此不宣称绝对相位精度。
+
 ## 目录
 
 ```text
@@ -70,7 +102,9 @@ ESP-EXO/
 ├── docs/phase5/          # 阶段 5 状态机、启停执行器设计和验收记录
 ├── docs/phase6/          # 阶段 6 产品 BLE 协议、设计和验收记录
 ├── docs/phase7/          # 阶段 7 正弦参考、关节阻抗迁移和验收记录
-├── tools/                # 构建验证和阶段 6 BLE 验收脚本
+├── docs/phase8/          # 阶段 8 五元命令、基础模式设计和验收记录
+├── docs/phase9/          # 阶段 9 传感、步态、SHADOW 助力设计和验收记录
+├── tools/                # 构建、BLE 验收和阶段 9 真实 C 回放脚本
 ├── CMakeLists.txt        # 工程构建入口
 ├── sdkconfig             # 当前 ESP32-S3 工程配置
 └── CONSOLE_COMMANDS.md   # UART-only 工程调试命令说明
@@ -96,10 +130,18 @@ GPIO 和电机左右安装关系来自 2026-08-06 实机标定；RAM 软件零�
 当前工程锁定 ESP-IDF v5.5（内部版本 5.5.0）。在 PowerShell 中激活环境后构建：
 
 ```powershell
-. 'C:\Espressif\tools\Microsoft.v5.5.PowerShell_profile.ps1'
-cd D:\ESP32\esp_can
+. .\tools\activate_esp_idf.ps1
 idf.py build
 ```
+
+激活脚本会优先使用当前 `IDF_TOOLS_PATH`，否则自动寻找 Windows EIM 默认安装目录，
+并检查 `idf.py`、`IDF_PATH` 和 Python 虚拟环境是否真实可用。脚本必须使用点调用，
+这样环境变量和 `idf.py` 命令才会保留在当前 PowerShell 会话中。
+
+本机采用 EIM 的版本化目录布局，正确入口是 EIM 生成的
+`C:\Espressif\tools\Microsoft.v5.5.PowerShell_profile.ps1`（仓库脚本会自动调用它）。
+不要直接运行 ESP-IDF 源码目录中的 `export.ps1`：该脚本会按传统
+`%USERPROFILE%\.espressif` 布局寻找 Python 和工具链，从而产生“环境缺失”的假象。
 
 执行阶段 0 的干净构建、尺寸检查和产物检查：
 
@@ -125,7 +167,7 @@ idf.py -p COMx flash monitor
 5. 建立状态机及 START/STOP 执行器（已完成：`phase5-system-state-start-stop`）；
 6. 建立产品 BLE 协议（已完成：`phase6-product-ble-protocol`）；
 7. 迁移正弦参考和阻抗控制（已完成：`phase7-sine-impedance-migration`）；
-8. 加入五元命令和基础模式；
-9. 加入传感快照和步态估计；
+8. 加入五元命令和基础模式（已完成）；
+9. 加入传感快照和步态估计（已完成：工程与功能范围 COMPLETE / PASS）；
 10. 加入相位曲线和遥测；
 11. 完成产品清理和整体回归。
