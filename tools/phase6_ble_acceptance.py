@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import dataclass
+import math
 import struct
 import sys
 import time
@@ -128,12 +129,23 @@ class SystemStatus:
 
 @dataclass(frozen=True)
 class JointStatus:
+    # BLE v1 的线格式必须保留 mrad；以下属性负责转换为产品界面的 deg。
     side: int
     flags: int
     direction: int
     position_mrad: int
     velocity_mrad_s: int
     feedback_age_ms: int
+
+    @property
+    def position_deg(self) -> float:
+        """Return the human-facing joint position in degrees."""
+        return self.position_mrad * 180.0 / (math.pi * 1000.0)
+
+    @property
+    def velocity_deg_s(self) -> float:
+        """Return the human-facing joint velocity in degrees per second."""
+        return self.velocity_mrad_s * 180.0 / (math.pi * 1000.0)
 
 
 @dataclass(frozen=True)
@@ -171,6 +183,21 @@ class Reporter:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AcceptanceError(message)
+
+
+def parse_firmware_version(value: str) -> tuple[int, int, int]:
+    """Parse an exact ``major.minor.patch`` firmware expectation."""
+    try:
+        parts = tuple(int(part, 10) for part in value.split("."))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "firmware must be formatted as major.minor.patch"
+        ) from error
+    if len(parts) != 3 or any(part < 0 or part > 255 for part in parts):
+        raise argparse.ArgumentTypeError(
+            "firmware must contain three byte values: major.minor.patch"
+        )
+    return parts
 
 
 def encode_request(opcode: int, request_id: int, payload: bytes = b"") -> bytes:
@@ -325,6 +352,10 @@ def run_self_test(reporter: Reporter) -> None:
     def _golden_info_request() -> None:
         require(encode_request(OP_GET_INFO, 0x2A) == bytes.fromhex("01 01 2A 00"), "byte mismatch")
 
+    @check("firmware expectation parser")
+    def _firmware_expectation_parser() -> None:
+        require(parse_firmware_version("0.7.1") == (0, 7, 1), "version mismatch")
+
     @check("golden request: right JOINT_STATUS")
     def _golden_joint_request() -> None:
         require(
@@ -366,6 +397,24 @@ def run_self_test(reporter: Reporter) -> None:
         require(status.position_mrad == -1234, "signed position decode mismatch")
         require(status.velocity_mrad_s == 5678, "velocity decode mismatch")
         require(status.feedback_age_ms == 42, "age decode mismatch")
+        require(
+            math.isclose(
+                status.position_deg,
+                -1234.0 * 180.0 / (math.pi * 1000.0),
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            ),
+            "position degree conversion mismatch",
+        )
+        require(
+            math.isclose(
+                status.velocity_deg_s,
+                5678.0 * 180.0 / (math.pi * 1000.0),
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            ),
+            "velocity degree conversion mismatch",
+        )
 
     @check("golden response: request-id conflict ACK")
     def _golden_ack_response() -> None:
@@ -450,7 +499,9 @@ async def resolve_device(bleak_scanner: Any, address: str | None, name: str, tim
 
 
 async def run_default_hardware_tests(
-    transport: BleTransport, reporter: Reporter
+    transport: BleTransport,
+    reporter: Reporter,
+    expected_firmware: tuple[int, int, int] | None,
 ) -> None:
     info_raw = await transport.transact(encode_request(OP_GET_INFO, 1))
     info_frame = decode_frame(info_raw)
@@ -465,6 +516,13 @@ async def run_default_hardware_tests(
         (info.capabilities & CAPABILITIES_REQUIRED) == CAPABILITIES_REQUIRED,
         "required capability bits are absent",
     )
+    if expected_firmware is not None:
+        require(
+            info.firmware == expected_firmware,
+            "firmware mismatch: "
+            f"got {'.'.join(map(str, info.firmware))}, "
+            f"expected {'.'.join(map(str, expected_firmware))}",
+        )
     reporter.passed_test(
         "GET_INFO",
         f"fw={'.'.join(map(str, info.firmware))} boot_id=0x{info.boot_id:08X}",
@@ -494,8 +552,9 @@ async def run_default_hardware_tests(
         require(joint.side == side, f"returned side {joint.side}, expected {side}")
         reporter.passed_test(
             f"GET_JOINT_STATUS {label}",
-            f"flags=0x{joint.flags:02X} pos={joint.position_mrad}mrad "
-            f"vel={joint.velocity_mrad_s}mrad/s age={joint.feedback_age_ms}ms",
+            f"flags=0x{joint.flags:02X} pos={joint.position_deg:.3f}deg "
+            f"vel={joint.velocity_deg_s:.3f}deg/s "
+            f"age={joint.feedback_age_ms}ms",
         )
 
     replay_request = encode_request(OP_GET_INFO, 5)
@@ -635,7 +694,9 @@ async def run_hardware(args: argparse.Namespace, reporter: Reporter) -> None:
         reporter.passed_test("response notifications enabled")
         try:
             if not args.dangerous_only:
-                await run_default_hardware_tests(transport, reporter)
+                await run_default_hardware_tests(
+                    transport, reporter, args.expect_firmware
+                )
             if args.dangerous_command is not None:
                 await run_dangerous_command(
                     transport,
@@ -667,6 +728,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scan-timeout", type=float, default=10.0)
     parser.add_argument("--connect-timeout", type=float, default=10.0)
     parser.add_argument("--response-timeout", type=float, default=3.0)
+    parser.add_argument(
+        "--expect-firmware",
+        type=parse_firmware_version,
+        metavar="MAJOR.MINOR.PATCH",
+        help="require an exact GET_INFO firmware version (for example 0.7.1)",
+    )
     parser.add_argument(
         "--allow-dangerous",
         action="store_true",
