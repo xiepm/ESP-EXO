@@ -1,5 +1,5 @@
-# ESP-IDF build output
-build/
+# ESP-IDF build output（只忽略仓库根目录，保留网页源码中的 build/）
+/build/
 sdkconfig.old
 managed_components/
 
@@ -20,6 +20,7 @@ venv/
 *.log
 tmp/
 temp/
+.codex_tmp/
 .render_*/
 .lo_profile_*/
 .patent_template_rework/
