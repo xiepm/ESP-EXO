@@ -54,6 +54,11 @@ typedef enum {
 	EXO_BLE_OPCODE_GET_JOINT_COMMAND = 0x05,
 	EXO_BLE_OPCODE_GET_GAIT_STATUS = 0x06,
 	EXO_BLE_OPCODE_GET_ASSIST_CONFIG = 0x07,
+	EXO_BLE_OPCODE_GET_TELEMETRY_STATUS = 0x08,
+	/* 只读：实际安装映射、连续电机角和 RAM 零位，不发送 CAN。 */
+	EXO_BLE_OPCODE_GET_CALIBRATION_STATUS = 0x09,
+	EXO_BLE_OPCODE_GET_ASSIST_TORQUE_LIMIT = 0x0A,
+	EXO_BLE_OPCODE_GET_ANGLE_ASSIST_CONFIG = 0x0B,
 	EXO_BLE_OPCODE_START = 0x10,
 	EXO_BLE_OPCODE_STOP = 0x11,
 	EXO_BLE_OPCODE_CAPTURE_ZERO = 0x12,
@@ -61,10 +66,27 @@ typedef enum {
 	EXO_BLE_OPCODE_SET_CONTROL_CONFIG = 0x14,
 	EXO_BLE_OPCODE_SET_JOINT_COMMAND = 0x15,
 	EXO_BLE_OPCODE_SET_ASSIST_CONFIG = 0x16,
+	EXO_BLE_OPCODE_START_TELEMETRY = 0x17,
+	EXO_BLE_OPCODE_STOP_TELEMETRY = 0x18,
+	/* 原8字节助力配置 + 最大附加力矩u16 mN·m，一次原子写入。 */
+	EXO_BLE_OPCODE_SET_ASSIST_CONFIG_WITH_LIMIT = 0x19,
+	EXO_BLE_OPCODE_SET_ANGLE_ASSIST_CONFIG = 0x1D,
+	/* side/action/token：人体手动前抬腿示教方向，不发送CAN运动命令。 */
+	EXO_BLE_OPCODE_TEACH_DIRECTION = 0x1A,
+	EXO_BLE_OPCODE_GET_CAN_STATUS = 0x1B,
+	EXO_BLE_OPCODE_RESTORE_FEEDBACK = 0x1C,
+    EXO_BLE_OPCODE_GET_SAVED_ZERO = 0x1E, /* side，候选和沿用预览，只读。 */
+    EXO_BLE_OPCODE_SAVED_ZERO_ACTION = 0x1F, /* action/confirmed，双侧原子操作；0.10.11新增action=3采集双零位。 */
+    EXO_BLE_OPCODE_GET_PULSE_TIMING = 0x20,
+    EXO_BLE_OPCODE_SET_PULSE_TIMING = 0x21,
+    EXO_BLE_OPCODE_GET_PULSE_WINDOW = 0x22,
+    EXO_BLE_OPCODE_SET_PULSE_WINDOW = 0x23,
+    EXO_BLE_OPCODE_GET_PULSE_STATUS = 0x24,
 } exo_ble_opcode_t;
 
 /* 响应操作码 = 请求操作码按位或 0x80，手机据此识别响应类型。 */
 typedef enum {
+	EXO_BLE_RESPONSE_SAVED_ZERO = 0x1E | EXO_BLE_PROTOCOL_RESPONSE_BIT,
 	EXO_BLE_RESPONSE_INFO =
 		EXO_BLE_OPCODE_GET_INFO | EXO_BLE_PROTOCOL_RESPONSE_BIT,
 	EXO_BLE_RESPONSE_SYSTEM_STATUS =
@@ -79,6 +101,12 @@ typedef enum {
 		EXO_BLE_OPCODE_GET_GAIT_STATUS | EXO_BLE_PROTOCOL_RESPONSE_BIT,
 	EXO_BLE_RESPONSE_ASSIST_CONFIG =
 		EXO_BLE_OPCODE_GET_ASSIST_CONFIG | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_TELEMETRY_STATUS =
+		EXO_BLE_OPCODE_GET_TELEMETRY_STATUS | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_CALIBRATION_STATUS =
+		EXO_BLE_OPCODE_GET_CALIBRATION_STATUS | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_ASSIST_TORQUE_LIMIT =
+		EXO_BLE_OPCODE_GET_ASSIST_TORQUE_LIMIT | EXO_BLE_PROTOCOL_RESPONSE_BIT,
 	EXO_BLE_RESPONSE_START_ACK =
 		EXO_BLE_OPCODE_START | EXO_BLE_PROTOCOL_RESPONSE_BIT,
 	EXO_BLE_RESPONSE_STOP_ACK =
@@ -93,6 +121,16 @@ typedef enum {
 		EXO_BLE_OPCODE_SET_JOINT_COMMAND | EXO_BLE_PROTOCOL_RESPONSE_BIT,
 	EXO_BLE_RESPONSE_SET_ASSIST_CONFIG_ACK =
 		EXO_BLE_OPCODE_SET_ASSIST_CONFIG | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_START_TELEMETRY_ACK =
+		EXO_BLE_OPCODE_START_TELEMETRY | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_STOP_TELEMETRY_ACK =
+		EXO_BLE_OPCODE_STOP_TELEMETRY | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_SET_ASSIST_CONFIG_WITH_LIMIT_ACK =
+		EXO_BLE_OPCODE_SET_ASSIST_CONFIG_WITH_LIMIT | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_TEACH_DIRECTION_ACK =
+		EXO_BLE_OPCODE_TEACH_DIRECTION | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_CAN_STATUS = EXO_BLE_OPCODE_GET_CAN_STATUS | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+	EXO_BLE_RESPONSE_RESTORE_FEEDBACK_ACK = EXO_BLE_OPCODE_RESTORE_FEEDBACK | EXO_BLE_PROTOCOL_RESPONSE_BIT,
 } exo_ble_response_opcode_t;
 
 /* 稳定的协议结果码，不是 esp_err_t，也不能把内部错误值直接发给手机。 */
@@ -166,6 +204,7 @@ typedef enum {
 	EXO_BLE_BLOCK_LEFT_MOTOR_FAULT = 16,
 	EXO_BLE_BLOCK_RIGHT_MOTOR_FAULT = 17,
 	EXO_BLE_BLOCK_SYSTEM_ERROR = 18,
+	EXO_BLE_BLOCK_RUN_CONTRACT_INVALID = 19,
 	EXO_BLE_BLOCK_UNKNOWN = 0xFF,
 } exo_ble_wire_block_reason_t;
 
@@ -197,10 +236,14 @@ typedef enum {
 	EXO_BLE_CONTROL_MODE_IMPEDANCE = 6,
 } exo_ble_wire_control_mode_t;
 
-/* 参考源与控制模式分离：CONSTANT 是静态目标，SINE 是阶段 7 正弦参考。 */
+/*
+ * 参考源与控制模式分离。线码 2 永久保留给隔离的工程交替激励；设备只有声明
+ * ENGINEERING_GAIT_STIMULUS 能力后才会在业务层接受它。
+ */
 typedef enum {
 	EXO_BLE_REFERENCE_CONSTANT = 0,
 	EXO_BLE_REFERENCE_SINE = 1,
+	EXO_BLE_REFERENCE_ALTERNATING_SINE_TEST = 2,
 } exo_ble_wire_reference_t;
 
 /* GET_CONTROL_CONFIG 的第 5 字节用于区分正常结构化响应与 4-byte 通用 ACK。 */
@@ -240,7 +283,50 @@ enum {
 	EXO_BLE_CAPABILITY_CONTROL_CONFIGURATION = 1U << 3,
 	EXO_BLE_CAPABILITY_GAIT_STATUS = 1U << 4,
 	EXO_BLE_CAPABILITY_ASSIST_CONFIGURATION = 1U << 5,
-	EXO_BLE_CAPABILITIES_MASK = 0x003FU,
+	EXO_BLE_CAPABILITY_TELEMETRY_STREAM = 1U << 6,
+	/* 仅 CONFIG_EXO_ENGINEERING_GAIT_STIMULUS=y 的构建会声明 bit 7。 */
+	EXO_BLE_CAPABILITY_ENGINEERING_GAIT_STIMULUS = 1U << 7,
+	EXO_BLE_CAPABILITY_CALIBRATION_STATUS = 1U << 8,
+	EXO_BLE_CAPABILITY_ASSIST_TORQUE_LIMIT = 1U << 9,
+	EXO_BLE_CAPABILITY_DIRECTION_TEACHING = 1U << 10,
+	EXO_BLE_CAPABILITY_FEEDBACK_RECOVERY = 1U << 11,
+	EXO_BLE_CAPABILITY_ANGLE_THRESHOLD_ASSIST = 1U << 12,
+    EXO_BLE_CAPABILITY_ANGLE_ASSIST_5NM = 1U << 13,
+    EXO_BLE_CAPABILITY_SAVED_WEAR_ZERO = 1U << 14,
+    EXO_BLE_CAPABILITY_SWING_EVENT_PULSE = 1U << 15,
+	EXO_BLE_CAPABILITIES_MASK = 0xFFFFU,
+};
+
+/*
+ * 遥测通道线码与 exo_telemetry.h 中的内部掩码保持数值一致，但单独定义，
+ * 以免纯字节协议层依赖 FreeRTOS 遥测队列实现。每个样本 Notify 只能携带
+ * 一个 single-bit channel；同时请求多通道时会产生多帧共用 sample_sequence。
+ */
+enum {
+	EXO_BLE_TELEMETRY_CHANNEL_JOINT_POSITION = 1U << 0,
+	EXO_BLE_TELEMETRY_CHANNEL_JOINT_VELOCITY = 1U << 1,
+	EXO_BLE_TELEMETRY_CHANNEL_MOTOR_TORQUE = 1U << 2,
+	EXO_BLE_TELEMETRY_CHANNEL_GAIT_PHASE = 1U << 3,
+	EXO_BLE_TELEMETRY_CHANNEL_ASSIST_SUGGESTION = 1U << 4,
+	EXO_BLE_TELEMETRY_CHANNEL_GAIT_CONFIDENCE = 1U << 5,
+	EXO_BLE_TELEMETRY_CHANNEL_APPLIED_TORQUE = 1U << 6,
+	EXO_BLE_TELEMETRY_CHANNELS_MASK = 0x007FU,
+};
+
+#define EXO_BLE_TELEMETRY_SCHEMA_VERSION 1U
+#define EXO_BLE_TELEMETRY_FRAME_TYPE_SAMPLE 1U
+#define EXO_BLE_TELEMETRY_FRAME_SIZE 20U
+#define EXO_BLE_TELEMETRY_SIGNED_INVALID ((uint16_t)0x8000U)
+#define EXO_BLE_TELEMETRY_UNSIGNED_INVALID UINT16_MAX
+
+enum {
+	EXO_BLE_TELEMETRY_FLAG_LEFT_VALID = 1U << 0,
+	EXO_BLE_TELEMETRY_FLAG_RIGHT_VALID = 1U << 1,
+	EXO_BLE_TELEMETRY_FLAG_DROPPED = 1U << 2,
+	EXO_BLE_TELEMETRY_FLAG_SYSTEM_STATE_SHIFT = 3,
+	EXO_BLE_TELEMETRY_FLAG_SYSTEM_STATE_MASK = 0x38U,
+	EXO_BLE_TELEMETRY_FLAG_OUTPUT_ALLOWED = 1U << 6,
+	EXO_BLE_TELEMETRY_FLAG_REAL_OUTPUT_ENABLED = 1U << 7,
 };
 
 /* 阶段9步态状态线码与内部枚举分开定义，后续内部重排不会破坏手机兼容。 */
@@ -285,6 +371,7 @@ typedef enum {
 	EXO_BLE_ASSIST_MODE_TRANSPARENT = 1,
 	EXO_BLE_ASSIST_MODE_ACTIVE_PHASE = 2,
 	EXO_BLE_ASSIST_MODE_ASSIST_AS_NEEDED = 3,
+	EXO_BLE_ASSIST_MODE_ANGLE_THRESHOLD = 4,
 } exo_ble_wire_assist_mode_t;
 
 typedef enum {
@@ -298,6 +385,7 @@ typedef enum {
 	EXO_BLE_ASSIST_STRATEGY_TRANSPARENT = 1,
 	EXO_BLE_ASSIST_STRATEGY_PHASE_PROFILE = 2,
 	EXO_BLE_ASSIST_STRATEGY_AAN_RESIDUAL = 3,
+	EXO_BLE_ASSIST_STRATEGY_ANGLE_THRESHOLD = 4,
 } exo_ble_wire_assist_strategy_t;
 
 typedef enum {
@@ -309,6 +397,7 @@ typedef enum {
 	EXO_BLE_ASSIST_UNAVAILABLE_REQUIRED_SENSOR_MISSING = 5,
 	EXO_BLE_ASSIST_UNAVAILABLE_NOT_ARMED = 6,
 	EXO_BLE_ASSIST_UNAVAILABLE_REQUIRED_GAIT_INVALID = 7,
+	EXO_BLE_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS = 8,
 } exo_ble_wire_assist_unavailable_t;
 
 enum {
@@ -388,7 +477,7 @@ typedef struct {
 	uint16_t available_sensor_mask;
 } exo_ble_wire_assist_config_t;
 
-/* SET_ASSIST_CONFIG使用8-byte payload；阶段9reserved_flags必须为0。 */
+/* SET_ASSIST_CONFIG使用8-byte payload；v1 reserved_flags 必须为0。 */
 typedef struct {
 	uint8_t schema_version;
 	exo_ble_wire_assist_mode_t selected_mode;
@@ -399,6 +488,88 @@ typedef struct {
 	uint8_t right_level_percent;
 	uint8_t reserved_flags;
 } exo_ble_wire_assist_request_t;
+
+/* GET_ASSIST_TORQUE_LIMIT: schema=1、flags(选择/活动有效)、三个u16LE，8字节。
+ * 上限是附加助力的绝对值，左右各自按等级百分比缩放，不含基础阻尼。
+ */
+#define EXO_BLE_ASSIST_TORQUE_HARD_MAX_MNM 500U
+#define EXO_BLE_ANGLE_TORQUE_HARD_MAX_MNM 15000U
+#define EXO_BLE_PULSE_FIXED_MAX_MS 3000U
+#define EXO_BLE_PULSE_SCALED_MAX_MS 2000U
+#define EXO_BLE_ANGLE_MIN_CDEG 100U
+#define EXO_BLE_ANGLE_MAX_CDEG 6000U
+#define EXO_BLE_ANGLE_HYSTERESIS_CDEG 100U
+#define EXO_BLE_ANGLE_RAMP_MS 200U
+/* 0x1D: 原8字节配置 + u16力矩mN·m + u16人体角0.01度，原子更新。
+ * 0x0B读回12字节: schema, flags, selected/active阈值, 回差, 渐入ms,
+ * generation低8位, reserved=0。旧帧和旧opcode保持原长度。
+ */
+typedef struct {
+    uint8_t flags, generation;
+    uint16_t selected_cdeg, active_cdeg;
+    bool pulse_model; /* schema2：旧回差/渐入字段为0，改读脉冲配置。 */
+} exo_ble_wire_angle_assist_t;
+bool exo_ble_protocol_encode_angle_assist(uint8_t request_id,
+    const exo_ble_wire_angle_assist_t *config, uint8_t *frame,
+    size_t capacity, size_t *length);
+typedef struct {
+	uint8_t flags;
+	uint16_t selected_maximum_mnm;
+	uint16_t active_maximum_mnm;
+	uint16_t hard_maximum_mnm;
+} exo_ble_wire_assist_torque_limit_t;
+
+/* START_TELEMETRY 的 3-byte payload；rate 仅允许 5/10/20 Hz，mask 必须非空。 */
+typedef struct {
+	uint8_t rate_hz;
+	uint16_t channel_mask;
+} exo_ble_wire_telemetry_start_t;
+
+/* GET_TELEMETRY_STATUS 的 16-byte payload DTO；计数器在每次成功 START 时清零。
+ */
+typedef struct {
+	bool streaming;
+	uint8_t rate_hz;
+	uint16_t channel_mask;
+	uint16_t stream_sequence;
+	uint32_t notify_success_count;
+	uint32_t dropped_sample_count;
+	uint8_t queued_samples;
+	uint8_t queue_capacity;
+} exo_ble_wire_telemetry_status_t;
+
+/*
+ * 独立 Telemetry characteristic 上的固定 20-byte 样本帧 DTO。left/right_value
+ * 只是 16-bit 位模式：有符号通道按 i16 解释，相位/置信度按 u16 解释。
+ */
+typedef struct {
+	uint8_t channel;
+	uint8_t flags;
+	uint16_t stream_sequence;
+	uint32_t sample_sequence;
+	uint32_t timestamp_ms;
+	uint16_t activation_epoch_lsb;
+	uint16_t left_value;
+	uint16_t right_value;
+} exo_ble_wire_telemetry_sample_t;
+
+/* 16-byte参数载荷：schema/mode，7个u16；显式字段编码，不传内部结构体。 */
+typedef struct {
+    uint8_t schema_version, duration_mode;
+    uint16_t peak_mnm, fixed_ms, ratio_permille, minimum_ms, maximum_ms;
+    uint16_t period_minimum_ms, period_maximum_ms;
+} exo_ble_wire_pulse_timing_t;
+typedef struct { int16_t reset_cdeg; uint16_t maximum_cdeg; } exo_ble_wire_pulse_window_t;
+typedef struct {
+    uint8_t side, state, flags, exit_reason;
+    uint16_t event_count, pulse_count, duration_ms, period_ms, peak_mnm, progress_x10000;
+} exo_ble_wire_pulse_status_t;
+bool exo_ble_protocol_encode_pulse_timing(uint8_t request_id,
+    const exo_ble_wire_pulse_timing_t *timing,uint8_t *frame,size_t capacity,size_t *length);
+bool exo_ble_protocol_encode_pulse_window(uint8_t request_id,
+    const exo_ble_wire_pulse_window_t *window,uint8_t *frame,size_t capacity,size_t *length);
+bool exo_ble_protocol_encode_pulse_status(uint8_t request_id,
+    const exo_ble_wire_pulse_status_t *status,uint8_t *frame,size_t capacity,size_t *length);
 
 /*
  * 解码后的请求 DTO。简单请求只读取 side；阶段 8 SET 请求分别填入
@@ -412,9 +583,31 @@ typedef struct {
 	uint8_t payload_len;
 	exo_ble_wire_side_t side;
 	exo_ble_wire_control_config_t control_config;
+	uint8_t direction_teach_action;
+	uint8_t direction_teach_token;
+    uint8_t saved_zero_action;
 	exo_ble_wire_joint_command_t joint_command;
 	exo_ble_wire_assist_request_t assist_config;
+	uint16_t maximum_assist_torque_mnm;
+	uint16_t angle_threshold_cdeg;
+	exo_ble_wire_pulse_timing_t pulse_timing;
+	exo_ble_wire_pulse_window_t pulse_window;
+	exo_ble_wire_telemetry_start_t telemetry_start;
 } exo_ble_request_t;
+
+/* 16字节payload：side/actuator/CAN/direction/flags/reason/reserved u16、
+ * 候选周期电机零位i32毫度、当前沿用人体角预览i32毫度；缺失值INT32_MIN。
+ * flags: stored/binding_matches/preview_valid/reuse_ready，预览不写RAM。 */
+typedef struct {
+    exo_ble_wire_side_t side;
+    uint8_t actuator, can_id;
+    exo_ble_wire_direction_t direction;
+    uint8_t flags, reason;
+    int32_t saved_zero_mdeg, preview_joint_mdeg;
+} exo_ble_saved_zero_status_t;
+bool exo_ble_protocol_encode_saved_zero(uint8_t request_id,
+    const exo_ble_saved_zero_status_t *status, uint8_t *frame,
+    size_t frame_capacity, size_t *frame_len);
 
 /*
  * ACK payload（4 bytes）：result、state、system_flags、detail。
@@ -479,6 +672,42 @@ typedef struct {
 } exo_ble_joint_status_t;
 
 /*
+ * 出厂核对/穿戴标定只读快照，payload 16 B（整帧仍为20 B）：
+ * side, actuator(A=0/B=1/unknown=255), CAN ID, direction, joint_flags,
+ * reserved=0, i32 LE 连续电机角mrad, i32 LE 软件零位mrad, u16 LE反馈年龄ms。
+ * 无有效数值使用INT32_MIN，不能用0冒充真实测量。零位是电机坐标偏置，
+ * 人体关节角仍由JOINT_STATUS提供；两者不得混用。没有运行期改映射/机械置零接口。
+ */
+typedef struct {
+	exo_ble_wire_side_t side;
+	uint8_t actuator;
+	uint8_t can_id;
+	exo_ble_wire_direction_t direction;
+	uint8_t joint_flags;
+	int32_t raw_position_mrad;
+	int32_t software_zero_mrad;
+	uint16_t feedback_age_ms;
+} exo_ble_calibration_status_t;
+
+/* CAN诊断固定16字节：state(0停止/1运行/2BUS_OFF/3恢复/4不可读),
+ * flags(bit0总线可用于请求/bit1待机允许恢复), TEC/REC u16, bus_errors u32,
+ * TX失败/RX丢帧饱和u16, A/B flags(曾有效/在线/请求上报/电机故障/预算耗尽)。
+ * 错误总数从启动累计，不能仅凭历史总数判断此刻故障。 */
+typedef struct {
+    uint8_t state, flags;
+    uint16_t tx_error_counter, rx_error_counter;
+    uint32_t bus_error_count;
+    uint16_t tx_failed_count, rx_missed_count;
+    uint8_t motor_flags[2];
+} exo_ble_can_status_t;
+bool exo_ble_protocol_encode_can_status(uint8_t request_id,
+    const exo_ble_can_status_t *status, uint8_t *frame, size_t capacity, size_t *length);
+
+bool exo_ble_protocol_encode_calibration_status(
+	uint8_t request_id, const exo_ble_calibration_status_t *status,
+	uint8_t *frame, size_t frame_capacity, size_t *frame_len);
+
+/*
  * 解码并验证一帧完整请求。函数先清空 request；即使帧错误，也尽量保留已经收到的
  * header 字节，使服务层能用 opcode/request_id 返回可关联的错误 ACK。
  * 只有返回 EXO_BLE_RESULT_OK 时，request 才可以交给业务分发。
@@ -516,6 +745,15 @@ bool exo_ble_protocol_encode_gait_status(
 bool exo_ble_protocol_encode_assist_config(
 	uint8_t request_id, const exo_ble_wire_assist_config_t *config,
 	uint8_t *frame, size_t frame_capacity, size_t *frame_len);
+bool exo_ble_protocol_encode_assist_torque_limit(
+	uint8_t request_id, const exo_ble_wire_assist_torque_limit_t *limit,
+	uint8_t *frame, size_t frame_capacity, size_t *frame_len);
+bool exo_ble_protocol_encode_telemetry_status(
+	uint8_t request_id, const exo_ble_wire_telemetry_status_t *status,
+	uint8_t *frame, size_t frame_capacity, size_t *frame_len);
+bool exo_ble_protocol_encode_telemetry_sample(
+	const exo_ble_wire_telemetry_sample_t *sample, uint8_t *frame,
+	size_t frame_capacity, size_t *frame_len);
 
 #ifdef __cplusplus
 }

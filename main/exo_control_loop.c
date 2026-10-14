@@ -20,6 +20,7 @@
 #include "exo_config.h"
 #include "exo_sensor_snapshot.h"
 #include "exo_system.h"
+#include "exo_telemetry.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "gait_estimator.h"
@@ -127,8 +128,143 @@ sensor_joint_from_hip(const hip_joint_snapshot_t *snapshot,
 	sensor.feedback_valid = snapshot->feedback_valid &&
 						 snapshot->continuous_position_valid;
 	sensor.online = snapshot->online;
+	sensor.motor_fault = snapshot->motor_fault;
 	sensor.joint_valid = snapshot->joint_valid;
 	return sensor;
+}
+
+/*
+ * 把“本次 100 Hz 周期”已经算好的结果整理成阶段 10 遥测输入。
+ *
+ * 这里不重新读取关节、步态或控制器全局快照，避免把不同周期的数据拼到一起：
+ * - 位置/速度/电机估算力矩来自本周期 sensor_snapshot；
+ * - 相位和置信度来自由该快照立即更新出的 gait_estimate；
+ * - 建议助力来自同一周期 assist_result；
+ * - 实际助力只有在最终命令发送成功时才被标为有效。
+ *
+ * exo_telemetry_push() 内部只做有界定点量化和静态环形队列写入，不发送 BLE，
+ * 因此可以安全地留在唯一控制任务中。真正的 Notify 由低优先级 BLE 任务完成。
+ */
+static void push_phase10_telemetry(
+	int64_t cycle_start_us, const exo_sensor_snapshot_t *sensor_snapshot,
+	const exo_gait_estimate_t *gait_estimate,
+	const exo_assist_result_t *assist_result,
+	const exo_controller_tick_result_t *control_result) {
+	if (sensor_snapshot == NULL || gait_estimate == NULL ||
+		assist_result == NULL || control_result == NULL) {
+		return;
+	}
+
+	exo_system_control_state_t system_state = {0};
+	(void)exo_system_get_control_state(&system_state);
+
+	const bool left_kinematics_valid =
+		(sensor_snapshot->valid_sensor_mask &
+		 EXO_SENSOR_LEFT_HIP_KINEMATICS) != 0U;
+	const bool right_kinematics_valid =
+		(sensor_snapshot->valid_sensor_mask &
+		 EXO_SENSOR_RIGHT_HIP_KINEMATICS) != 0U;
+	const bool left_motor_torque_valid =
+		(sensor_snapshot->valid_sensor_mask &
+		 EXO_SENSOR_LEFT_MOTOR_TORQUE_ESTIMATE) != 0U;
+	const bool right_motor_torque_valid =
+		(sensor_snapshot->valid_sensor_mask &
+		 EXO_SENSOR_RIGHT_MOTOR_TORQUE_ESTIMATE) != 0U;
+	const bool left_phase_valid =
+		(gait_estimate->valid_flags & EXO_GAIT_VALID_LEFT_PHASE) != 0U;
+	const bool right_phase_valid =
+		(gait_estimate->valid_flags & EXO_GAIT_VALID_RIGHT_PHASE) != 0U;
+	const bool confidence_valid =
+		(gait_estimate->valid_flags & EXO_GAIT_VALID_CONFIDENCE) != 0U;
+	const bool torque_suggestion_valid =
+		assist_result->valid &&
+		assist_result->output_kind == EXO_ASSIST_OUTPUT_TORQUE_FF_DELTA;
+	/*
+	 * SHADOW 下最终基础命令发送成功时，实际助力是“已知的 0 N·m”，所以仍标
+	 * 有效；只有发送失败/输出门关闭时才不能声称某个值已实际施加。
+	 */
+	/*
+	 * 一对 Motion 命令是两帧 CAN，不具备总线原子性。若其中一帧失败，已经成功
+	 * 入队的另一侧仍可能产生真实输出，所以遥测必须按人体 LEFT/RIGHT 分别标记，
+	 * 不能用合并返回值把物理上的单侧输出抹成两个无效值。
+	 */
+	const bool left_send_succeeded =
+		g_exo_hardware_config.hip_joint[EXO_HIP_JOINT_LEFT].actuator ==
+			EXO_ACTUATOR_A
+			? control_result->actuator_a_send_succeeded
+			: control_result->actuator_b_send_succeeded;
+	const bool right_send_succeeded =
+		g_exo_hardware_config.hip_joint[EXO_HIP_JOINT_RIGHT].actuator ==
+			EXO_ACTUATOR_A
+			? control_result->actuator_a_send_succeeded
+			: control_result->actuator_b_send_succeeded;
+	const bool left_assist_applied =
+		control_result->assist_accepted && left_send_succeeded;
+	const bool right_assist_applied =
+		control_result->assist_accepted && right_send_succeeded;
+	const float applied_left_nm =
+		left_assist_applied
+			? control_result->assist_delta.left.torque_ff_nm
+			: 0.0f;
+	const float applied_right_nm =
+		right_assist_applied
+			? control_result->assist_delta.right.torque_ff_nm
+			: 0.0f;
+
+	exo_telemetry_input_t input = {
+		.timestamp_us = cycle_start_us,
+		.system_state = (uint8_t)system_state.state,
+		.sample_flags =
+			(uint8_t)((control_result->output_gate_open
+					   ? EXO_TELEMETRY_SAMPLE_FLAG_OUTPUT_ALLOWED
+					   : 0U) |
+				  (control_result->assist_applied
+					   ? EXO_TELEMETRY_SAMPLE_FLAG_REAL_OUTPUT_ENABLED
+					   : 0U)),
+		.activation_epoch = assist_result->activation_epoch,
+		.joint_position_deg = {
+			.left = sensor_snapshot->left.joint_sample.position_deg,
+			.right = sensor_snapshot->right.joint_sample.position_deg,
+			.left_valid = left_kinematics_valid,
+			.right_valid = right_kinematics_valid,
+		},
+		.joint_velocity_deg_s = {
+			.left = sensor_snapshot->left.joint_sample.velocity_deg_s,
+			.right = sensor_snapshot->right.joint_sample.velocity_deg_s,
+			.left_valid = left_kinematics_valid,
+			.right_valid = right_kinematics_valid,
+		},
+		.motor_torque_nm = {
+			.left = sensor_snapshot->left.joint_sample.torque_nm,
+			.right = sensor_snapshot->right.joint_sample.torque_nm,
+			.left_valid = left_motor_torque_valid,
+			.right_valid = right_motor_torque_valid,
+		},
+		.gait_phase_01 = {
+			.left = gait_estimate->left_phase_01,
+			.right = gait_estimate->right_phase_01,
+			.left_valid = left_phase_valid,
+			.right_valid = right_phase_valid,
+		},
+		.assist_suggestion_nm = {
+			.left = assist_result->suggestion.left.torque_ff_nm,
+			.right = assist_result->suggestion.right.torque_ff_nm,
+			.left_valid = torque_suggestion_valid,
+			.right_valid = torque_suggestion_valid,
+		},
+		.gait_confidence_01 = gait_estimate->confidence_01,
+		.gait_confidence_valid = confidence_valid,
+		.final_command = control_result->final_command,
+		.final_left_valid = left_send_succeeded,
+		.final_right_valid = right_send_succeeded,
+		.applied_assist_nm = {
+			.left = applied_left_nm,
+			.right = applied_right_nm,
+			.left_valid = left_send_succeeded,
+			.right_valid = right_send_succeeded,
+		},
+	};
+	exo_telemetry_push(&input);
 }
 
 /*
@@ -143,7 +279,9 @@ static void update_cycle_diagnostics(
 	bool right_available, const exo_sensor_snapshot_t *sensor_snapshot,
 	const exo_gait_estimate_t *gait_estimate, uint32_t snapshot_build_us,
 	uint32_t gait_update_us, uint32_t assist_update_us,
-	const exo_assist_result_t *assist_result, esp_err_t algorithm_result,
+	const exo_assist_result_t *assist_result,
+	const exo_controller_tick_result_t *control_tick_result,
+	esp_err_t algorithm_result,
 	bool stack_sample_available,
 	uint32_t stack_high_water_mark_bytes) {
 	exo_control_loop_snapshot_t *snapshot = &diagnostics->snapshot;
@@ -195,6 +333,9 @@ static void update_cycle_diagnostics(
 	}
 	if (assist_result != NULL) {
 		snapshot->assist_result = *assist_result;
+	}
+	if (control_tick_result != NULL) {
+		snapshot->control_tick_result = *control_tick_result;
 	}
 	snapshot->last_snapshot_build_us = snapshot_build_us;
 	if (snapshot_build_us > snapshot->max_snapshot_build_us) {
@@ -330,6 +471,7 @@ static void control_task(void *arg) {
 		exo_sensor_snapshot_t sensor_snapshot = {0};
 		exo_gait_estimate_t gait_estimate = {0};
 		exo_assist_result_t assist_tick_result = {0};
+		exo_controller_tick_result_t control_tick_result = {0};
 		esp_err_t algorithm_result = ESP_OK;
 
 		int64_t stage_start_us = esp_timer_get_time();
@@ -362,8 +504,21 @@ static void control_task(void *arg) {
 		const uint32_t assist_update_us = clamp_duration_us(
 			esp_timer_get_time() - stage_start_us);
 
-		const esp_err_t output_result =
-			exo_system_process_control_tick(cycle_start_us);
+		/*
+		 * 把同一周期的 assist result 及其来源序号直接交给输出门。controller 会
+		 * 再核对 epoch/sequence/timestamp，最终纯值结果供本周期诊断与遥测使用。
+		 */
+		const esp_err_t output_result = exo_system_process_control_tick(
+			cycle_start_us, &sensor_snapshot, &assist_tick_result, sensor_snapshot.sequence,
+			gait_estimate.sequence, &control_tick_result);
+
+		/*
+		 * 控制输出结果确定后再采样，才能区分“策略建议”与“确实加入并发送的助力”。
+		 * 此调用不做 BLE I/O；未通过 START_TELEMETRY 开流时会立即返回。
+		 */
+		push_phase10_telemetry(cycle_start_us, &sensor_snapshot,
+						   &gait_estimate, &assist_tick_result,
+						   &control_tick_result);
 		const bool sample_stack = stack_sample_countdown == 0U;
 		if (sample_stack) {
 			stack_high_water_mark_bytes =
@@ -381,7 +536,8 @@ static void control_task(void *arg) {
 			&diagnostics, cycle_start_us, output_result, &left_snapshot,
 			left_available, &right_snapshot, right_available, &sensor_snapshot,
 			&gait_estimate, snapshot_build_us, gait_update_us,
-			assist_update_us, &assist_tick_result, algorithm_result, sample_stack,
+			assist_update_us, &assist_tick_result, &control_tick_result,
+			algorithm_result, sample_stack,
 			stack_high_water_mark_bytes);
 
 		/* 最后发布双缓冲；它自身的复制和锁等待也计入本周期execution。 */

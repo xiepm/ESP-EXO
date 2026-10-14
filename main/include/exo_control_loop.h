@@ -6,6 +6,7 @@
 
 #include "esp_err.h"
 #include "exo_assist.h"
+#include "exo_controller.h"
 #include "exo_sensor_snapshot.h"
 #include "gait_estimator.h"
 
@@ -87,8 +88,13 @@ typedef struct {
 	/* 最近一个完整控制周期使用的真实算法输入与估计结果。 */
 	exo_sensor_snapshot_t sensor_snapshot;
 	exo_gait_estimate_t gait_estimate;
-	/* 与上面两份输入序号绑定的本周期SHADOW结果，阶段9不进入真实输出链。 */
+	/* 与上面两份输入序号绑定的本周期策略结果；SHADOW/ACTIVE语义由字段明确区分。 */
 	exo_assist_result_t assist_result;
+	/*
+	 * 阶段 10 最终输出纯值：同时包含 base/final、建议/接纳/实发和发送结果。
+	 * 遥测应消费这份同周期副本，不能在另一个任务里重新拼接多个全局快照。
+	 */
+	exo_controller_tick_result_t control_tick_result;
 	uint32_t stack_high_water_mark_bytes;
 } exo_control_loop_snapshot_t;
 

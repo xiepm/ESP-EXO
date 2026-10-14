@@ -15,9 +15,22 @@ menu "Example Configuration"
     config EXAMPLE_RX_GPIO_NUM
         int "RX GPIO number"
         default 22 if IDF_TARGET_ESP32
+        # 2026-10-09 操作者确认：当前 ESP32-S3-N16R8 收发器 RXD 接 GPIO1。
+        # 默认值只影响新配置；已有 sdkconfig 仍以其中保存的值为准。
+        default 1 if IDF_TARGET_ESP32S3
         default 2
         help
             This option selects the GPIO pin used for the RX signal. Connect the
             RX signal to your transceiver.
+
+    config EXO_ENGINEERING_GAIT_STIMULUS
+        bool "Enable isolated alternating-gait engineering stimulus"
+        default n
+        help
+            Enable the deliberately isolated IMPEDANCE + ALTERNATING_SINE_TEST
+            reference used to make an unloaded exoskeleton move during estimator
+            and telemetry verification.  This is not a product assist mode.  A
+            production build should leave it disabled; when disabled the firmware
+            neither advertises the capability nor accepts that reference source.
 
 endmenu

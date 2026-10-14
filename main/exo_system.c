@@ -22,6 +22,7 @@
 #include "exo_assist.h"
 #include "exo_control_loop.h"
 #include "exo_controller.h"
+#include "exo_feedback_recovery.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -60,6 +61,9 @@ static SemaphoreHandle_t s_operation_mutex;
 static TaskHandle_t s_executor_task;
 static exo_system_snapshot_t s_snapshot;
 static bool s_initialized;
+
+/* 运行故障只通知现有执行器做一次清理；无论清理成功与否都锁在ERROR。 */
+static bool s_runtime_stop_pending;
 static uint32_t s_maintenance_generation;
 static portMUX_TYPE s_state_lock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -157,8 +161,9 @@ validate_joint(exo_hip_joint_id_t joint, const hip_joint_snapshot_t *snapshot) {
 }
 
 /*
- * 汇总 START 的当前硬件门槛：永久控制任务存活、TWAI 运行、左右关节均已映射、
- * 定向、归零、在线且无电机故障。本函数只读取快照，不使能电机、不发送 CAN。
+ * 汇总 START 的当前门槛：永久控制任务存活、TWAI 运行、左右关节均已映射、
+ * 定向、归零、在线且无电机故障，最后核对 controller+assist 运行合同。
+ * 本函数全程只读快照，不 arm 对象、不使能电机、不发送 CAN。
  */
 static exo_start_block_reason_t hardware_start_block_reason(void) {
 	exo_control_loop_snapshot_t control;
@@ -169,7 +174,8 @@ static exo_start_block_reason_t hardware_start_block_reason(void) {
 
 	twai_status_info_t twai_status;
 	if (twai_get_status_info(&twai_status) != ESP_OK ||
-		twai_status.state != TWAI_STATE_RUNNING) {
+		twai_status.state != TWAI_STATE_RUNNING ||
+		twai_status.tx_error_counter >= 128U || twai_status.rx_error_counter >= 128U) {
 		return EXO_START_BLOCK_TWAI_NOT_RUNNING;
 	}
 
@@ -186,7 +192,22 @@ static exo_start_block_reason_t hardware_start_block_reason(void) {
 	if (reason != EXO_START_BLOCK_NONE) {
 		return reason;
 	}
-	return validate_joint(EXO_HIP_JOINT_RIGHT, &right);
+	reason = validate_joint(EXO_HIP_JOINT_RIGHT, &right);
+	if (reason != EXO_START_BLOCK_NONE) {
+		return reason;
+	}
+
+	/*
+	 * 最后做完全只读的 controller+assist 运行合同预检。该函数也被 START 请求
+	 * 入口用于 ready_to_start，因此非法 ACTIVE+TEST 在异步序列开始前即可见；
+	 * execute_start_sequence 再次调用本函数，保证第一条 disable 前仍然有效。
+	 */
+	exo_assist_run_contract_t assist_contract;
+	if (exo_assist_preview_run_contract(&assist_contract) != ESP_OK ||
+		exo_controller_validate_run_contract(&assist_contract) != ESP_OK) {
+		return EXO_START_BLOCK_RUN_CONTRACT_INVALID;
+	}
+	return EXO_START_BLOCK_NONE;
 }
 
 /* START 序列在每个可取消边界调用它；STOP 会在状态锁内撤销该条件。 */
@@ -474,15 +495,28 @@ static start_sequence_result_t execute_start_sequence(void) {
 		.left_deg = left.joint_sample.position_deg,
 		.right_deg = right.joint_sample.position_deg,
 	};
-	err = exo_controller_arm(&centers, (int64_t)now_us());
+	/*
+	 * 高层助力和阶段 8 底层选择必须属于同一个 START 代次。先 arm assist 取得
+	 * 本轮 activation_epoch/effective execution，再把该合同交给 controller。
+	 * controller 会在发任何周期帧前强制 ACTIVE 只能搭配 DAMPING+CONSTANT。
+	 */
+	err = exo_assist_arm();
 	if (err != ESP_OK) {
 		return failed_start(err);
 	}
-	/*
-	 * 高层助力配置与阶段8底层控制选择在同一个START边界锁存。阶段9即使选择
-	 * ACTIVE_PHASE或AAN也只能锁存SHADOW，exo_assist不会打开真实输出。
-	 */
-	err = exo_assist_arm();
+	exo_assist_snapshot_t assist_snapshot;
+	if (!exo_assist_get_snapshot(&assist_snapshot) ||
+		!assist_snapshot.active_valid ||
+		assist_snapshot.activation_epoch == 0U) {
+		return failed_start(ESP_ERR_INVALID_STATE);
+	}
+	const exo_controller_assist_contract_t assist_contract = {
+		.execution_state = assist_snapshot.execution_state,
+		.activation_epoch = assist_snapshot.activation_epoch,
+		.strategy_id = assist_snapshot.active.strategy_id,
+		.maximum_assist_torque_mnm = assist_snapshot.active.maximum_assist_torque_mnm,
+	};
+	err = exo_controller_arm(&centers, (int64_t)now_us(), &assist_contract);
 	if (err != ESP_OK) {
 		return failed_start(err);
 	}
@@ -578,7 +612,20 @@ static void finalize_stop(esp_err_t stop_error, esp_err_t preserved_error,
 	s_snapshot.output_allowed = false;
 	s_snapshot.active_step = EXO_SYSTEM_STEP_NONE;
 	s_snapshot.last_completed_us = timestamp_us;
-	if (stop_error == ESP_OK) {
+	const bool runtime_stop = s_runtime_stop_pending;
+	s_runtime_stop_pending = false;
+	if (runtime_stop) {
+		/* 清理成功也不自动回IDLE/重新START；明确的后续STOP才可解除故障锁。 */
+		set_state_locked(EXO_SYSTEM_STATE_ERROR, timestamp_us);
+		s_snapshot.start_block_reason = EXO_START_BLOCK_SYSTEM_ERROR;
+		s_snapshot.last_error = stop_error == ESP_OK
+			? s_snapshot.runtime_fault_error : stop_error;
+		if (stop_error != ESP_OK) {
+			++s_snapshot.stop_failure_count;
+			s_snapshot.last_failed_step = failed_step;
+			s_snapshot.last_failure_us = timestamp_us;
+		}
+	} else if (stop_error == ESP_OK) {
 		set_state_locked(EXO_SYSTEM_STATE_IDLE, timestamp_us);
 		if (count_explicit_stop) {
 			++s_snapshot.stop_success_count;
@@ -691,7 +738,8 @@ static void executor_task(void *arg) {
 	portEXIT_CRITICAL(&s_state_lock);
 
 	for (;;) {
-		(void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		/* 5 Hz慢速维护复用现有执行器；不是第二个实时控制任务。 */
+		(void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(200));
 		for (;;) {
 			portENTER_CRITICAL(&s_state_lock);
 			const exo_system_state_t state = s_snapshot.state;
@@ -708,6 +756,7 @@ static void executor_task(void *arg) {
 			}
 			break;
 		}
+		exo_feedback_recovery_poll();
 	}
 }
 
@@ -740,6 +789,7 @@ esp_err_t exo_system_init(void) {
 	s_snapshot.last_error = ESP_OK;
 	s_snapshot.state_entered_us = timestamp_us;
 	s_maintenance_generation = 0U;
+	s_runtime_stop_pending = false;
 	s_operation_mutex = mutex;
 	s_initialized = true;
 	portEXIT_CRITICAL(&s_state_lock);
@@ -944,17 +994,176 @@ exo_request_result_t exo_system_request_stop(void) {
 }
 
 /*
- * 100 Hz 路径的最终门。只在短临界区内复制三个布尔条件，随后解锁再调用控制器；
- * 绝不能在 s_state_lock 内做正弦计算或 CAN 发送。门关闭时返回 ESP_OK
- * 表示“本周期 按状态无需输出”，不是漏执行或错误。
+ * 首次运行故障的线性化点：在很短的状态锁内关闭输出门、锁存首因并发布STOPPING。
+ * CAN释力/失能/等待反馈交给现有执行器，100 Hz任务不等待。STOP不能保证总线故障时
+ * 电机真的收到失能，因此执行器仍做新REST验证；绝不自动恢复总线或重新使能。
  */
-esp_err_t exo_system_process_control_tick(int64_t now) {
+static void latch_runtime_fault(exo_runtime_fault_t fault, esp_err_t error,
+								const twai_status_info_t *can,
+								const exo_sensor_snapshot_t *sensor) {
+	TaskHandle_t task = NULL;
+	const uint64_t timestamp_us = now_us();
+	portENTER_CRITICAL(&s_state_lock);
+	if (s_snapshot.state == EXO_SYSTEM_STATE_RUNNING &&
+		s_snapshot.run_requested && s_snapshot.output_allowed) {
+		s_snapshot.run_requested = false;
+		s_snapshot.output_allowed = false;
+		s_runtime_stop_pending = true;
+		++s_snapshot.runtime_fault_count;
+		s_snapshot.last_runtime_fault = fault;
+		s_snapshot.runtime_fault_error = error;
+		s_snapshot.runtime_fault_us = timestamp_us;
+		s_snapshot.runtime_can_status_valid = can != NULL;
+		s_snapshot.runtime_can_state = can != NULL ? (uint32_t)can->state : UINT32_MAX;
+		s_snapshot.runtime_can_tx_errors = can != NULL ? can->tx_error_counter : 0U;
+		s_snapshot.runtime_can_rx_errors = can != NULL ? can->rx_error_counter : 0U;
+		s_snapshot.runtime_left_age_us = sensor != NULL ? sensor->left.age_us : UINT32_MAX;
+		s_snapshot.runtime_right_age_us = sensor != NULL ? sensor->right.age_us : UINT32_MAX;
+		s_snapshot.last_error = error;
+		s_snapshot.last_failed_step = EXO_SYSTEM_STEP_NONE;
+		s_snapshot.last_failure_us = timestamp_us;
+		s_snapshot.active_step = EXO_SYSTEM_STEP_NONE;
+		set_state_locked(EXO_SYSTEM_STATE_STOPPING, timestamp_us);
+		task = s_executor_task;
+	}
+	portEXIT_CRITICAL(&s_state_lock);
+	if (task != NULL) {
+		xTaskNotifyGive(task);
+	}
+}
+
+/*
+ * 只检查驱动短快照和本周期已有传感输入，不重复读取关节、不跑START全套预检。
+ * TEC/REC>=128按Error Passive提前停机；仲裁丢失累计和历史bus_error累计不单独
+ * 触发停机，因为它们不能说明本周期链路已经失效。正常步态尚未形成也不属于故障。
+ */
+static exo_runtime_fault_t runtime_health(int64_t now,
+	const exo_sensor_snapshot_t *sensor, uint32_t expected_sequence,
+	const twai_status_info_t *can) {
+	if (can == NULL) {
+		return EXO_RUNTIME_FAULT_CAN_STATUS_UNAVAILABLE;
+	}
+	if (can->state != TWAI_STATE_RUNNING) {
+		return EXO_RUNTIME_FAULT_CAN_NOT_RUNNING;
+	}
+	if (can->tx_error_counter >= 128U || can->rx_error_counter >= 128U) {
+		return EXO_RUNTIME_FAULT_CAN_ERROR_PASSIVE;
+	}
+	if (sensor == NULL || now <= 0 || sensor->captured_us != now ||
+		sensor->sequence == 0U || sensor->sequence != expected_sequence) {
+		return EXO_RUNTIME_FAULT_SENSOR_CYCLE_INVALID;
+	}
+	if (sensor->left.motor_fault) {
+		return EXO_RUNTIME_FAULT_LEFT_MOTOR;
+	}
+	if (sensor->right.motor_fault) {
+		return EXO_RUNTIME_FAULT_RIGHT_MOTOR;
+	}
+	if ((sensor->valid_sensor_mask & EXO_SENSOR_LEFT_HIP_KINEMATICS) == 0U ||
+		!sensor->left.joint_valid || !sensor->left.online) {
+		return EXO_RUNTIME_FAULT_LEFT_FEEDBACK_INVALID;
+	}
+	if ((sensor->valid_sensor_mask & EXO_SENSOR_RIGHT_HIP_KINEMATICS) == 0U ||
+		!sensor->right.joint_valid || !sensor->right.online) {
+		return EXO_RUNTIME_FAULT_RIGHT_FEEDBACK_INVALID;
+	}
+	return EXO_RUNTIME_FAULT_NONE;
+}
+
+/* 门关闭时无硬件I/O；门打开时先检查健康，锁外运行控制器，失败即触发一次清理。 */
+esp_err_t exo_system_process_control_tick(
+	int64_t now, const exo_sensor_snapshot_t *sensor_snapshot,
+	const exo_assist_result_t *assist_result,
+	uint32_t expected_sensor_sequence, uint32_t expected_gait_sequence,
+	exo_controller_tick_result_t *tick_result) {
+	if (tick_result == NULL) {
+		return ESP_ERR_INVALID_ARG;
+	}
+	memset(tick_result, 0, sizeof(*tick_result));
+	tick_result->send_result = ESP_OK;
+
 	portENTER_CRITICAL(&s_state_lock);
 	const bool output_allowed = s_snapshot.state == EXO_SYSTEM_STATE_RUNNING &&
 								s_snapshot.run_requested &&
 								s_snapshot.output_allowed;
 	portEXIT_CRITICAL(&s_state_lock);
-	return output_allowed ? exo_controller_process_tick(now) : ESP_OK;
+	if (!output_allowed) {
+		/* IDLE/STARTING/STOPPING 都明确撤销上一周期真实输出诊断。 */
+		exo_assist_report_output(assist_result, false);
+		return ESP_OK;
+	}
+
+	twai_status_info_t can;
+	const esp_err_t can_result = twai_get_status_info(&can);
+	const twai_status_info_t *can_snapshot = can_result == ESP_OK ? &can : NULL;
+	const exo_runtime_fault_t fault = runtime_health(
+		now, sensor_snapshot, expected_sensor_sequence, can_snapshot);
+	if (fault != EXO_RUNTIME_FAULT_NONE) {
+		const esp_err_t error = can_result != ESP_OK ? can_result : ESP_ERR_INVALID_STATE;
+		latch_runtime_fault(fault, error, can_snapshot, sensor_snapshot);
+		tick_result->send_result = error;
+		exo_assist_report_output(assist_result, false);
+		return error;
+	}
+
+	const esp_err_t result = exo_controller_process_tick(
+		now, assist_result, expected_sensor_sequence, expected_gait_sequence,
+		tick_result);
+	/*
+	 * composer 接纳且至少一侧 CAN 帧成功时，assist_applied 才会为 true。逐侧
+	 * 结果保留在 tick_result；合并标志只回答“是否存在真实助力输出”。
+	 */
+	exo_assist_report_output(assist_result, tick_result->assist_applied);
+	if (result != ESP_OK) {
+		/* 一侧成功、另一侧入队失败也立即关闭后续周期，不能继续单腿输出。 */
+		latch_runtime_fault(EXO_RUNTIME_FAULT_CONTROL_OUTPUT, result,
+			can_snapshot, sensor_snapshot);
+	}
+	return result;
+}
+
+const char *exo_system_runtime_fault_name(exo_runtime_fault_t fault) {
+	switch (fault) {
+	case EXO_RUNTIME_FAULT_NONE: return "NONE";
+	case EXO_RUNTIME_FAULT_CAN_STATUS_UNAVAILABLE: return "CAN_STATUS_UNAVAILABLE";
+	case EXO_RUNTIME_FAULT_CAN_NOT_RUNNING: return "CAN_NOT_RUNNING";
+	case EXO_RUNTIME_FAULT_CAN_ERROR_PASSIVE: return "CAN_ERROR_PASSIVE";
+	case EXO_RUNTIME_FAULT_SENSOR_CYCLE_INVALID: return "SENSOR_CYCLE_INVALID";
+	case EXO_RUNTIME_FAULT_LEFT_FEEDBACK_INVALID: return "LEFT_FEEDBACK_INVALID";
+	case EXO_RUNTIME_FAULT_RIGHT_FEEDBACK_INVALID: return "RIGHT_FEEDBACK_INVALID";
+	case EXO_RUNTIME_FAULT_LEFT_MOTOR: return "LEFT_MOTOR_FAULT";
+	case EXO_RUNTIME_FAULT_RIGHT_MOTOR: return "RIGHT_MOTOR_FAULT";
+	case EXO_RUNTIME_FAULT_CONTROL_OUTPUT: return "CONTROL_OUTPUT_FAILED";
+	default: return "UNKNOWN";
+	}
+}
+
+/* 100 Hz 控制链使用的轻量状态副本；这里只复制状态机字段，不推导启动条件。 */
+bool exo_system_get_control_state(exo_system_control_state_t *control_state) {
+	if (control_state == NULL) {
+		return false;
+	}
+
+	/*
+	 * 临界区内只有三个标量赋值：不会访问 TWAI、关节对象或电机反馈，也不会等待
+	 * mutex。这样控制任务每 10 ms 读取一次时，不会把完整 START
+	 * 就绪检查带进实时链。
+	 */
+	portENTER_CRITICAL(&s_state_lock);
+	const bool initialized = s_initialized;
+	if (initialized) {
+		control_state->state = s_snapshot.state;
+		control_state->run_requested = s_snapshot.run_requested;
+		control_state->output_allowed = s_snapshot.output_allowed;
+	}
+	portEXIT_CRITICAL(&s_state_lock);
+
+	if (!initialized) {
+		/* 枚举零值就是 INIT；清零可避免调用者误用上一次读取留下的旧状态。 */
+		memset(control_state, 0, sizeof(*control_state));
+		return false;
+	}
+	return true;
 }
 
 /*
@@ -1155,6 +1364,8 @@ exo_system_start_block_reason_name(exo_start_block_reason_t reason) {
 		return "RIGHT_MOTOR_FAULT";
 	case EXO_START_BLOCK_SYSTEM_ERROR:
 		return "SYSTEM_ERROR";
+	case EXO_START_BLOCK_RUN_CONTRACT_INVALID:
+		return "RUN_CONTRACT_INVALID";
 	default:
 		return "UNKNOWN";
 	}

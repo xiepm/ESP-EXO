@@ -8,7 +8,8 @@
  *
  *   手机
  *     ├─ Write  Command characteristic：写入一帧产品命令
- *     └─ Notify Response characteristic：订阅并接收对应响应
+ *     ├─ Notify Response characteristic：订阅并接收对应响应
+ *     └─ Notify Telemetry characteristic：订阅阶段10连续遥测
  *              │
  *              ▼
  *       exo_ble.c 的静态队列与 worker
@@ -38,7 +39,9 @@ typedef struct {
 	bool host_synced;
 	bool connected;
 	bool response_subscribed;
+	bool telemetry_subscribed;
 	bool worker_task_alive;
+	bool telemetry_task_alive;
 
 	/* 当前传输会话及任务身份；session_generation 不发送到手机。 */
 	uint16_t connection_handle;
@@ -47,6 +50,8 @@ typedef struct {
 	uint32_t boot_id;
 	uintptr_t worker_task_identity;
 	uint32_t worker_stack_free_min_bytes;
+	uintptr_t telemetry_task_identity;
+	uint32_t telemetry_stack_free_min_bytes;
 
 	/*
 	 * 从 Command Write 到 Response Notify 的累计诊断计数。它们用于 UART
@@ -63,11 +68,22 @@ typedef struct {
 	uint32_t notify_success_count;
 	uint32_t notify_failure_count;
 	uint32_t notify_tx_failure_count;
+	/* 独立 Telemetry characteristic 的帧级计数，不与命令响应混计。 */
+	uint32_t telemetry_notify_success_count;
+	uint32_t telemetry_notify_failure_count;
+	uint32_t telemetry_notify_tx_failure_count;
+	/* 瞬时失败被重试吸收、重试耗尽及最近 NimBLE 错误码，仅供 UART 诊断。 */
+	uint32_t telemetry_notify_retry_success_count;
+	uint32_t telemetry_notify_exhausted_count;
+	uint32_t telemetry_mbuf_allocation_failure_count;
+	uint32_t telemetry_submit_failure_count;
+	int32_t last_telemetry_notify_error;
 } exo_ble_snapshot_t;
 
 /*
  * 初始化本固件唯一的 NimBLE Host、产品 GATT Service、静态命令队列和
- * BLE worker。重复调用在已初始化时直接成功，不会再创建第二个 worker。
+ * BLE worker。调用前app_main须初始化NVS；本模块不会擦除出厂配置。
+ * 重复调用在已初始化时直接成功，不会再创建第二个worker。
  */
 esp_err_t exo_ble_init(void);
 

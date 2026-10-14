@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-const title = "ESP-EXO 真机 BLE 验收台";
+const title = "ESP-EXO 外骨骼上位机";
 const description =
-  "通过 Product BLE v1 连接 ESP-EXO，完成双髋归零、START/STOP、状态轮询与阶段 7 数据导出。";
+  "连接外骨骼、校准穿戴零位、设置助力等级，查看左右髋关节与按日期保存的步态记录。";
 
 export const metadata: Metadata = {
   title,

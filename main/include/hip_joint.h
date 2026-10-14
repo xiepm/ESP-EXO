@@ -71,11 +71,14 @@ typedef struct {
 	bool continuous_position_valid;
 	bool zero_epoch_matches;
 	bool online;
+	/* 同一份RS01反馈的故障位；运行期保护不再另取一份不同时间的电机数据。 */
+	bool motor_fault;
 	bool joint_valid;
 } hip_joint_snapshot_t;
 
 /*
- * 从 g_exo_hardware_config 初始化左右两个静态髋关节对象。
+ * 从g_exo_hardware_config初始化映射，再读取NVS出厂方向；调用前需初始化NVS。
+ * 缺少有效出厂记录时方向保持未就绪，软件零位不会从NVS恢复。
  * 可重复调用：首次成功后再次调用直接返回 ESP_OK；函数不创建堆对象或后台任务。
  */
 esp_err_t hip_joint_init(void);
@@ -89,7 +92,7 @@ bool hip_joint_get_snapshot(exo_hip_joint_id_t joint,
 
 /*
  * 把当前有效 RS01 输出轴位置保存为 RAM 软件零位（deg）。本函数不发送 CAN，
- * 也不会修改电机机械零位；设备复位后必须在中立位重新执行。
+ * 也不会修改电机机械零位；复位后可通过穿戴服务确认沿用已保存候选或重新采集。
  */
 esp_err_t hip_joint_set_zero_from_current(exo_hip_joint_id_t joint);
 
@@ -98,6 +101,58 @@ esp_err_t hip_joint_set_zero_from_current(exo_hip_joint_id_t joint);
  * 清除后该侧 joint_valid 会保持 false，直到重新在中立位采集零点。
  */
 esp_err_t hip_joint_clear_zero(exo_hip_joint_id_t joint);
+
+/*
+ * 候选恢复专用：调用者持有IDLE维护权并已核对中立位、映射和方向。
+ * 周期零位（deg）投影到本次连续坐标，重新绑定最新反馈epoch；两侧一次发布。
+ * 不沿用旧启动的圈数/时间戳，不发送CAN。反馈变化、示教中、非REST均拒绝。
+ */
+esp_err_t hip_joint_restore_zero_pair(const float periodic_zero_deg[2],
+    const rs01_feedback_snapshot_t expected_feedback[2]);
+
+/* 穿戴重新校准：调用者持有IDLE维护权。重新读取同一批双侧新反馈，核对
+ * 映射、方向和坐标epoch，再在一个短临界区内同时更新双侧RAM零位。
+ * 任一侧不满足条件时两侧均不更新；不访问NVS、不发送电机命令。 */
+esp_err_t hip_joint_capture_zero_pair(const hip_joint_snapshot_t expected_joints[2],
+    const rs01_feedback_snapshot_t expected_feedback[2]);
+
+/* 出厂方向示教只读取反馈，完成时保存方向至NVS；不发送CAN、不驱动人体。 */
+typedef enum {
+	HIP_DIRECTION_TEACH_BEGIN = 0,
+	HIP_DIRECTION_TEACH_FINISH = 1,
+	HIP_DIRECTION_TEACH_CANCEL = 2,
+} hip_direction_teach_action_t;
+
+/* BLE拒绝ACK的detail使用这些稳定原因码；成功FINISH的detail为方向线码。 */
+typedef enum {
+	HIP_DIRECTION_TEACH_OK = 0,
+	HIP_DIRECTION_TEACH_NO_SESSION = 1,
+	HIP_DIRECTION_TEACH_EXPIRED = 2,
+	HIP_DIRECTION_TEACH_FEEDBACK_INVALID = 3,
+	HIP_DIRECTION_TEACH_EPOCH_CHANGED = 4,
+	HIP_DIRECTION_TEACH_TOO_SMALL = 5,
+	HIP_DIRECTION_TEACH_TOO_LARGE = 6,
+	HIP_DIRECTION_TEACH_OTHER_LEG_MOVED = 7,
+	HIP_DIRECTION_TEACH_NOT_STILL = 8,
+	HIP_DIRECTION_TEACH_MOTOR_NOT_REST = 9,
+	HIP_DIRECTION_TEACH_MOTOR_FAULT = 10,
+	HIP_DIRECTION_TEACH_BUSY = 11,
+	HIP_DIRECTION_TEACH_TOKEN_MISMATCH = 12,
+	HIP_DIRECTION_TEACH_STORAGE_FAILED = 13,
+} hip_direction_teach_result_t;
+
+/*
+ * 调用者必须持有整机IDLE维护权。BEGIN采集双方基准并撤销目标侧旧零位，防止
+ * 示教中途START；FINISH用新的连续电机角判断“向前抬腿”为正；CANCEL不恢复旧零位。
+ * token为1..255的会话标记，禁止上一轮FINISH套用下一轮基准。会话60秒有效，
+ * 新反馈必须同一position epoch，目标位移3..30度且对侧没有明显移动，两侧均REST。
+ * FINISH先提交/读回NVS，成功后才发布方向。方向统一作用于角度、速度和力矩，
+ * 完成后仍须返回中立位重新采集RAM软件零点。本层不写NVS零位；产品入口须经过
+ * exo_wear_zero_teach_direction，先撤销旧候选，防止安装调整后误沿用。
+ */
+esp_err_t hip_joint_teach_direction(exo_hip_joint_id_t joint,
+	hip_direction_teach_action_t action, uint8_t token,
+	hip_direction_teach_result_t *result, exo_direction_t *direction);
 
 /*
  * 把一侧人体五元命令完整映射为 RS01 电机五元命令：

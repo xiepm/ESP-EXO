@@ -34,6 +34,20 @@ extern "C" {
 bool exo_joint_command_is_valid(const exo_joint_command_t *command);
 
 /*
+ * 一次双侧发送的逐执行器结果。
+ *
+ * RS01 总线不能把两帧 CAN 变成真正的原子事务，因此 A 成功/B 失败（或反之）是
+ * 必须如实记录的物理状态。旧接口只返回一个合并错误，会让上层把已经发出的单侧
+ * 力矩误报为“双侧均未施加”。本结构按 A/B 保留结果；调用者再通过髋关节映射把
+ * 它解释为 LEFT/RIGHT。map_error 非 ESP_OK 时保证两侧都没有尝试发送。
+ */
+typedef struct {
+	esp_err_t map_error;
+	esp_err_t actuator_error[EXO_ACTUATOR_COUNT];
+	bool actuator_attempted[EXO_ACTUATOR_COUNT];
+} exo_joint_command_send_result_t;
+
+/*
  * 一次性校验并映射左右命令，结果数组按 EXO_ACTUATOR_A/B 下标排列。
  *
  * 只有 LEFT 和 RIGHT 都成功映射、且恰好分别占用 A/B 两个不同槽位时才写出结果。
@@ -51,6 +65,11 @@ esp_err_t exo_joint_command_map_pair(
  */
 esp_err_t
 exo_joint_command_try_send_pair(const exo_joint_command_pair_t *joint_commands);
+
+/* 与上面相同的唯一发送出口，但额外返回逐执行器事实供控制诊断和遥测使用。 */
+esp_err_t exo_joint_command_try_send_pair_detailed(
+	const exo_joint_command_pair_t *joint_commands,
+	exo_joint_command_send_result_t *send_result);
 
 #ifdef __cplusplus
 }

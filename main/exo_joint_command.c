@@ -122,11 +122,22 @@ esp_err_t exo_joint_command_map_pair(
 	return ESP_OK;
 }
 
-esp_err_t exo_joint_command_try_send_pair(
-	const exo_joint_command_pair_t *joint_commands) {
+esp_err_t exo_joint_command_try_send_pair_detailed(
+	const exo_joint_command_pair_t *joint_commands,
+	exo_joint_command_send_result_t *send_result) {
+	if (send_result == NULL) {
+		return ESP_ERR_INVALID_ARG;
+	}
+	memset(send_result, 0, sizeof(*send_result));
+	send_result->map_error = ESP_OK;
+	for (unsigned actuator = 0U; actuator < EXO_ACTUATOR_COUNT; ++actuator) {
+		send_result->actuator_error[actuator] = ESP_ERR_INVALID_STATE;
+	}
+
 	rs01_motion_command_t commands[EXO_ACTUATOR_COUNT];
 	const esp_err_t map_error =
 		exo_joint_command_map_pair(joint_commands, commands);
+	send_result->map_error = map_error;
 	if (map_error != ESP_OK) {
 		/* 最重要的不变量：任一侧预检失败时，一帧 CAN 都不能发送。 */
 		return map_error;
@@ -136,9 +147,19 @@ esp_err_t exo_joint_command_try_send_pair(
 	 * 固定 A -> B 发送能让每个 10 ms 周期的总线顺序可重复。A 失败后仍尝试 B，
 	 * 避免一次短暂的 A 队列/锁错误无条件饿死 B；返回值仍保留遇到的首个错误。
 	 */
+	send_result->actuator_attempted[EXO_ACTUATOR_A] = true;
 	const esp_err_t actuator_a_error =
 		rs01_try_send_motion_command(EXO_ACTUATOR_A, &commands[EXO_ACTUATOR_A]);
+	send_result->actuator_error[EXO_ACTUATOR_A] = actuator_a_error;
+	send_result->actuator_attempted[EXO_ACTUATOR_B] = true;
 	const esp_err_t actuator_b_error =
 		rs01_try_send_motion_command(EXO_ACTUATOR_B, &commands[EXO_ACTUATOR_B]);
+	send_result->actuator_error[EXO_ACTUATOR_B] = actuator_b_error;
 	return actuator_a_error != ESP_OK ? actuator_a_error : actuator_b_error;
+}
+
+esp_err_t exo_joint_command_try_send_pair(
+	const exo_joint_command_pair_t *joint_commands) {
+	exo_joint_command_send_result_t ignored;
+	return exo_joint_command_try_send_pair_detailed(joint_commands, &ignored);
 }

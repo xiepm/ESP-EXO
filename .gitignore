@@ -25,6 +25,10 @@ temp/
 .lo_profile_*/
 .patent_template_rework/
 
+# 本机冻结固件、重复源码快照与实验产物；原文件保留，精选证据另存 docs。
+/output/
+!docs/phase10/evidence/**/*.log
+
 # Operating-system files
 .DS_Store
 Thumbs.db

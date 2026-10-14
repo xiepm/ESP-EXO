@@ -13,9 +13,9 @@
  *     -> 先缓存响应，再由 Response characteristic Notify 给手机
  *
  * GATT（Generic Attribute Profile）是 BLE 的数据接口表：Service 是一组功能，
- * Characteristic 是其中一个可读写/通知的数据端点。本服务只有 Command Write 和
- * Response Notify 两个产品端点。Notify 不是普通读取；手机必须先订阅，ESP32 才能
- * 主动推送响应。
+ * Characteristic 是其中一个可读写/通知的数据端点。本服务包含 Command Write、
+ * Response Notify 和阶段10独立 Telemetry Notify。Notify 不是普通读取；手机必须
+ * 先订阅对应特征，ESP32 才能主动推送响应或连续遥测。
  *
  * BLE 会话不拥有外骨骼生命周期：连接不会 START，断开不会 STOP。连接变化只更新
  * session generation，使旧队列项和旧缓存失效；已经交给 exo_system 的启停请求仍
@@ -33,10 +33,16 @@
 #include "esp_timer.h"
 #include "exo_assist.h"
 #include "exo_ble_protocol.h"
+#include "exo_command_composer.h"
 #include "exo_config.h"
 #include "exo_control_loop.h"
 #include "exo_controller.h"
+#include "exo_phase_profile.h"
 #include "exo_system.h"
+#include "exo_feedback_recovery.h"
+#include "exo_wear_zero.h"
+#include "rs01_driver.h"
+#include "exo_telemetry.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -47,8 +53,8 @@
 #include "host/util/util.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
-#include "nvs_flash.h"
 #include "os/os_mbuf.h"
+#include "sdkconfig.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 
@@ -57,14 +63,38 @@
 #define EXO_BLE_TASK_STACK_BYTES 4096U
 #define EXO_BLE_TASK_PRIORITY 5U
 #define EXO_BLE_TASK_CORE 0
+#define EXO_BLE_TELEMETRY_TASK_STACK_BYTES 4096U
+#define EXO_BLE_TELEMETRY_TASK_PRIORITY 4U
+#define EXO_BLE_TELEMETRY_TASK_CORE 0
+#define EXO_BLE_TELEMETRY_POLL_MS 5U
+#define EXO_BLE_TELEMETRY_BUFFER_WAIT_MS 50U
+#define EXO_BLE_TELEMETRY_FRAME_RETRY_BUDGET_MS 1000U
+#define EXO_BLE_TELEMETRY_INTER_FRAME_DELAY_MS 10U
 #define EXO_BLE_DEFAULT_ATT_MTU 23U
 #define EXO_BLE_NOTIFY_RETRY_COUNT 3U
 #define EXO_BLE_NOTIFY_RETRY_DELAY_MS 10U
 
 #define EXO_FIRMWARE_VERSION_MAJOR 0U
-#define EXO_FIRMWARE_VERSION_MINOR 9U
-#define EXO_FIRMWARE_VERSION_PATCH 0U
+#define EXO_FIRMWARE_VERSION_MINOR 10U
+#define EXO_FIRMWARE_VERSION_PATCH 13U
 
+_Static_assert(EXO_BLE_ASSIST_TORQUE_HARD_MAX_MNM ==
+			   EXO_PHASE_PROFILE_TORQUE_HARD_MAX_MNM,
+			   "BLE and control assistance torque bounds must agree");
+_Static_assert(EXO_BLE_ANGLE_TORQUE_HARD_MAX_MNM == EXO_ASSIST_ANGLE_TORQUE_HARD_MAX_MNM,
+               "BLE and angle assistance torque bounds must agree");
+_Static_assert(EXO_BLE_ANGLE_TORQUE_HARD_MAX_MNM ==
+               EXO_COMMAND_COMPOSER_MAX_ABS_ACTIVE_TORQUE_MNM,
+               "BLE and final command torque bounds must agree");
+_Static_assert(EXO_BLE_ANGLE_TORQUE_HARD_MAX_MNM == EXO_PULSE_PEAK_HARD_MAX_MNM &&
+               EXO_BLE_PULSE_FIXED_MAX_MS == EXO_PULSE_FIXED_MAX_MS,
+               "BLE and pulse parameter bounds must agree");
+
+_Static_assert(EXO_BLE_ANGLE_MIN_CDEG == EXO_ASSIST_ANGLE_MIN_CDEG &&
+               EXO_BLE_ANGLE_MAX_CDEG == EXO_ASSIST_ANGLE_MAX_CDEG &&
+               EXO_BLE_ANGLE_HYSTERESIS_CDEG == EXO_ASSIST_ANGLE_HYSTERESIS_CDEG &&
+               EXO_BLE_ANGLE_RAMP_MS * 1000U == EXO_ASSIST_ANGLE_RAMP_US,
+               "BLE angle units and bounds must match control policy");
 static const char *TAG = "exo_ble";
 
 /*
@@ -82,6 +112,10 @@ static const ble_uuid128_t s_command_uuid =
 static const ble_uuid128_t s_response_uuid =
 	BLE_UUID128_INIT(0x01, 0x00, 0x64, 0x8B, 0x1C, 0x3A, 0x7C, 0x9E, 0x92, 0x4D,
 					 0x5A, 0x6B, 0x03, 0x00, 0xA1, 0xF7);
+/* 遥测不复用 Response：它是无 request_id 的高频流，必须独立订阅和统计。 */
+static const ble_uuid128_t s_telemetry_uuid =
+	BLE_UUID128_INIT(0x01, 0x00, 0x64, 0x8B, 0x1C, 0x3A, 0x7C, 0x9E, 0x92, 0x4D,
+					 0x5A, 0x6B, 0x04, 0x00, 0xA1, 0xF7);
 
 /*
  * GATT 回调复制到静态队列的最小工作项。generation + connection_handle 把命令
@@ -119,12 +153,19 @@ static StackType_t
 	s_worker_task_stack[EXO_BLE_TASK_STACK_BYTES / sizeof(StackType_t)];
 static TaskHandle_t s_worker_task;
 
+/* 遥测发送任务比命令 worker 低一级，拥塞时不得延迟 START/STOP 响应。 */
+static StaticTask_t s_telemetry_task_buffer;
+static StackType_t s_telemetry_task_stack[EXO_BLE_TELEMETRY_TASK_STACK_BYTES /
+										  sizeof(StackType_t)];
+static TaskHandle_t s_telemetry_task;
+
 /* 环形覆盖的幂等缓存；generation 变化后旧条目无需立即清零也不会命中。 */
 static exo_ble_cache_entry_t s_cache[EXO_BLE_CACHE_DEPTH];
 static size_t s_next_cache_entry;
 
 static uint16_t s_command_value_handle;
 static uint16_t s_response_value_handle;
+static uint16_t s_telemetry_value_handle;
 static uint8_t s_own_addr_type = BLE_OWN_ADDR_PUBLIC;
 
 /* 连接状态与诊断计数由 GAP、GATT 回调和 worker 共享，访问时使用 s_lock。 */
@@ -135,6 +176,11 @@ _Static_assert(EXO_BLE_PROTOCOL_MAX_FRAME_SIZE <= 20U,
 			   "phase 6 frames must fit the default ATT payload");
 _Static_assert((EXO_BLE_TASK_STACK_BYTES % sizeof(StackType_t)) == 0U,
 			   "BLE worker stack size must align to StackType_t");
+_Static_assert((EXO_BLE_TELEMETRY_TASK_STACK_BYTES % sizeof(StackType_t)) == 0U,
+			   "telemetry worker stack size must align to StackType_t");
+_Static_assert(EXO_TELEMETRY_CHANNEL_MASK_ALL ==
+				   EXO_BLE_TELEMETRY_CHANNELS_MASK,
+			   "telemetry internal and wire channel masks diverged");
 
 /*
  * 以下 wire_*() 适配器把内部 enum 显式翻译成稳定线码。不能直接强转内部值，
@@ -229,6 +275,8 @@ wire_block_reason(exo_start_block_reason_t reason) {
 		return EXO_BLE_BLOCK_RIGHT_MOTOR_FAULT;
 	case EXO_START_BLOCK_SYSTEM_ERROR:
 		return EXO_BLE_BLOCK_SYSTEM_ERROR;
+	case EXO_START_BLOCK_RUN_CONTRACT_INVALID:
+		return EXO_BLE_BLOCK_RUN_CONTRACT_INVALID;
 	default:
 		return EXO_BLE_BLOCK_UNKNOWN;
 	}
@@ -392,8 +440,15 @@ static bool control_mode_from_wire(exo_ble_wire_control_mode_t wire,
 
 static exo_ble_wire_reference_t
 wire_reference(exo_reference_source_t reference) {
-	return reference == EXO_REFERENCE_SINE ? EXO_BLE_REFERENCE_SINE
-										 : EXO_BLE_REFERENCE_CONSTANT;
+	switch (reference) {
+	case EXO_REFERENCE_SINE:
+		return EXO_BLE_REFERENCE_SINE;
+	case EXO_REFERENCE_ALTERNATING_SINE_TEST:
+		return EXO_BLE_REFERENCE_ALTERNATING_SINE_TEST;
+	case EXO_REFERENCE_CONSTANT:
+	default:
+		return EXO_BLE_REFERENCE_CONSTANT;
+	}
 }
 
 static bool reference_from_wire(exo_ble_wire_reference_t wire,
@@ -407,6 +462,11 @@ static bool reference_from_wire(exo_ble_wire_reference_t wire,
 	}
 	if (wire == EXO_BLE_REFERENCE_SINE) {
 		*reference = EXO_REFERENCE_SINE;
+		return true;
+	}
+	if (wire == EXO_BLE_REFERENCE_ALTERNATING_SINE_TEST) {
+		/* 是否编入工程能力由 controller 业务层返回 NOT_SUPPORTED。 */
+		*reference = EXO_REFERENCE_ALTERNATING_SINE_TEST;
 		return true;
 	}
 	return false;
@@ -459,6 +519,8 @@ static exo_ble_wire_assist_mode_t wire_assist_mode(exo_assist_mode_t mode) {
 		return EXO_BLE_ASSIST_MODE_ACTIVE_PHASE;
 	case EXO_ASSIST_MODE_ASSIST_AS_NEEDED:
 		return EXO_BLE_ASSIST_MODE_ASSIST_AS_NEEDED;
+	case EXO_ASSIST_MODE_ANGLE_THRESHOLD:
+		return EXO_BLE_ASSIST_MODE_ANGLE_THRESHOLD;
 	case EXO_ASSIST_MODE_NONE:
 	default:
 		return EXO_BLE_ASSIST_MODE_NONE;
@@ -466,7 +528,7 @@ static exo_ble_wire_assist_mode_t wire_assist_mode(exo_assist_mode_t mode) {
 }
 
 static bool assist_mode_from_wire(exo_ble_wire_assist_mode_t wire,
-							  exo_assist_mode_t *mode) {
+								  exo_assist_mode_t *mode) {
 	if (mode == NULL) {
 		return false;
 	}
@@ -479,6 +541,9 @@ static bool assist_mode_from_wire(exo_ble_wire_assist_mode_t wire,
 		return true;
 	case EXO_BLE_ASSIST_MODE_ASSIST_AS_NEEDED:
 		*mode = EXO_ASSIST_MODE_ASSIST_AS_NEEDED;
+		return true;
+	case EXO_BLE_ASSIST_MODE_ANGLE_THRESHOLD:
+		*mode = EXO_ASSIST_MODE_ANGLE_THRESHOLD;
 		return true;
 	case EXO_BLE_ASSIST_MODE_NONE:
 	default:
@@ -498,7 +563,7 @@ wire_assist_execution(exo_assist_execution_state_t state) {
 }
 
 static bool assist_execution_from_wire(exo_ble_wire_assist_execution_t wire,
-								   exo_assist_execution_state_t *state) {
+									   exo_assist_execution_state_t *state) {
 	if (state == NULL) {
 		return false;
 	}
@@ -526,6 +591,8 @@ wire_assist_strategy(exo_assist_strategy_id_t strategy) {
 		return EXO_BLE_ASSIST_STRATEGY_PHASE_PROFILE;
 	case EXO_ASSIST_STRATEGY_AAN_RESIDUAL:
 		return EXO_BLE_ASSIST_STRATEGY_AAN_RESIDUAL;
+	case EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD:
+		return EXO_BLE_ASSIST_STRATEGY_ANGLE_THRESHOLD;
 	case EXO_ASSIST_STRATEGY_NONE:
 	default:
 		return EXO_BLE_ASSIST_STRATEGY_NONE;
@@ -533,7 +600,7 @@ wire_assist_strategy(exo_assist_strategy_id_t strategy) {
 }
 
 static bool assist_strategy_from_wire(exo_ble_wire_assist_strategy_t wire,
-								  exo_assist_strategy_id_t *strategy) {
+									  exo_assist_strategy_id_t *strategy) {
 	if (strategy == NULL) {
 		return false;
 	}
@@ -547,14 +614,17 @@ static bool assist_strategy_from_wire(exo_ble_wire_assist_strategy_t wire,
 	case EXO_BLE_ASSIST_STRATEGY_AAN_RESIDUAL:
 		*strategy = EXO_ASSIST_STRATEGY_AAN_RESIDUAL;
 		return true;
+	case EXO_BLE_ASSIST_STRATEGY_ANGLE_THRESHOLD:
+		*strategy = EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD;
+		return true;
 	case EXO_BLE_ASSIST_STRATEGY_NONE:
 	default:
 		return false;
 	}
 }
 
-static exo_ble_wire_assist_unavailable_t wire_assist_unavailable(
-	exo_assist_unavailable_reason_t reason) {
+static exo_ble_wire_assist_unavailable_t
+wire_assist_unavailable(exo_assist_unavailable_reason_t reason) {
 	switch (reason) {
 	case EXO_ASSIST_UNAVAILABLE_NOT_INITIALIZED:
 		return EXO_BLE_ASSIST_UNAVAILABLE_NOT_INITIALIZED;
@@ -570,6 +640,8 @@ static exo_ble_wire_assist_unavailable_t wire_assist_unavailable(
 		return EXO_BLE_ASSIST_UNAVAILABLE_NOT_ARMED;
 	case EXO_ASSIST_UNAVAILABLE_REQUIRED_GAIT_INVALID:
 		return EXO_BLE_ASSIST_UNAVAILABLE_REQUIRED_GAIT_INVALID;
+	case EXO_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS:
+		return EXO_BLE_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS;
 	case EXO_ASSIST_UNAVAILABLE_NONE:
 	default:
 		return EXO_BLE_ASSIST_UNAVAILABLE_NONE;
@@ -614,7 +686,7 @@ static uint16_t scaled_u16(float value, float scale) {
 	}
 	const double scaled = (double)value * (double)scale;
 	return scaled >= (double)UINT16_MAX ? UINT16_MAX
-										 : (uint16_t)llround(scaled);
+										: (uint16_t)llround(scaled);
 }
 
 /* 将反馈时间戳换算为 u16 ms；无时间戳或超过范围时使用协议规定的饱和值。 */
@@ -637,18 +709,30 @@ static bool encode_info_response(uint8_t request_id, uint8_t *response,
 	const uint32_t boot_id = s_snapshot.boot_id;
 	portEXIT_CRITICAL(&s_lock);
 
+	uint16_t capabilities = EXO_BLE_CAPABILITY_SYSTEM_CONTROL |
+							EXO_BLE_CAPABILITY_JOINT_CALIBRATION |
+							EXO_BLE_CAPABILITY_ON_DEMAND_STATUS |
+							EXO_BLE_CAPABILITY_CONTROL_CONFIGURATION |
+							EXO_BLE_CAPABILITY_GAIT_STATUS |
+							EXO_BLE_CAPABILITY_ASSIST_CONFIGURATION |
+							EXO_BLE_CAPABILITY_TELEMETRY_STREAM |
+							EXO_BLE_CAPABILITY_CALIBRATION_STATUS |
+								EXO_BLE_CAPABILITY_ASSIST_TORQUE_LIMIT |
+							EXO_BLE_CAPABILITY_DIRECTION_TEACHING | EXO_BLE_CAPABILITY_FEEDBACK_RECOVERY |
+                            EXO_BLE_CAPABILITY_ANGLE_THRESHOLD_ASSIST |
+                            EXO_BLE_CAPABILITY_ANGLE_ASSIST_5NM | EXO_BLE_CAPABILITY_SAVED_WEAR_ZERO |
+                            EXO_BLE_CAPABILITY_SWING_EVENT_PULSE;
+#if defined(CONFIG_EXO_ENGINEERING_GAIT_STIMULUS) &&                           \
+	CONFIG_EXO_ENGINEERING_GAIT_STIMULUS
+	capabilities |= EXO_BLE_CAPABILITY_ENGINEERING_GAIT_STIMULUS;
+#endif
 	const exo_ble_info_t info = {
 		.protocol_min_version = EXO_BLE_PROTOCOL_VERSION,
 		.protocol_max_version = EXO_BLE_PROTOCOL_VERSION,
 		.firmware_major = EXO_FIRMWARE_VERSION_MAJOR,
 		.firmware_minor = EXO_FIRMWARE_VERSION_MINOR,
 		.firmware_patch = EXO_FIRMWARE_VERSION_PATCH,
-		.capabilities = EXO_BLE_CAPABILITY_SYSTEM_CONTROL |
-						EXO_BLE_CAPABILITY_JOINT_CALIBRATION |
-						EXO_BLE_CAPABILITY_ON_DEMAND_STATUS |
-						EXO_BLE_CAPABILITY_CONTROL_CONFIGURATION |
-						EXO_BLE_CAPABILITY_GAIT_STATUS |
-						EXO_BLE_CAPABILITY_ASSIST_CONFIGURATION,
+		.capabilities = capabilities,
 		.max_frame_size = EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,
 		.boot_id = boot_id,
 	};
@@ -686,15 +770,7 @@ static bool encode_system_response(uint8_t request_id, uint8_t *response,
  * 所以在这里显式 deg -> rad -> mrad。手机收到 i32 后再换算为 deg 显示。
  * joint_valid=false 时数值字段发送 0，手机必须同时检查 joint_flags。
  */
-static bool encode_joint_response(const exo_ble_request_t *request,
-								  uint8_t *response, size_t *response_len) {
-	hip_joint_snapshot_t joint;
-	if (!hip_joint_get_snapshot(joint_from_wire_side(request->side), &joint)) {
-		return encode_ack(request->opcode, request->request_id,
-						  EXO_BLE_RESULT_INTERNAL_ERROR, 0U, response,
-						  response_len);
-	}
-
+static uint8_t joint_wire_flags(hip_joint_snapshot_t joint) {
 	uint8_t flags = 0U;
 	if (joint.mapping_valid) {
 		flags |= EXO_BLE_JOINT_FLAG_MAPPING_VALID;
@@ -714,10 +790,45 @@ static bool encode_joint_response(const exo_ble_request_t *request,
 	if (joint.joint_valid) {
 		flags |= EXO_BLE_JOINT_FLAG_JOINT_VALID;
 	}
+	return flags;
+}
+
+/* 仅在BLE低优先级worker读取静态配置与快照，不改变实时控制或CAN状态。 */
+static bool encode_calibration_response(const exo_ble_request_t *request,
+	uint8_t *response, size_t *response_len) {
+	hip_joint_snapshot_t joint;
+	if (!hip_joint_get_snapshot(joint_from_wire_side(request->side), &joint))
+		return encode_ack(request->opcode, request->request_id,
+			EXO_BLE_RESULT_INTERNAL_ERROR, 0U, response, response_len);
+	const bool mapped = joint.mapping_valid && joint.actuator < EXO_ACTUATOR_COUNT;
+	const bool raw_valid = joint.feedback_valid && joint.online &&
+		joint.continuous_position_valid;
+	const exo_ble_calibration_status_t status = {
+		.side = request->side,
+		.actuator = mapped ? (uint8_t)joint.actuator : 0xFFU,
+		.can_id = mapped ? g_exo_hardware_config.actuator[joint.actuator].can_id : 0xFFU,
+		.direction = wire_direction(joint.direction),
+		.joint_flags = joint_wire_flags(joint),
+		.raw_position_mrad = raw_valid ? scaled_i32(
+			joint.continuous_actuator_position_rad, 1000.0f) : INT32_MIN,
+		.software_zero_mrad = joint.zero_valid ? scaled_i32(
+			exo_degrees_to_radians(joint.software_zero_motor_deg), 1000.0f) : INT32_MIN,
+		.feedback_age_ms = feedback_age_ms(joint.feedback_timestamp_us),
+	};
+	return exo_ble_protocol_encode_calibration_status(request->request_id,
+		&status, response, EXO_BLE_PROTOCOL_MAX_FRAME_SIZE, response_len);
+}
+
+static bool encode_joint_response(const exo_ble_request_t *request,
+	uint8_t *response, size_t *response_len) {
+	hip_joint_snapshot_t joint;
+	if (!hip_joint_get_snapshot(joint_from_wire_side(request->side), &joint))
+		return encode_ack(request->opcode, request->request_id,
+			EXO_BLE_RESULT_INTERNAL_ERROR, 0U, response, response_len);
 
 	const exo_ble_joint_status_t status = {
 		.side = request->side,
-		.joint_flags = flags,
+		.joint_flags = joint_wire_flags(joint),
 		.direction = wire_direction(joint.direction),
 		.position_mrad = joint.joint_valid
 							 ? scaled_i32(exo_degrees_to_radians(
@@ -743,8 +854,8 @@ wire_joint_command(exo_ble_wire_side_t side,
 				   const exo_joint_command_t *command) {
 	return (exo_ble_wire_joint_command_t){
 		.side = side,
-		.position_mrad = scaled_i32(
-			exo_degrees_to_radians(command->position_deg), 1000.0f),
+		.position_mrad =
+			scaled_i32(exo_degrees_to_radians(command->position_deg), 1000.0f),
 		.velocity_mrad_s = scaled_i32(
 			exo_degrees_to_radians(command->velocity_deg_s), 1000.0f),
 		.torque_mnm = scaled_i16(command->torque_ff_nm, 1000.0f),
@@ -756,10 +867,10 @@ wire_joint_command(exo_ble_wire_side_t side,
 static exo_joint_command_t
 joint_command_from_wire(const exo_ble_wire_joint_command_t *wire) {
 	return (exo_joint_command_t){
-		.position_deg = exo_radians_to_degrees(
-			(float)wire->position_mrad / 1000.0f),
-		.velocity_deg_s = exo_radians_to_degrees(
-			(float)wire->velocity_mrad_s / 1000.0f),
+		.position_deg =
+			exo_radians_to_degrees((float)wire->position_mrad / 1000.0f),
+		.velocity_deg_s =
+			exo_radians_to_degrees((float)wire->velocity_mrad_s / 1000.0f),
 		.torque_ff_nm = (float)wire->torque_mnm / 1000.0f,
 		.kp = (float)wire->kp_x100 / 100.0f,
 		.kd = (float)wire->kd_x1000 / 1000.0f,
@@ -767,8 +878,8 @@ joint_command_from_wire(const exo_ble_wire_joint_command_t *wire) {
 }
 
 static bool encode_control_config_response(uint8_t request_id,
-									   uint8_t *response,
-									   size_t *response_len) {
+										   uint8_t *response,
+										   size_t *response_len) {
 	exo_controller_snapshot_t controller;
 	if (!exo_controller_get_snapshot(&controller)) {
 		return encode_ack(EXO_BLE_OPCODE_GET_CONTROL_CONFIG, request_id,
@@ -792,8 +903,8 @@ static bool encode_control_config_response(uint8_t request_id,
 }
 
 static bool encode_joint_command_response(const exo_ble_request_t *request,
-									  uint8_t *response,
-									  size_t *response_len) {
+										  uint8_t *response,
+										  size_t *response_len) {
 	exo_controller_snapshot_t controller;
 	if (!exo_controller_get_snapshot(&controller)) {
 		return encode_ack(request->opcode, request->request_id,
@@ -802,12 +913,12 @@ static bool encode_joint_command_response(const exo_ble_request_t *request,
 	}
 	const exo_joint_command_t *selected =
 		request->side == EXO_BLE_SIDE_LEFT ? &controller.selected.command.left
-										 : &controller.selected.command.right;
+										   : &controller.selected.command.right;
 	const exo_ble_wire_joint_command_t wire =
 		wire_joint_command(request->side, selected);
 	return exo_ble_protocol_encode_joint_command(
-		request->request_id, &wire, response,
-		EXO_BLE_PROTOCOL_MAX_FRAME_SIZE, response_len);
+		request->request_id, &wire, response, EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,
+		response_len);
 }
 
 /* 把[0,1)相位编码为0..9999；无效值必须发送0xFFFF，不能伪装成0%。 */
@@ -856,7 +967,8 @@ static uint16_t wire_cadence_x100(float cadence_spm, bool valid) {
 }
 
 /*
- * BLE worker只读取100 Hz任务已经发布的完整估计快照，不在通信任务里重复运行算法。
+ * BLE worker只读取100
+ * Hz任务已经发布的完整估计快照，不在通信任务里重复运行算法。
  * 左右相位允许单侧有效；overall_valid只有两侧都锁定时才置位。
  */
 static bool encode_gait_response(uint8_t request_id, uint8_t *response,
@@ -905,21 +1017,19 @@ static bool encode_gait_response(uint8_t request_id, uint8_t *response,
 		.phase_origin = wire_gait_origin(gait->phase_origin),
 		.quality_flags =
 			(uint16_t)(gait->quality_flags & EXO_BLE_GAIT_QUALITY_FLAGS_MASK),
-		.left_phase_x10000 =
-			wire_phase_x10000(gait->left_phase_01, left_valid),
+		.left_phase_x10000 = wire_phase_x10000(gait->left_phase_01, left_valid),
 		.right_phase_x10000 =
 			wire_phase_x10000(gait->right_phase_01, right_valid),
-		.cadence_x100 =
-			wire_cadence_x100(gait->cadence_spm, cadence_valid),
-		.confidence_x10000 = wire_confidence_x10000(
-			gait->confidence_01, confidence_valid),
+		.cadence_x100 = wire_cadence_x100(gait->cadence_spm, cadence_valid),
+		.confidence_x10000 =
+			wire_confidence_x10000(gait->confidence_01, confidence_valid),
 		.estimate_age_ms = gait->timestamp_us > 0
-						   ? feedback_age_ms((uint64_t)gait->timestamp_us)
-						   : UINT16_MAX,
+							   ? feedback_age_ms((uint64_t)gait->timestamp_us)
+							   : UINT16_MAX,
 	};
-	return exo_ble_protocol_encode_gait_status(
-		request_id, &status, response, EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,
-		response_len);
+	return exo_ble_protocol_encode_gait_status(request_id, &status, response,
+											   EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,
+											   response_len);
 }
 
 /* 将助力模块的内部诊断快照压成固定16-byte状态；这里不执行任何策略。 */
@@ -960,19 +1070,18 @@ static bool encode_assist_response(uint8_t request_id, uint8_t *response,
 	const exo_ble_wire_assist_config_t config = {
 		.schema_version = EXO_ASSIST_CONFIG_SCHEMA_VERSION,
 		.selected_mode = assist.selected_valid
-						 ? wire_assist_mode(selected->mode)
-						 : EXO_BLE_ASSIST_MODE_NONE,
-		.active_mode = assist.active_valid
-					   ? wire_assist_mode(active->mode)
-					   : EXO_BLE_ASSIST_MODE_NONE,
-		.requested_execution_state = assist.selected_valid
-								 ? wire_assist_execution(
-									   selected->requested_execution_state)
-								 : EXO_BLE_ASSIST_EXEC_DISABLED,
+							 ? wire_assist_mode(selected->mode)
+							 : EXO_BLE_ASSIST_MODE_NONE,
+		.active_mode = assist.active_valid ? wire_assist_mode(active->mode)
+										   : EXO_BLE_ASSIST_MODE_NONE,
+		.requested_execution_state =
+			assist.selected_valid
+				? wire_assist_execution(selected->requested_execution_state)
+				: EXO_BLE_ASSIST_EXEC_DISABLED,
 		.execution_state = wire_assist_execution(assist.execution_state),
 		.strategy_id = assist.selected_valid
-					   ? wire_assist_strategy(selected->strategy_id)
-					   : EXO_BLE_ASSIST_STRATEGY_NONE,
+						   ? wire_assist_strategy(selected->strategy_id)
+						   : EXO_BLE_ASSIST_STRATEGY_NONE,
 		.strategy_version = assist.strategy_version,
 		.profile_id = assist.selected_valid ? selected->profile_id : 0U,
 		.left_level_percent =
@@ -991,6 +1100,31 @@ static bool encode_assist_response(uint8_t request_id, uint8_t *response,
 		response_len);
 }
 
+/* GET 只复制遥测模块的自洽快照，不会隐式开启或停止数据流。 */
+static bool encode_telemetry_status_response(uint8_t request_id,
+											 uint8_t *response,
+											 size_t *response_len) {
+	exo_telemetry_status_t status;
+	if (!exo_telemetry_get_status(&status)) {
+		return encode_ack(EXO_BLE_OPCODE_GET_TELEMETRY_STATUS, request_id,
+						  EXO_BLE_RESULT_INTERNAL_ERROR, 0U, response,
+						  response_len);
+	}
+	const exo_ble_wire_telemetry_status_t wire = {
+		.streaming = status.streaming,
+		.rate_hz = status.rate_hz,
+		.channel_mask = status.channel_mask,
+		.stream_sequence = status.stream_sequence,
+		.notify_success_count = status.notify_success_count,
+		.dropped_sample_count = status.dropped_sample_count,
+		.queued_samples = status.queued_samples,
+		.queue_capacity = status.queue_capacity,
+	};
+	return exo_ble_protocol_encode_telemetry_status(
+		request_id, &wire, response, EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,
+		response_len);
+}
+
 static exo_ble_wire_result_t controller_error_result(esp_err_t error) {
 	if (error == ESP_OK) {
 		return EXO_BLE_RESULT_OK;
@@ -1000,6 +1134,9 @@ static exo_ble_wire_result_t controller_error_result(esp_err_t error) {
 	}
 	if (error == ESP_ERR_INVALID_STATE) {
 		return EXO_BLE_RESULT_REJECTED_BUSY;
+	}
+	if (error == ESP_ERR_NOT_SUPPORTED) {
+		return EXO_BLE_RESULT_REJECTED_NOT_READY;
 	}
 	return EXO_BLE_RESULT_INTERNAL_ERROR;
 }
@@ -1012,7 +1149,8 @@ static exo_ble_wire_result_t assist_error_result(esp_err_t error) {
 	return controller_error_result(error);
 }
 
-/* SET 请求必须先取得整机 IDLE 维护权，BLE worker 不能绕过状态机直接改运行配置。 */
+/* SET 请求必须先取得整机 IDLE 维护权，BLE worker 不能绕过状态机直接改运行配置。
+ */
 static exo_ble_wire_result_t
 execute_control_config_command(const exo_ble_request_t *request) {
 	if (!exo_system_try_begin_maintenance()) {
@@ -1044,8 +1182,8 @@ execute_joint_command(const exo_ble_request_t *request) {
 }
 
 /*
- * 高层策略配置也必须经过整机IDLE维护门。阶段9只执行DISABLED/SHADOW；ACTIVE
- * 可被解码以返回明确的NOT_READY + ACTIVE_NOT_ALLOWED，但绝不会进入selected。
+ * 高层策略配置也必须经过整机IDLE维护门。阶段10只对元数据明确允许的
+ * PHASE_PROFILE 接受 ACTIVE；AAN 等未实现/未授权组合仍返回稳定拒绝结果。
  */
 static exo_ble_wire_result_t
 execute_assist_config_command(const exo_ble_request_t *request) {
@@ -1057,7 +1195,9 @@ execute_assist_config_command(const exo_ble_request_t *request) {
 	exo_assist_execution_state_t execution;
 	exo_assist_strategy_id_t strategy;
 	esp_err_t error = ESP_ERR_INVALID_ARG;
-	if (assist_mode_from_wire(request->assist_config.selected_mode, &mode) &&
+	exo_assist_snapshot_t current;
+	if (exo_assist_get_snapshot(&current) && current.selected_valid &&
+		assist_mode_from_wire(request->assist_config.selected_mode, &mode) &&
 		assist_execution_from_wire(
 			request->assist_config.requested_execution_state, &execution) &&
 		assist_strategy_from_wire(request->assist_config.strategy_id,
@@ -1068,16 +1208,57 @@ execute_assist_config_command(const exo_ble_request_t *request) {
 			.requested_execution_state = execution,
 			.strategy_id = strategy,
 			.profile_id = request->assist_config.profile_id,
-			.left_level_percent =
-				request->assist_config.left_level_percent,
-			.right_level_percent =
-				request->assist_config.right_level_percent,
+			.left_level_percent = request->assist_config.left_level_percent,
+			.right_level_percent = request->assist_config.right_level_percent,
 			.reserved_flags = request->assist_config.reserved_flags,
+			/* 旧0x16只改等级/策略，保留当前上限。新0x19一次锁存整份配置。 */
+			.maximum_assist_torque_mnm =
+				(request->opcode == EXO_BLE_OPCODE_SET_ASSIST_CONFIG_WITH_LIMIT ||
+                 request->opcode == EXO_BLE_OPCODE_SET_ANGLE_ASSIST_CONFIG)
+					? request->maximum_assist_torque_mnm
+					: current.selected.maximum_assist_torque_mnm,
+            .angle_threshold_cdeg = request->opcode == EXO_BLE_OPCODE_SET_ANGLE_ASSIST_CONFIG
+                ? request->angle_threshold_cdeg : current.selected.angle_threshold_cdeg,
 		};
 		error = exo_assist_set_config(&config);
 	}
 	exo_system_end_maintenance();
 	return assist_error_result(error);
+}
+
+/* START_TELEMETRY 只能在当前连接已订阅独立遥测 CCCD 时成功。 */
+/* 运行中仅更新纯参数对象，不占用IDLE硬件维护锁、不触发电机命令。
+ * STOP/故障优先；即便在查询后发生STOP，assist内部锁也不会重新armed。
+ * 固定最大力矩仍由本轮START合同约束，只有下一新事件消费新的A/Ta。 */
+static exo_ble_wire_result_t execute_pulse_update(const exo_ble_request_t *request) {
+    exo_system_snapshot_t system;
+    if(!get_system_snapshot(&system) ||
+        (system.state!=EXO_SYSTEM_STATE_IDLE && system.state!=EXO_SYSTEM_STATE_RUNNING))
+        return EXO_BLE_RESULT_REJECTED_BUSY;
+    const bool maintenance=system.state==EXO_SYSTEM_STATE_IDLE;
+    if(maintenance && !exo_system_try_begin_maintenance()) return EXO_BLE_RESULT_REJECTED_BUSY;
+    esp_err_t error;
+    if(request->opcode==EXO_BLE_OPCODE_SET_PULSE_TIMING) {
+        const exo_ble_wire_pulse_timing_t *w=&request->pulse_timing;
+        const exo_pulse_timing_t t={.schema_version=w->schema_version,.duration_mode=w->duration_mode,
+            .peak_mnm=w->peak_mnm,.fixed_ms=w->fixed_ms,.ratio_permille=w->ratio_permille,
+            .minimum_ms=w->minimum_ms,.maximum_ms=w->maximum_ms,
+            .period_minimum_ms=w->period_minimum_ms,.period_maximum_ms=w->period_maximum_ms};
+        error=exo_assist_update_pulse_timing(&t);
+    } else {
+        const exo_pulse_window_t w={.reset_cdeg=request->pulse_window.reset_cdeg,
+            .window_maximum_cdeg=request->pulse_window.maximum_cdeg};
+        error=exo_assist_update_pulse_window(&w);
+    }
+    if(maintenance) exo_system_end_maintenance();
+    return assist_error_result(error);
+}
+
+static bool telemetry_transport_ready(void) {
+	portENTER_CRITICAL(&s_lock);
+	const bool ready = s_snapshot.connected && s_snapshot.telemetry_subscribed;
+	portEXIT_CRITICAL(&s_lock);
+	return ready;
 }
 
 /*
@@ -1111,10 +1292,115 @@ execute_zero_command(const exo_ble_request_t *request, bool capture) {
  *   CAPTURE/CLEAR_ZERO 在维护作用域内更新 RAM 零位。
  * ACCEPTED 不等于已经 RUNNING/IDLE，手机仍需继续轮询 SYSTEM_STATUS。
  */
+/* 一次维护权只覆盖一个短操作；人手抬腿的等待由RAM会话记录，不持有RTOS锁。 */
+static exo_ble_wire_result_t execute_direction_teach_command(
+	const exo_ble_request_t *request, uint8_t *detail) {
+	*detail = 0U;
+	if (!exo_system_try_begin_maintenance()) return EXO_BLE_RESULT_REJECTED_BUSY;
+	hip_direction_teach_result_t reason;
+	exo_direction_t direction;
+	const esp_err_t error = exo_wear_zero_teach_direction(
+		joint_from_wire_side(request->side),
+		(hip_direction_teach_action_t)request->direction_teach_action,
+		request->direction_teach_token, &reason, &direction);
+	exo_system_end_maintenance();
+	if (error == ESP_OK) {
+		*detail = request->direction_teach_action == HIP_DIRECTION_TEACH_FINISH ?
+			(uint8_t)wire_direction(direction) : 0U;
+		return EXO_BLE_RESULT_OK;
+	}
+	*detail = (uint8_t)reason;
+	return EXO_BLE_RESULT_REJECTED_NOT_READY;
+}
+
+static bool encode_saved_zero_response(const exo_ble_request_t *request,
+    uint8_t *response, size_t *length) {
+    exo_wear_zero_status_t saved;
+    if (!exo_wear_zero_get_status(joint_from_wire_side(request->side), &saved)) return false;
+    const exo_ble_saved_zero_status_t status = {
+        .side = request->side,
+        .actuator = (unsigned)saved.actuator < EXO_ACTUATOR_COUNT ? (uint8_t)saved.actuator : 0xFFU,
+        .can_id = (unsigned)saved.actuator < EXO_ACTUATOR_COUNT ? saved.can_id : 0xFFU,
+        .direction = wire_direction(saved.direction),
+        .flags = (saved.stored ? 1U : 0U) | (saved.binding_matches ? 2U : 0U) |
+            (saved.preview_valid ? 4U : 0U) | (saved.reuse_ready ? 8U : 0U),
+        .reason = (uint8_t)saved.reason,
+        .saved_zero_mdeg = saved.stored ? scaled_i32(saved.saved_periodic_motor_deg, 1000.0f) : INT32_MIN,
+        .preview_joint_mdeg = saved.preview_valid ? scaled_i32(saved.preview_joint_deg, 1000.0f) : INT32_MIN,
+    };
+    return exo_ble_protocol_encode_saved_zero(request->request_id, &status,
+        response, EXO_BLE_PROTOCOL_MAX_FRAME_SIZE, length);
+}
+
+static exo_ble_wire_result_t execute_saved_zero_command(const exo_ble_request_t *request,
+    uint8_t *detail) {
+    *detail = 0U;
+    if (!exo_system_try_begin_maintenance()) return EXO_BLE_RESULT_REJECTED_BUSY;
+    exo_wear_zero_result_t reason;
+    const esp_err_t error = exo_wear_zero_execute(
+        (exo_wear_zero_action_t)request->saved_zero_action, true, &reason);
+    exo_system_end_maintenance();
+    *detail = (uint8_t)reason;
+    if (error == ESP_OK) return EXO_BLE_RESULT_OK;
+    return reason == EXO_WEAR_ZERO_STORAGE_FAILED ? EXO_BLE_RESULT_INTERNAL_ERROR :
+        EXO_BLE_RESULT_REJECTED_NOT_READY;
+}
+
+static uint16_t saturate_u16(uint32_t value) {
+    return value > UINT16_MAX ? UINT16_MAX : (uint16_t)value;
+}
+
+static bool encode_can_response(uint8_t request_id, uint8_t *response, size_t *length) {
+    twai_status_info_t can = {0};
+    exo_ble_can_status_t status = {.state = 4U};
+    const bool can_valid = twai_get_status_info(&can) == ESP_OK;
+    if (can_valid) {
+        switch (can.state) {
+        case TWAI_STATE_STOPPED: status.state = 0U; break;
+        case TWAI_STATE_RUNNING: status.state = 1U; break;
+        case TWAI_STATE_BUS_OFF: status.state = 2U; break;
+        case TWAI_STATE_RECOVERING: status.state = 3U; break;
+        default: break;
+        }
+        status.tx_error_counter = saturate_u16(can.tx_error_counter);
+        status.rx_error_counter = saturate_u16(can.rx_error_counter);
+        status.bus_error_count = can.bus_error_count;
+        status.tx_failed_count = saturate_u16(can.tx_failed_count);
+        status.rx_missed_count = saturate_u16(can.rx_missed_count);
+        const bool usable = status.state == 1U && can.tx_error_counter < 128U && can.rx_error_counter < 128U;
+        if (usable) status.flags |= 1U;
+        exo_system_snapshot_t system;
+        if (usable && exo_system_get_snapshot(&system) && system.state == EXO_SYSTEM_STATE_IDLE &&
+            !system.run_requested && !system.output_allowed && !system.maintenance_active)
+            status.flags |= 2U;
+    }
+    exo_feedback_recovery_snapshot_t recovery;
+    exo_feedback_recovery_get_snapshot(&recovery);
+    for (unsigned i = 0; i < 2U; ++i) {
+        rs01_feedback_snapshot_t motor;
+        if (rs01_get_feedback((exo_actuator_id_t)i, &motor)) {
+            status.motor_flags[i] = (motor.valid ? 1U : 0U) | (motor.online ? 2U : 0U) |
+                (motor.reporting_requested ? 4U : 0U) | (motor.faults.present ? 8U : 0U) |
+                (!motor.online && recovery.exhausted[i] ? 16U : 0U);
+        }
+    }
+    return exo_ble_protocol_encode_can_status(request_id, &status, response,
+        EXO_BLE_PROTOCOL_MAX_FRAME_SIZE, length);
+}
+
 static bool dispatch_request(const exo_ble_request_t *request,
 							 uint8_t *response, size_t *response_len) {
 	switch (request->opcode) {
-	case EXO_BLE_OPCODE_GET_INFO:
+	case EXO_BLE_OPCODE_GET_CAN_STATUS:
+        return encode_can_response(request->request_id, response, response_len);
+    case EXO_BLE_OPCODE_RESTORE_FEEDBACK: {
+        const esp_err_t err = exo_feedback_recovery_request();
+        return encode_ack(request->opcode, request->request_id,
+            err == ESP_OK ? EXO_BLE_RESULT_ACCEPTED :
+            err == ESP_ERR_TIMEOUT ? EXO_BLE_RESULT_REJECTED_BUSY : EXO_BLE_RESULT_REJECTED_NOT_READY,
+            0U, response, response_len);
+    }
+    case EXO_BLE_OPCODE_GET_INFO:
 		return encode_info_response(request->request_id, response,
 									response_len);
 	case EXO_BLE_OPCODE_GET_SYSTEM_STATUS:
@@ -1122,16 +1408,102 @@ static bool dispatch_request(const exo_ble_request_t *request,
 									  response_len);
 	case EXO_BLE_OPCODE_GET_JOINT_STATUS:
 		return encode_joint_response(request, response, response_len);
+	case EXO_BLE_OPCODE_GET_CALIBRATION_STATUS:
+		return encode_calibration_response(request, response, response_len);
+    case EXO_BLE_OPCODE_GET_SAVED_ZERO:
+        return encode_saved_zero_response(request, response, response_len);
+    case EXO_BLE_OPCODE_SAVED_ZERO_ACTION: {
+        uint8_t detail;
+        const exo_ble_wire_result_t result = execute_saved_zero_command(request, &detail);
+        return encode_ack(request->opcode, request->request_id,
+            result, detail, response, response_len);
+    }
 	case EXO_BLE_OPCODE_GET_CONTROL_CONFIG:
 		return encode_control_config_response(request->request_id, response,
-									  response_len);
+											  response_len);
 	case EXO_BLE_OPCODE_GET_JOINT_COMMAND:
 		return encode_joint_command_response(request, response, response_len);
 	case EXO_BLE_OPCODE_GET_GAIT_STATUS:
-		return encode_gait_response(request->request_id, response, response_len);
+		return encode_gait_response(request->request_id, response,
+									response_len);
 	case EXO_BLE_OPCODE_GET_ASSIST_CONFIG:
 		return encode_assist_response(request->request_id, response,
-								  response_len);
+									  response_len);
+	case EXO_BLE_OPCODE_GET_ANGLE_ASSIST_CONFIG: {
+        exo_assist_snapshot_t assist;
+        if (!exo_assist_get_snapshot(&assist))
+            return encode_ack(request->opcode, request->request_id,
+                EXO_BLE_RESULT_INTERNAL_ERROR, 0U, response, response_len);
+        const exo_ble_wire_angle_assist_t config = {
+            .flags = (assist.selected_valid ? 1U : 0U) | (assist.active_valid ? 2U : 0U),
+            .generation = (uint8_t)assist.selected_generation,
+            .selected_cdeg = assist.selected_valid ? assist.selected.angle_threshold_cdeg : 0U,
+            .active_cdeg = assist.active_valid ? assist.active.angle_threshold_cdeg : 0U,
+            .pulse_model=true,
+        };
+        return exo_ble_protocol_encode_angle_assist(request->request_id, &config,
+            response, EXO_BLE_PROTOCOL_MAX_FRAME_SIZE, response_len);
+    }
+    case EXO_BLE_OPCODE_GET_PULSE_TIMING:
+    case EXO_BLE_OPCODE_GET_PULSE_WINDOW:
+    case EXO_BLE_OPCODE_GET_PULSE_STATUS: {
+        exo_assist_snapshot_t assist;
+        if(!exo_assist_get_snapshot(&assist)) return encode_ack(request->opcode,request->request_id,
+            EXO_BLE_RESULT_INTERNAL_ERROR,0,response,response_len);
+        if(request->opcode==EXO_BLE_OPCODE_GET_PULSE_TIMING) {
+            const exo_pulse_timing_t *t=&assist.selected.pulse_timing;
+            const exo_ble_wire_pulse_timing_t wire={.schema_version=t->schema_version,
+                .duration_mode=t->duration_mode,.peak_mnm=t->peak_mnm,.fixed_ms=t->fixed_ms,
+                .ratio_permille=t->ratio_permille,.minimum_ms=t->minimum_ms,.maximum_ms=t->maximum_ms,
+                .period_minimum_ms=t->period_minimum_ms,.period_maximum_ms=t->period_maximum_ms};
+            return exo_ble_protocol_encode_pulse_timing(request->request_id,&wire,response,
+                EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,response_len);
+        }
+        if(request->opcode==EXO_BLE_OPCODE_GET_PULSE_WINDOW) {
+            const exo_ble_wire_pulse_window_t wire={.reset_cdeg=assist.selected.pulse_window.reset_cdeg,
+                .maximum_cdeg=assist.selected.pulse_window.window_maximum_cdeg};
+            return exo_ble_protocol_encode_pulse_window(request->request_id,&wire,response,
+                EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,response_len);
+        }
+        const exo_swing_pulse_leg_t *leg=request->side==EXO_BLE_SIDE_LEFT ?
+            &assist.pulse_left : &assist.pulse_right;
+        const exo_ble_wire_pulse_status_t wire={.side=(uint8_t)request->side,
+            .state=leg->state,.flags=(leg->valid_period_intervals>=2?1U:0U) |
+                (leg->peak_rate_limited?2U:0U) |
+                (assist.active_valid && assist.active.strategy_id==EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD &&
+                    assist.execution_state!=EXO_ASSIST_EXEC_DISABLED?4U:0U),
+            .exit_reason=leg->exit_reason,.event_count=(uint16_t)leg->event_count,
+            .pulse_count=(uint16_t)leg->pulse_count,.duration_ms=(uint16_t)(leg->frozen_duration_us/1000),
+            .period_ms=(uint16_t)lroundf(leg->estimated_period_us*0.001f),
+            .peak_mnm=(uint16_t)lroundf(leg->frozen_peak_nm*1000),
+            .progress_x10000=(uint16_t)lroundf(leg->progress_01*10000)};
+        return exo_ble_protocol_encode_pulse_status(request->request_id,&wire,response,
+            EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,response_len);
+    }
+    case EXO_BLE_OPCODE_SET_PULSE_TIMING:
+    case EXO_BLE_OPCODE_SET_PULSE_WINDOW:
+        return encode_ack(request->opcode,request->request_id,execute_pulse_update(request),0,
+            response,response_len);
+    case EXO_BLE_OPCODE_GET_ASSIST_TORQUE_LIMIT: {
+		exo_assist_snapshot_t assist;
+		if (!exo_assist_get_snapshot(&assist))
+			return encode_ack(request->opcode, request->request_id,
+				EXO_BLE_RESULT_INTERNAL_ERROR, 0U, response, response_len);
+		const exo_ble_wire_assist_torque_limit_t limit = {
+			.flags = (assist.selected_valid ? 1U : 0U) |
+					 (assist.active_valid ? 2U : 0U),
+			.selected_maximum_mnm = assist.selected_valid
+				? assist.selected.maximum_assist_torque_mnm : 0U,
+			.active_maximum_mnm = assist.active_valid
+				? assist.active.maximum_assist_torque_mnm : 0U,
+			.hard_maximum_mnm = EXO_BLE_ANGLE_TORQUE_HARD_MAX_MNM,
+		};
+		return exo_ble_protocol_encode_assist_torque_limit(request->request_id,
+			&limit, response, EXO_BLE_PROTOCOL_MAX_FRAME_SIZE, response_len);
+	}
+	case EXO_BLE_OPCODE_GET_TELEMETRY_STATUS:
+		return encode_telemetry_status_response(request->request_id, response,
+												response_len);
 	case EXO_BLE_OPCODE_START: {
 		const exo_request_result_t result = exo_system_request_start();
 		uint8_t detail = (uint8_t)EXO_BLE_BLOCK_NONE;
@@ -1152,6 +1524,11 @@ static bool dispatch_request(const exo_ble_request_t *request,
 		return encode_ack(request->opcode, request->request_id,
 						  wire_request_result(exo_system_request_stop()), 0U,
 						  response, response_len);
+	case EXO_BLE_OPCODE_TEACH_DIRECTION: {
+		uint8_t detail;
+		const exo_ble_wire_result_t result = execute_direction_teach_command(request, &detail);
+		return encode_ack(request->opcode, request->request_id, result, detail, response, response_len);
+	}
 	case EXO_BLE_OPCODE_CAPTURE_ZERO:
 	case EXO_BLE_OPCODE_CLEAR_ZERO: {
 		const bool capture = request->opcode == EXO_BLE_OPCODE_CAPTURE_ZERO;
@@ -1167,16 +1544,37 @@ static bool dispatch_request(const exo_ble_request_t *request,
 		return encode_ack(request->opcode, request->request_id,
 						  execute_joint_command(request), 0U, response,
 						  response_len);
-	case EXO_BLE_OPCODE_SET_ASSIST_CONFIG: {
+	case EXO_BLE_OPCODE_SET_ASSIST_CONFIG:
+	case EXO_BLE_OPCODE_SET_ASSIST_CONFIG_WITH_LIMIT:
+	case EXO_BLE_OPCODE_SET_ANGLE_ASSIST_CONFIG: {
 		const exo_ble_wire_result_t result =
 			execute_assist_config_command(request);
-		const uint8_t detail = result == EXO_BLE_RESULT_REJECTED_NOT_READY
-						   ? (uint8_t)
-							 EXO_BLE_ASSIST_UNAVAILABLE_ACTIVE_NOT_ALLOWED
-						   : 0U;
+		const uint8_t detail =
+			result == EXO_BLE_RESULT_REJECTED_NOT_READY
+				? (uint8_t)EXO_BLE_ASSIST_UNAVAILABLE_ACTIVE_NOT_ALLOWED
+				: 0U;
 		return encode_ack(request->opcode, request->request_id, result, detail,
 						  response, response_len);
 	}
+	case EXO_BLE_OPCODE_START_TELEMETRY:
+		if (!telemetry_transport_ready()) {
+			return encode_ack(request->opcode, request->request_id,
+							  EXO_BLE_RESULT_REJECTED_NOT_READY, 0U, response,
+							  response_len);
+		}
+		return encode_ack(
+			request->opcode, request->request_id,
+			exo_telemetry_start(request->telemetry_start.rate_hz,
+								request->telemetry_start.channel_mask, NULL)
+				? EXO_BLE_RESULT_OK
+				: EXO_BLE_RESULT_INVALID_PAYLOAD,
+			0U, response, response_len);
+	case EXO_BLE_OPCODE_STOP_TELEMETRY:
+		return encode_ack(request->opcode, request->request_id,
+						  exo_telemetry_stop()
+							  ? EXO_BLE_RESULT_OK
+							  : EXO_BLE_RESULT_ALREADY_SATISFIED,
+						  0U, response, response_len);
 	default:
 		return encode_ack(request->opcode, request->request_id,
 						  EXO_BLE_RESULT_UNKNOWN_OPCODE, 0U, response,
@@ -1250,6 +1648,228 @@ static bool notify_response(uint32_t generation, uint16_t connection,
 	record_notify_result(false);
 	ESP_LOGW(TAG, "response notify failed: %d", rc);
 	return false;
+}
+
+/* 遥测任务每次发送前都获取一份会话令牌，断连后旧令牌立即失效。 */
+static bool get_telemetry_session(uint32_t *generation, uint16_t *connection) {
+	if (generation == NULL || connection == NULL) {
+		return false;
+	}
+	portENTER_CRITICAL(&s_lock);
+	const bool ready = s_snapshot.connected && s_snapshot.telemetry_subscribed;
+	if (ready) {
+		*generation = s_snapshot.session_generation;
+		*connection = s_snapshot.connection_handle;
+	}
+	portEXIT_CRITICAL(&s_lock);
+	return ready;
+}
+
+static bool telemetry_session_is_current(uint32_t generation,
+										 uint16_t connection) {
+	portENTER_CRITICAL(&s_lock);
+	const bool current = s_snapshot.connected &&
+						 s_snapshot.telemetry_subscribed &&
+						 s_snapshot.session_generation == generation &&
+						 s_snapshot.connection_handle == connection;
+	portEXIT_CRITICAL(&s_lock);
+	return current;
+}
+
+/*
+ * 遥测 Notify 的重试严格限定在低优先级任务内，100 Hz 控制任务不会等待 BLE。
+ * Windows/Web Bluetooth 的链路偶尔会让 NimBLE 暂时没有可用 mbuf。分配失败
+ * 时不丢掉已经出队的样本，而是保留当前通道，等待任一旧 Telemetry Notify
+ * 完成后再提交。1 秒预算小于 32 样本环在 20 Hz 下可吸收的 1.6 秒积压；若
+ * 整条链路持续堵塞到超时，才显式丢弃。所有等待只发生在本低优先级任务。
+ */
+static bool notify_telemetry_frame(uint32_t generation, uint16_t connection,
+								   uint16_t stream_sequence,
+								   const uint8_t *frame, uint8_t frame_len) {
+	if (frame == NULL || frame_len != EXO_BLE_TELEMETRY_FRAME_SIZE) {
+		portENTER_CRITICAL(&s_lock);
+		++s_snapshot.telemetry_notify_failure_count;
+		portEXIT_CRITICAL(&s_lock);
+		return false;
+	}
+	/* 清除过去已处理的完成事件；之后的事件才可能为本次背压释放空间。 */
+	(void)ulTaskNotifyTake(pdTRUE, 0U);
+	const int64_t retry_deadline_us =
+		esp_timer_get_time() +
+		(int64_t)EXO_BLE_TELEMETRY_FRAME_RETRY_BUDGET_MS * 1000;
+	unsigned attempt = 0U;
+	for (;;) {
+		if (!telemetry_session_is_current(generation, connection)) {
+			return false;
+		}
+		exo_telemetry_status_t status;
+		if (!exo_telemetry_get_status(&status) || !status.streaming ||
+			status.stream_sequence != stream_sequence) {
+			return false;
+		}
+		struct os_mbuf *packet = ble_hs_mbuf_from_flat(frame, frame_len);
+		const bool allocation_failed = packet == NULL;
+		const int rc = allocation_failed
+						   ? BLE_HS_ENOMEM
+						   : ble_gatts_notify_custom(
+								 connection, s_telemetry_value_handle, packet);
+		portENTER_CRITICAL(&s_lock);
+		if (rc == 0) {
+			++s_snapshot.telemetry_notify_success_count;
+			if (attempt > 0U) {
+				++s_snapshot.telemetry_notify_retry_success_count;
+			}
+		} else {
+			++s_snapshot.telemetry_notify_failure_count;
+			if (allocation_failed) {
+				++s_snapshot.telemetry_mbuf_allocation_failure_count;
+			} else {
+				++s_snapshot.telemetry_submit_failure_count;
+			}
+			s_snapshot.last_telemetry_notify_error = rc;
+		}
+		portEXIT_CRITICAL(&s_lock);
+		if (rc == 0) {
+			exo_telemetry_note_notify_success(stream_sequence);
+			return true;
+		}
+		++attempt;
+		if (esp_timer_get_time() >= retry_deadline_us) {
+			break;
+		}
+		(void)ulTaskNotifyTake(pdTRUE,
+							   pdMS_TO_TICKS(EXO_BLE_TELEMETRY_BUFFER_WAIT_MS));
+	}
+	portENTER_CRITICAL(&s_lock);
+	++s_snapshot.telemetry_notify_exhausted_count;
+	portEXIT_CRITICAL(&s_lock);
+	return false;
+}
+
+/* 按低位到高位的固定顺序发送，便于网页稳定聚合同 sample_sequence。 */
+static const uint16_t s_telemetry_channel_order[] = {
+	EXO_TELEMETRY_CHANNEL_JOINT_POSITION,
+	EXO_TELEMETRY_CHANNEL_JOINT_VELOCITY,
+	EXO_TELEMETRY_CHANNEL_MOTOR_TORQUE,
+	EXO_TELEMETRY_CHANNEL_GAIT_PHASE,
+	EXO_TELEMETRY_CHANNEL_ASSIST_SUGGESTION,
+	EXO_TELEMETRY_CHANNEL_GAIT_CONFIDENCE,
+	EXO_TELEMETRY_CHANNEL_APPLIED_TORQUE,
+};
+
+/*
+ * 低优先级发送任务只消费已定点化队列，不重跑算法、不读电机、不输出 CAN。
+ * 5 ms 轮询只是 BLE 后台发送节拍，不是第二个运动控制周期。
+ */
+static void telemetry_task(void *arg) {
+	(void)arg;
+	uint16_t last_stream_sequence = 0U;
+	uint32_t last_completed_drop_count = 0U;
+	portENTER_CRITICAL(&s_lock);
+	s_snapshot.telemetry_task_alive = true;
+	portEXIT_CRITICAL(&s_lock);
+
+	for (;;) {
+		vTaskDelay(pdMS_TO_TICKS(EXO_BLE_TELEMETRY_POLL_MS));
+		uint32_t generation;
+		uint16_t connection;
+		if (!get_telemetry_session(&generation, &connection)) {
+			continue;
+		}
+
+		exo_telemetry_status_t status;
+		if (!exo_telemetry_get_status(&status) || !status.streaming) {
+			continue;
+		}
+		if (status.stream_sequence != last_stream_sequence) {
+			last_stream_sequence = status.stream_sequence;
+			last_completed_drop_count = 0U;
+		}
+
+		exo_telemetry_sample_t sample;
+		if (!exo_telemetry_pop(&sample)) {
+			continue;
+		}
+		/* 样本出队后仍重查 stream，防止并发 STOP/START 把旧样本发入新流。 */
+		if (!exo_telemetry_get_status(&status) || !status.streaming ||
+			status.stream_sequence != sample.stream_sequence) {
+			continue;
+		}
+
+		const bool dropped_since_previous =
+			status.dropped_sample_count != last_completed_drop_count;
+		bool sample_complete = true;
+		bool sent_one_channel = false;
+		for (size_t i = 0U; i < sizeof(s_telemetry_channel_order) /
+									sizeof(s_telemetry_channel_order[0]);
+			 ++i) {
+			const uint16_t channel = s_telemetry_channel_order[i];
+			if ((status.channel_mask & channel) == 0U) {
+				continue;
+			}
+			/*
+			 * 同一样本的多个 Notify 不在同一调度瞬间突发提交。10 ms 间隔只
+			 * 发生在 BLE 低优先级任务，并且不改变样本自身的时间戳。
+			 */
+			if (sent_one_channel) {
+				vTaskDelay(
+					pdMS_TO_TICKS(EXO_BLE_TELEMETRY_INTER_FRAME_DELAY_MS));
+			}
+			sent_one_channel = true;
+			uint16_t left_value;
+			uint16_t right_value;
+			uint8_t value_flags;
+			if (!exo_telemetry_get_channel_values(&sample, channel, &left_value,
+												  &right_value, &value_flags)) {
+				sample_complete = false;
+				continue;
+			}
+			uint8_t wire_flags = value_flags;
+			if (dropped_since_previous) {
+				wire_flags |= EXO_BLE_TELEMETRY_FLAG_DROPPED;
+			}
+			wire_flags |=
+				(uint8_t)((sample.system_state & 0x07U)
+						  << EXO_BLE_TELEMETRY_FLAG_SYSTEM_STATE_SHIFT);
+			if ((sample.sample_flags &
+				 EXO_TELEMETRY_SAMPLE_FLAG_OUTPUT_ALLOWED) != 0U) {
+				wire_flags |= EXO_BLE_TELEMETRY_FLAG_OUTPUT_ALLOWED;
+			}
+			if ((sample.sample_flags &
+				 EXO_TELEMETRY_SAMPLE_FLAG_REAL_OUTPUT_ENABLED) != 0U) {
+				wire_flags |= EXO_BLE_TELEMETRY_FLAG_REAL_OUTPUT_ENABLED;
+			}
+			const exo_ble_wire_telemetry_sample_t wire = {
+				.channel = (uint8_t)channel,
+				.flags = wire_flags,
+				.stream_sequence = sample.stream_sequence,
+				.sample_sequence = sample.sample_sequence,
+				.timestamp_ms = sample.timestamp_ms,
+				.activation_epoch_lsb = (uint16_t)sample.activation_epoch,
+				.left_value = left_value,
+				.right_value = right_value,
+			};
+			uint8_t frame[EXO_BLE_TELEMETRY_FRAME_SIZE];
+			size_t frame_len = 0U;
+			if (!exo_ble_protocol_encode_telemetry_sample(
+					&wire, frame, sizeof(frame), &frame_len) ||
+				!notify_telemetry_frame(generation, connection,
+										sample.stream_sequence, frame,
+										(uint8_t)frame_len)) {
+				sample_complete = false;
+			}
+		}
+		if (sample_complete) {
+			/* 只有所有选中通道都提交成功，才把当前 drop 基线向前推进。 */
+			last_completed_drop_count = status.dropped_sample_count;
+		} else {
+			/* STOP/断连导致的中止不归因到一个已经结束的流。 */
+			if (exo_telemetry_get_status(&status) && status.streaming &&
+				status.stream_sequence == sample.stream_sequence) {
+				exo_telemetry_note_transport_drop(sample.stream_sequence);
+			}
+		}
+	}
 }
 
 /* 在当前 generation 内按 request_id 查找最近响应。 */
@@ -1462,10 +2082,22 @@ static int response_access(uint16_t connection_handle, uint16_t attr_handle,
 	return BLE_ATT_ERR_REQ_NOT_SUPPORTED;
 }
 
+/* Telemetry 也只允许 Notify；客户端不能通过 Read 绕过 START/STOP 流生命周期。
+ */
+static int telemetry_access(uint16_t connection_handle, uint16_t attr_handle,
+							struct ble_gatt_access_ctxt *context, void *arg) {
+	(void)connection_handle;
+	(void)attr_handle;
+	(void)context;
+	(void)arg;
+	return BLE_ATT_ERR_REQ_NOT_SUPPORTED;
+}
+
 /*
- * Product Service 的两个 characteristic：
+ * Product Service 的三个 characteristic：
  *   Command  = Write，手机到 ESP32；
- *   Response = Notify，ESP32 到手机。
+ *   Response  = Notify，ESP32 到手机的低频关联响应；
+ *   Telemetry = Notify，ESP32 到手机的无 request_id 实时流。
  * 末尾全零项是 NimBLE GATT 定义数组的结束标记。
  */
 static const struct ble_gatt_chr_def s_product_characteristics[] = {
@@ -1480,6 +2112,12 @@ static const struct ble_gatt_chr_def s_product_characteristics[] = {
 		.access_cb = response_access,
 		.flags = BLE_GATT_CHR_F_NOTIFY,
 		.val_handle = &s_response_value_handle,
+	},
+	{
+		.uuid = &s_telemetry_uuid.u,
+		.access_cb = telemetry_access,
+		.flags = BLE_GATT_CHR_F_NOTIFY,
+		.val_handle = &s_telemetry_value_handle,
 	},
 	{0},
 };
@@ -1528,6 +2166,7 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
 			++s_snapshot.session_generation;
 			s_snapshot.connected = true;
 			s_snapshot.response_subscribed = false;
+			s_snapshot.telemetry_subscribed = false;
 			s_snapshot.connection_handle = event->connect.conn_handle;
 			s_snapshot.negotiated_mtu = EXO_BLE_DEFAULT_ATT_MTU;
 			portEXIT_CRITICAL(&s_lock);
@@ -1546,10 +2185,12 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
 			++s_snapshot.session_generation;
 			s_snapshot.connected = false;
 			s_snapshot.response_subscribed = false;
+			s_snapshot.telemetry_subscribed = false;
 			s_snapshot.connection_handle = BLE_HS_CONN_HANDLE_NONE;
 			s_snapshot.negotiated_mtu = EXO_BLE_DEFAULT_ATT_MTU;
 		}
 		portEXIT_CRITICAL(&s_lock);
+		(void)exo_telemetry_stop();
 		start_advertising();
 		break;
 	case BLE_GAP_EVENT_SUBSCRIBE:
@@ -1561,6 +2202,19 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
 					event->subscribe.cur_notify > 0;
 			}
 			portEXIT_CRITICAL(&s_lock);
+		} else if (event->subscribe.attr_handle == s_telemetry_value_handle) {
+			bool subscribed = false;
+			portENTER_CRITICAL(&s_lock);
+			if (s_snapshot.connected &&
+				s_snapshot.connection_handle == event->subscribe.conn_handle) {
+				s_snapshot.telemetry_subscribed =
+					event->subscribe.cur_notify > 0;
+				subscribed = s_snapshot.telemetry_subscribed;
+			}
+			portEXIT_CRITICAL(&s_lock);
+			if (!subscribed) {
+				(void)exo_telemetry_stop();
+			}
 		}
 		break;
 	case BLE_GAP_EVENT_MTU:
@@ -1577,6 +2231,19 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
 			portENTER_CRITICAL(&s_lock);
 			++s_snapshot.notify_tx_failure_count;
 			portEXIT_CRITICAL(&s_lock);
+		} else if (event->notify_tx.attr_handle == s_telemetry_value_handle) {
+			if (event->notify_tx.status != 0) {
+				portENTER_CRITICAL(&s_lock);
+				++s_snapshot.telemetry_notify_tx_failure_count;
+				portEXIT_CRITICAL(&s_lock);
+			}
+			/*
+			 * 成功或失败都表示一次旧发送尝试已经结束，可能释放了 mbuf。
+			 * 这里只唤醒低优先级任务；是否最终丢弃当前样本由重试循环统一决定。
+			 */
+			if (s_telemetry_task != NULL) {
+				xTaskNotifyGive(s_telemetry_task);
+			}
 		}
 		break;
 	case BLE_GAP_EVENT_ADV_COMPLETE:
@@ -1636,9 +2303,11 @@ static void on_reset(int reason) {
 	s_snapshot.host_synced = false;
 	s_snapshot.connected = false;
 	s_snapshot.response_subscribed = false;
+	s_snapshot.telemetry_subscribed = false;
 	s_snapshot.connection_handle = BLE_HS_CONN_HANDLE_NONE;
 	s_snapshot.negotiated_mtu = EXO_BLE_DEFAULT_ATT_MTU;
 	portEXIT_CRITICAL(&s_lock);
+	(void)exo_telemetry_stop();
 }
 
 /* Host 与控制器同步后确定本机地址类型，标记可用并开始产品广播。 */
@@ -1665,21 +2334,8 @@ static void host_task(void *arg) {
 	nimble_port_freertos_deinit();
 }
 
-/* NimBLE 依赖 NVS；遇到页面耗尽或版本不兼容时擦除并重新初始化。 */
-static esp_err_t initialize_nvs(void) {
-	esp_err_t error = nvs_flash_init();
-	if (error == ESP_ERR_NVS_NO_FREE_PAGES ||
-		error == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-		error = nvs_flash_erase();
-		if (error == ESP_OK) {
-			error = nvs_flash_init();
-		}
-	}
-	return error;
-}
-
 /*
- * 一次性初始化顺序：NVS -> NimBLE -> 回调/GATT/设备名 -> 静态队列 ->
+ * app_main已初始化NVS并恢复出厂方向。本模块顺序：NimBLE -> 回调/GATT/设备名 -> 静态队列 ->
  * 唯一 BLE worker -> boot_id/诊断快照 -> NimBLE Host 任务。
  * boot_id 在每次 ESP32 启动时随机生成且非 0，手机可据此识别设备重启。
  */
@@ -1690,12 +2346,11 @@ esp_err_t exo_ble_init(void) {
 	if (already_initialized) {
 		return ESP_OK;
 	}
-
-	esp_err_t error = initialize_nvs();
-	if (error != ESP_OK) {
-		return error;
+	if (!exo_telemetry_init()) {
+		return ESP_ERR_INVALID_STATE;
 	}
-	error = nimble_port_init();
+
+	esp_err_t error = nimble_port_init();
 	if (error != ESP_OK) {
 		return error;
 	}
@@ -1727,6 +2382,13 @@ esp_err_t exo_ble_init(void) {
 	if (s_worker_task == NULL) {
 		return ESP_ERR_NO_MEM;
 	}
+	s_telemetry_task = xTaskCreateStaticPinnedToCore(
+		telemetry_task, "exo_ble_tlm", EXO_BLE_TELEMETRY_TASK_STACK_BYTES, NULL,
+		EXO_BLE_TELEMETRY_TASK_PRIORITY, s_telemetry_task_stack,
+		&s_telemetry_task_buffer, EXO_BLE_TELEMETRY_TASK_CORE);
+	if (s_telemetry_task == NULL) {
+		return ESP_ERR_NO_MEM;
+	}
 
 	portENTER_CRITICAL(&s_lock);
 	s_snapshot.initialized = true;
@@ -1737,6 +2399,7 @@ esp_err_t exo_ble_init(void) {
 	s_snapshot.connection_handle = BLE_HS_CONN_HANDLE_NONE;
 	s_snapshot.negotiated_mtu = EXO_BLE_DEFAULT_ATT_MTU;
 	s_snapshot.worker_task_identity = (uintptr_t)s_worker_task;
+	s_snapshot.telemetry_task_identity = (uintptr_t)s_telemetry_task;
 	portEXIT_CRITICAL(&s_lock);
 
 	nimble_port_freertos_init(host_task);
@@ -1758,6 +2421,10 @@ bool exo_ble_get_snapshot(exo_ble_snapshot_t *snapshot) {
 	if (s_worker_task != NULL) {
 		snapshot->worker_stack_free_min_bytes =
 			(uint32_t)uxTaskGetStackHighWaterMark(s_worker_task);
+	}
+	if (s_telemetry_task != NULL) {
+		snapshot->telemetry_stack_free_min_bytes =
+			(uint32_t)uxTaskGetStackHighWaterMark(s_telemetry_task);
 	}
 	return snapshot->initialized;
 }

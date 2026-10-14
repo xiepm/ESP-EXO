@@ -3,6 +3,11 @@ export const EXO_BLE = Object.freeze({
   SERVICE_UUID: "f7a10001-6b5a-4d92-9e7c-3a1c8b640001",
   COMMAND_CHARACTERISTIC_UUID: "f7a10002-6b5a-4d92-9e7c-3a1c8b640001",
   RESPONSE_CHARACTERISTIC_UUID: "f7a10003-6b5a-4d92-9e7c-3a1c8b640001",
+  /**
+   * 阶段 10 使用独立 Notify 特征承载连续遥测。它不是命令响应通道，
+   * 因而遥测拥塞不会占用 request_id，也不会和 START/STOP 的 ACK 混淆。
+   */
+  TELEMETRY_CHARACTERISTIC_UUID: "f7a10004-6b5a-4d92-9e7c-3a1c8b640001",
   PROTOCOL_VERSION: 1,
   HEADER_SIZE: 4,
   MAX_PAYLOAD_SIZE: 16,
@@ -16,13 +21,23 @@ export const EXO_BLE = Object.freeze({
   ASSIST_FLAGS_MASK: 0x7f,
   ASSIST_EXECUTION_PACKED_RESERVED_MASK: 0xcc,
   SENSOR_MASK: 0x00ff,
-  CAPABILITIES_MASK: 0x003f,
+  CAPABILITIES_MASK: 0xffff,
+  ASSIST_TORQUE_HARD_MAX_MNM: 500,
+  ANGLE_ASSIST_TORQUE_HARD_MAX_MNM: 15000,
+  LEGACY_ANGLE_ASSIST_TORQUE_HARD_MAX_MNM: 5000,
+  PULSE_FIXED_MAX_MS: 3000,
   INVALID_U16: 0xffff,
   PHASE_X10000_MAX: 9999,
   CADENCE_X100_MAX: 30000,
   CONFIDENCE_X10000_MAX: 10000,
   ASSIST_CONFIG_SCHEMA_VERSION: 1,
   ASSIST_LEVEL_PERCENT_MAX: 100,
+  TELEMETRY_SCHEMA_VERSION: 1,
+  TELEMETRY_PACKET_SIZE: 20,
+  TELEMETRY_FLAGS_MASK: 0xff,
+  TELEMETRY_CHANNEL_MASK: 0x007f,
+  TELEMETRY_DEFAULT_CHANNEL_MASK: 0x0078,
+  TELEMETRY_INVALID_SIGNED: -32768,
   JOINT_POSITION_MRAD_MIN: -12570,
   JOINT_POSITION_MRAD_MAX: 12570,
   JOINT_VELOCITY_MRAD_S_MIN: -44000,
@@ -41,6 +56,10 @@ export const Opcode = Object.freeze({
   GET_JOINT_COMMAND: 0x05,
   GET_GAIT_STATUS: 0x06,
   GET_ASSIST_CONFIG: 0x07,
+  GET_TELEMETRY_STATUS: 0x08,
+  GET_CALIBRATION_STATUS: 0x09,
+  GET_ASSIST_TORQUE_LIMIT: 0x0a,
+  GET_ANGLE_ASSIST_CONFIG: 0x0b,
   START: 0x10,
   STOP: 0x11,
   CAPTURE_ZERO: 0x12,
@@ -48,6 +67,20 @@ export const Opcode = Object.freeze({
   SET_CONTROL_CONFIG: 0x14,
   SET_JOINT_COMMAND: 0x15,
   SET_ASSIST_CONFIG: 0x16,
+  START_TELEMETRY: 0x17,
+  STOP_TELEMETRY: 0x18,
+  SET_ASSIST_CONFIG_WITH_LIMIT: 0x19,
+  SET_ANGLE_ASSIST_CONFIG: 0x1d,
+  TEACH_DIRECTION: 0x1a,
+  GET_CAN_STATUS: 0x1b,
+  RESTORE_FEEDBACK: 0x1c,
+  GET_SAVED_ZERO: 0x1e,
+  SAVED_ZERO_ACTION: 0x1f,
+  GET_PULSE_TIMING: 0x20,
+  SET_PULSE_TIMING: 0x21,
+  GET_PULSE_WINDOW: 0x22,
+  SET_PULSE_WINDOW: 0x23,
+  GET_PULSE_STATUS: 0x24,
 });
 
 export const Side = Object.freeze({
@@ -68,6 +101,12 @@ export const ControlMode = Object.freeze({
 export const ReferenceSource = Object.freeze({
   CONSTANT: 0x00,
   SINE: 0x01,
+  /**
+   * 仅供隔离工程验收使用的左右交替正弦激励。它不是产品助力参考，网页也不会
+   * 将它放入普通产品参考源下拉框；只有设备声明 ENGINEERING_TEST_STIMULUS
+   * capability 时，独立的工程验证卡片才可以写入这个值。
+  */
+  ALTERNATING_SINE_TEST: 0x02,
 });
 
 export const Capability = Object.freeze({
@@ -77,6 +116,83 @@ export const Capability = Object.freeze({
   CONTROL_CONFIGURATION: 1 << 3,
   GAIT_STATUS: 1 << 4,
   ASSIST_CONFIGURATION: 1 << 5,
+  TELEMETRY_STREAM: 1 << 6,
+  ENGINEERING_TEST_STIMULUS: 1 << 7,
+  CALIBRATION_STATUS: 1 << 8,
+  ASSIST_TORQUE_LIMIT: 1 << 9,
+  DIRECTION_TEACHING: 1 << 10,
+  FEEDBACK_RECOVERY: 1 << 11,
+  ANGLE_THRESHOLD_ASSIST: 1 << 12,
+  ANGLE_ASSIST_5NM: 1 << 13,
+  SAVED_WEAR_ZERO: 1 << 14,
+  SWING_EVENT_PULSE: 1 << 15,
+});
+
+export const SavedZeroAction = Object.freeze({ SAVE_CURRENT: 0, RESTORE: 1, FORGET: 2, CAPTURE_PAIR: 3 });
+export const savedZeroReasonDescriptions: Readonly<Record<number, string>> = Object.freeze({
+  0: "上次零位可沿用；仍需确认本次穿戴中立静止",
+  1: "尚未保存可沿用的零位，请先重新校准并保存",
+  2: "左右映射或出厂方向不一致，请重新校准",
+  3: "等待两台电机的新反馈",
+  4: "两台电机必须均为未使能REST状态",
+  5: "存在电机故障，不能沿用零位",
+  6: "双腿仍在运动，请回中立位并保持静止",
+  7: "中立位与上次相差超过5°，请重新校准",
+  8: "主控保存失败，不能认定新零位已断电保留",
+  9: "先完成出厂方向标定",
+  10: "本次双髋零位无效，不能保存为上次零位",
+  11: "请确认本次穿戴完成且中立静止",
+  12: "反馈坐标已变化，请重新读取后校准",
+  13: "保存记录损坏或版本不符，请重新校准",
+});
+
+export const DirectionTeachAction = Object.freeze({ BEGIN: 0, FINISH: 1, CANCEL: 2 });
+export const directionTeachFailureDescriptions: Readonly<Record<number, string>> = Object.freeze({
+  1: "没有有效基准，请重新记录静止基准",
+  2: "基准已超过60秒，请重新记录",
+  3: "双电机反馈缺失、过期或没有新样本",
+  4: "电机连续坐标已重置，请重新记录基准",
+  5: "目标腿位移不足3°，请向前小幅抬腿并停稳",
+  6: "目标腿位移超过30°，请取消后减小幅度重试",
+  7: "另一侧也明显移动，请只前抬指定的一条腿",
+  8: "双腿尚未停稳，请保持姿态后再确认",
+  9: "电机未处于REST，不能进行手动方向标定",
+  10: "电机报告故障，请先排除故障",
+  11: "已有未完成的方向标定，请取消后重试",
+  12: "基准会话不匹配，请重新记录",
+  13: "出厂方向保存或读回失败，请重试；当前零位仍无效",
+});
+
+/**
+ * 遥测包 byte 1 的类型。阶段 10 只有 SAMPLE；解析器会保留未知类型原始帧，
+ * 这样未来固件新增包型时，旧网页仍能保持连接并把问题写入事务日志。
+ */
+export const TelemetryPacketType = Object.freeze({
+  SAMPLE: 0x01,
+});
+
+/**
+ * START_TELEMETRY 的 channel_mask。每个 Notify 只携带其中一个单比特通道，
+ * 同一采样时刻的多通道包通过 streamSequence/sampleSequence 重新组合。
+ */
+export const TelemetryChannel = Object.freeze({
+  POSITION: 0x0001,
+  VELOCITY: 0x0002,
+  MOTOR_TORQUE: 0x0004,
+  GAIT_PHASE: 0x0008,
+  ASSIST_SUGGESTION: 0x0010,
+  GAIT_CONFIDENCE: 0x0020,
+  APPLIED_TORQUE: 0x0040,
+});
+
+export const TelemetryFlag = Object.freeze({
+  LEFT_VALID: 1 << 0,
+  RIGHT_VALID: 1 << 1,
+  DROPPED_SINCE_PREVIOUS: 1 << 2,
+  SYSTEM_STATE_SHIFT: 3,
+  SYSTEM_STATE_MASK: 0x38,
+  OUTPUT_ALLOWED: 1 << 6,
+  REAL_OUTPUT_ENABLED: 1 << 7,
 });
 
 export const GaitEstimator = Object.freeze({
@@ -103,6 +219,7 @@ export const AssistMode = Object.freeze({
   TRANSPARENT: 0x01,
   ACTIVE_PHASE: 0x02,
   ASSIST_AS_NEEDED: 0x03,
+  ANGLE_THRESHOLD: 0x04,
 });
 
 export const AssistExecutionState = Object.freeze({
@@ -116,6 +233,7 @@ export const AssistStrategy = Object.freeze({
   TRANSPARENT: 0x01,
   PHASE_PROFILE: 0x02,
   AAN_RESIDUAL: 0x03,
+  ANGLE_THRESHOLD: 0x04,
 });
 
 export const AssistUnavailableReason = Object.freeze({
@@ -127,9 +245,13 @@ export const AssistUnavailableReason = Object.freeze({
   REQUIRED_SENSOR_MISSING: 0x05,
   NOT_ARMED: 0x06,
   REQUIRED_GAIT_INVALID: 0x07,
+  WAITING_NEW_GAIT_EVENTS: 0x08,
 });
 
 export type ResponseKind =
+  | "canStatus"
+  | "calibrationStatus"
+  | "savedZeroStatus"
   | "ack"
   | "info"
   | "systemStatus"
@@ -137,7 +259,13 @@ export type ResponseKind =
   | "controlConfig"
   | "jointCommand"
   | "gaitStatus"
-  | "assistConfig";
+  | "assistConfig"
+  | "assistTorqueLimit"
+  | "angleAssistConfig"
+  | "pulseTiming"
+  | "pulseWindow"
+  | "pulseStatus"
+  | "telemetryStatus";
 
 export const resultNames: Readonly<Record<number, string>> = Object.freeze({
   0x00: "OK",
@@ -202,7 +330,18 @@ export const blockReasonNames: Readonly<Record<number, string>> = Object.freeze(
   0x10: "LEFT_MOTOR_FAULT",
   0x11: "RIGHT_MOTOR_FAULT",
   0x12: "SYSTEM_ERROR",
+  0x13: "RUN_CONTRACT_INVALID",
   0xff: "UNKNOWN",
+});
+
+/**
+ * 面向操作者的阻止原因说明。线码名称保持英文稳定，中文只用于页面显示，避免
+ * 日志/协议字段和产品文案耦合。当前新增原因表示基础控制和助力执行态不能组成
+ * 同一个安全、可执行的 RUNNING 合同。
+ */
+export const blockReasonDescriptions: Readonly<Record<number, string>> = Object.freeze({
+  0x05: "CAN未就绪：未运行或收发错误计数已达到128",
+  0x13: "控制模式/参考源与助力执行状态不兼容",
 });
 
 export const directionNames: Readonly<Record<number, string>> = Object.freeze({
@@ -224,6 +363,7 @@ export const controlModeNames: Readonly<Record<number, string>> = Object.freeze(
 export const referenceSourceNames: Readonly<Record<number, string>> = Object.freeze({
   [ReferenceSource.CONSTANT]: "CONSTANT",
   [ReferenceSource.SINE]: "SINE",
+  [ReferenceSource.ALTERNATING_SINE_TEST]: "ALTERNATING_SINE_TEST",
 });
 
 export const gaitEstimatorNames: Readonly<Record<number, string>> = Object.freeze({
@@ -250,6 +390,7 @@ export const assistModeNames: Readonly<Record<number, string>> = Object.freeze({
   [AssistMode.TRANSPARENT]: "TRANSPARENT",
   [AssistMode.ACTIVE_PHASE]: "ACTIVE_PHASE",
   [AssistMode.ASSIST_AS_NEEDED]: "ASSIST_AS_NEEDED",
+  [AssistMode.ANGLE_THRESHOLD]: "ANGLE_THRESHOLD",
 });
 
 export const assistExecutionStateNames: Readonly<Record<number, string>> = Object.freeze({
@@ -263,6 +404,7 @@ export const assistStrategyNames: Readonly<Record<number, string>> = Object.free
   [AssistStrategy.TRANSPARENT]: "TRANSPARENT",
   [AssistStrategy.PHASE_PROFILE]: "PHASE_PROFILE",
   [AssistStrategy.AAN_RESIDUAL]: "AAN_RESIDUAL",
+  [AssistStrategy.ANGLE_THRESHOLD]: "ANGLE_THRESHOLD",
 });
 
 export const assistUnavailableReasonNames: Readonly<Record<number, string>> = Object.freeze({
@@ -274,7 +416,16 @@ export const assistUnavailableReasonNames: Readonly<Record<number, string>> = Ob
   [AssistUnavailableReason.REQUIRED_SENSOR_MISSING]: "REQUIRED_SENSOR_MISSING",
   [AssistUnavailableReason.NOT_ARMED]: "NOT_ARMED",
   [AssistUnavailableReason.REQUIRED_GAIT_INVALID]: "REQUIRED_GAIT_INVALID",
+  [AssistUnavailableReason.WAITING_NEW_GAIT_EVENTS]: "WAITING_NEW_GAIT_EVENTS",
 });
+
+/** 面向操作者的助力不可用原因；英文线码名仍作为协议和日志稳定标识。 */
+export const assistUnavailableReasonDescriptions: Readonly<Record<number, string>> =
+  Object.freeze({
+    [AssistUnavailableReason.REQUIRED_GAIT_INVALID]: "所需步态无效",
+    [AssistUnavailableReason.WAITING_NEW_GAIT_EVENTS]:
+      "等待本次 START 后左右髋各自出现新的屈曲峰",
+  });
 
 export type ProtocolErrorCode =
   | "INVALID_SOURCE"
@@ -441,6 +592,45 @@ export interface JointStatusResponse extends CommonResponse {
   feedbackAgeMs: number;
 }
 
+/** 零位偏置与电机连续角来自设备；缺失反馈显示null而不是0°。 */
+export interface CalibrationStatusResponse extends CommonResponse {
+  kind: "calibrationStatus";
+  side: number;
+  actuator: number;
+  canId: number;
+  direction: number;
+  directionName: string;
+  jointFlags: number;
+  decodedJointFlags: DecodedJointFlags;
+  rawPositionDegrees: number | null;
+  softwareZeroDegrees: number | null;
+  feedbackAgeMs: number;
+}
+
+export interface SavedZeroStatusResponse extends CommonResponse {
+  kind: "savedZeroStatus";
+  side: number;
+  actuator: number;
+  canId: number;
+  direction: number;
+  stored: boolean;
+  bindingMatches: boolean;
+  previewValid: boolean;
+  reuseReady: boolean;
+  reason: number;
+  savedZeroDegrees: number | null;
+  previewJointDegrees: number | null;
+}
+
+export function canReuseSavedWearZero(left: SavedZeroStatusResponse | null,
+  right: SavedZeroStatusResponse | null): boolean {
+  return Boolean(left && right && left.side === Side.LEFT && right.side === Side.RIGHT &&
+    left.actuator !== right.actuator && [left, right].every((s) => s.stored &&
+      s.bindingMatches && s.previewValid && s.reuseReady && s.reason === 0 &&
+      s.previewJointDegrees !== null && Number.isFinite(s.previewJointDegrees) &&
+      Math.abs(s.previewJointDegrees) <= 5));
+}
+
 export interface ControlConfigResponse extends CommonResponse {
   kind: "controlConfig";
   selectedMode: number;
@@ -527,6 +717,72 @@ export interface AssistConfigResponse extends CommonResponse {
   decodedAvailableSensorMask: DecodedSensorMask;
 }
 
+/** 最大附加助力配置快照，mN·m在协议边界显式转换为N·m。 */
+export interface AssistTorqueLimitResponse extends CommonResponse {
+  kind: "assistTorqueLimit";
+  selectedValid: boolean;
+  activeValid: boolean;
+  selectedMaximumNm: number | null;
+  activeMaximumNm: number | null;
+  hardMaximumNm: number;
+}
+
+/** GET_TELEMETRY_STATUS 的16字节快照；计数器均来自设备而不是网页推算。 */
+export interface TelemetryStatusResponse extends CommonResponse {
+  kind: "telemetryStatus";
+  streaming: boolean;
+  rateHz: number;
+  channelMask: number;
+  streamSequence: number;
+  notifySuccessCount: number;
+  droppedSampleCount: number;
+  queuedSamples: number;
+  queueCapacity: number;
+}
+
+export type TelemetryStartValues = {
+  rateHz: 5 | 10 | 20;
+  channelMask: number;
+};
+
+type TelemetryCommonPacket = {
+  schemaVersion: number;
+  packetType: number;
+  raw: Uint8Array<ArrayBuffer>;
+};
+
+export type UnknownTelemetryPacket = TelemetryCommonPacket & {
+  kind: "unknown";
+};
+
+export type TelemetrySamplePacket = TelemetryCommonPacket & {
+  kind: "sample";
+  channel: number;
+  channelName: string;
+  flags: number;
+  unknownFlags: number;
+  leftValid: boolean;
+  rightValid: boolean;
+  outputAllowed: boolean;
+  realOutputEnabled: boolean;
+  systemState: number;
+  droppedSincePrevious: boolean;
+  streamSequence: number;
+  sampleSequence: number;
+  timestampMs: number;
+  activationEpochLow16: number;
+  leftRaw: number;
+  rightRaw: number;
+  /** valid 标志与无效哨兵矛盾时置位，页面记录告警但仍保持连接。 */
+  sentinelMismatch: boolean;
+  /** 已按通道换算成人体显示单位；无效侧为 null。 */
+  leftValue: number | null;
+  rightValue: number | null;
+  unit: "deg" | "deg/s" | "N·m" | "%" | "raw";
+};
+
+export type ExoTelemetryPacket = TelemetrySamplePacket | UnknownTelemetryPacket;
+
 /** 网页表单使用人体关节单位；编码器会显式量化成 v1 定点线码。 */
 export type JointCommandValues = {
   side: number;
@@ -547,45 +803,98 @@ export type AssistConfigValues = {
   rightLevelPercent: number;
 };
 
+export type CanStatusResponse = CommonResponse & {
+  kind: "canStatus";
+  state: number;
+  stateName: string;
+  usable: boolean;
+  restoreAllowed: boolean;
+  txErrorCounter: number;
+  rxErrorCounter: number;
+  busErrorCount: number;
+  txFailedCount: number;
+  rxMissedCount: number;
+  motorFlags: readonly [number, number];
+};
+
 export type ExoBleResponse =
+  | SavedZeroStatusResponse
+  | CanStatusResponse
   | AckResponse
   | InfoResponse
   | SystemStatusResponse
   | JointStatusResponse
+  | CalibrationStatusResponse
   | ControlConfigResponse
   | JointCommandResponse
   | GaitStatusResponse
-  | AssistConfigResponse;
+  | AssistConfigResponse
+  | AssistTorqueLimitResponse
+  | AngleAssistConfigResponse
+  | PulseTimingResponse
+  | PulseWindowResponse
+  | PulseStatusResponse
+  | TelemetryStatusResponse;
 
 const responseOpcodes = Object.freeze({
+  CAN_STATUS: Opcode.GET_CAN_STATUS | EXO_BLE.RESPONSE_BIT,
   INFO: Opcode.GET_INFO | EXO_BLE.RESPONSE_BIT,
   SYSTEM_STATUS: Opcode.GET_SYSTEM_STATUS | EXO_BLE.RESPONSE_BIT,
   JOINT_STATUS: Opcode.GET_JOINT_STATUS | EXO_BLE.RESPONSE_BIT,
+  CALIBRATION_STATUS: Opcode.GET_CALIBRATION_STATUS | EXO_BLE.RESPONSE_BIT,
+  SAVED_ZERO: Opcode.GET_SAVED_ZERO | EXO_BLE.RESPONSE_BIT,
   CONTROL_CONFIG: Opcode.GET_CONTROL_CONFIG | EXO_BLE.RESPONSE_BIT,
   JOINT_COMMAND: Opcode.GET_JOINT_COMMAND | EXO_BLE.RESPONSE_BIT,
   GAIT_STATUS: Opcode.GET_GAIT_STATUS | EXO_BLE.RESPONSE_BIT,
   ASSIST_CONFIG: Opcode.GET_ASSIST_CONFIG | EXO_BLE.RESPONSE_BIT,
+  ASSIST_TORQUE_LIMIT: Opcode.GET_ASSIST_TORQUE_LIMIT | EXO_BLE.RESPONSE_BIT,
+  ANGLE_ASSIST_CONFIG: Opcode.GET_ANGLE_ASSIST_CONFIG | EXO_BLE.RESPONSE_BIT,
+  PULSE_TIMING: Opcode.GET_PULSE_TIMING | EXO_BLE.RESPONSE_BIT,
+  PULSE_WINDOW: Opcode.GET_PULSE_WINDOW | EXO_BLE.RESPONSE_BIT,
+  PULSE_STATUS: Opcode.GET_PULSE_STATUS | EXO_BLE.RESPONSE_BIT,
+  TELEMETRY_STATUS: Opcode.GET_TELEMETRY_STATUS | EXO_BLE.RESPONSE_BIT,
 });
 
 const requestPayloadLengths: Readonly<Record<number, number>> = Object.freeze({
+  [Opcode.GET_CAN_STATUS]: 0,
+  [Opcode.RESTORE_FEEDBACK]: 0,
   [Opcode.GET_INFO]: 0,
   [Opcode.GET_SYSTEM_STATUS]: 0,
   [Opcode.GET_JOINT_STATUS]: 1,
+  [Opcode.GET_CALIBRATION_STATUS]: 1,
+  [Opcode.GET_SAVED_ZERO]: 1,
+  [Opcode.SAVED_ZERO_ACTION]: 2,
   [Opcode.GET_CONTROL_CONFIG]: 0,
   [Opcode.GET_JOINT_COMMAND]: 1,
   [Opcode.GET_GAIT_STATUS]: 0,
   [Opcode.GET_ASSIST_CONFIG]: 0,
+  [Opcode.GET_ASSIST_TORQUE_LIMIT]: 0,
+  [Opcode.GET_ANGLE_ASSIST_CONFIG]: 0,
+  [Opcode.GET_PULSE_TIMING]: 0,
+  [Opcode.SET_PULSE_TIMING]: 16,
+  [Opcode.GET_PULSE_WINDOW]: 0,
+  [Opcode.SET_PULSE_WINDOW]: 4,
+  [Opcode.GET_PULSE_STATUS]: 1,
+  [Opcode.GET_TELEMETRY_STATUS]: 0,
   [Opcode.START]: 0,
   [Opcode.STOP]: 0,
   [Opcode.CAPTURE_ZERO]: 1,
   [Opcode.CLEAR_ZERO]: 1,
+  [Opcode.TEACH_DIRECTION]: 3,
   [Opcode.SET_CONTROL_CONFIG]: 2,
   [Opcode.SET_JOINT_COMMAND]: 15,
   [Opcode.SET_ASSIST_CONFIG]: 8,
+  [Opcode.SET_ASSIST_CONFIG_WITH_LIMIT]: 10,
+  [Opcode.SET_ANGLE_ASSIST_CONFIG]: 12,
+  [Opcode.START_TELEMETRY]: 3,
+  [Opcode.STOP_TELEMETRY]: 0,
 });
 
 const sidePayloadOpcodes = new Set<number>([
   Opcode.GET_JOINT_STATUS,
+  Opcode.GET_CALIBRATION_STATUS,
+  Opcode.GET_SAVED_ZERO,
+  Opcode.GET_PULSE_STATUS,
   Opcode.GET_JOINT_COMMAND,
   Opcode.CAPTURE_ZERO,
   Opcode.CLEAR_ZERO,
@@ -819,11 +1128,12 @@ export function encodeControlConfigPayload(
   requireIntegerInRange(selectedMode, ControlMode.HOLD, ControlMode.IMPEDANCE, "selected mode");
   selectedControlModeName(selectedMode, "selected mode");
   requireNamedCode(selectedReference, referenceSourceNames, "selected reference");
-  // 固件阶段 8 只给 IMPEDANCE 定义了 SINE 参考。把组合约束放在公共编码器里，
-  // 即使以后出现第二个调用页面，也不会发送一个已知会被设备拒绝的组合。
-  if (selectedReference === ReferenceSource.SINE &&
+  // 动态参考只给 IMPEDANCE 定义。ALTERNATING_SINE_TEST 还需要调用方在发送前
+  // capability；编码器只负责拒绝协议本身不允许的模式/参考组合。
+  if ((selectedReference === ReferenceSource.SINE ||
+       selectedReference === ReferenceSource.ALTERNATING_SINE_TEST) &&
       selectedMode !== ControlMode.IMPEDANCE) {
-    fail("INVALID_ARGUMENT", "SINE reference requires IMPEDANCE mode");
+    fail("INVALID_ARGUMENT", "dynamic reference requires IMPEDANCE mode");
   }
   return Uint8Array.of(selectedMode, selectedReference);
 }
@@ -866,6 +1176,7 @@ function validateAssistConfigWire(values: AssistConfigWireValues): void {
     [AssistStrategy.TRANSPARENT]: AssistMode.TRANSPARENT,
     [AssistStrategy.PHASE_PROFILE]: AssistMode.ACTIVE_PHASE,
     [AssistStrategy.AAN_RESIDUAL]: AssistMode.ASSIST_AS_NEEDED,
+    [AssistStrategy.ANGLE_THRESHOLD]: AssistMode.ANGLE_THRESHOLD,
   };
   if (expectedModeByStrategy[values.strategyId] !== values.selectedMode) {
     fail("INVALID_FIELD", "assist mode and strategy do not match");
@@ -1012,6 +1323,170 @@ export function encodeJointCommandPayload(
   return payload;
 }
 
+/**
+ * 编码低频的“开始遥测”配置。采样率和通道掩码只在启动流时写一次；
+ * 手机绝不能用这个接口代替 ESP32 本地 100 Hz 控制。
+ */
+export function encodeTelemetryStartPayload(
+  values: TelemetryStartValues,
+): Uint8Array<ArrayBuffer> {
+  if (values.rateHz !== 5 && values.rateHz !== 10 && values.rateHz !== 20) {
+    fail("INVALID_ARGUMENT", "telemetry rate must be 5, 10, or 20 Hz");
+  }
+  requireIntegerInRange(values.channelMask, 1, 0xffff, "telemetry channel mask");
+  if ((values.channelMask & ~EXO_BLE.TELEMETRY_CHANNEL_MASK) !== 0) {
+    fail("INVALID_ARGUMENT", "telemetry channel mask contains unsupported bits");
+  }
+
+  const payload = new Uint8Array(3);
+  const view = new DataView(payload.buffer);
+  view.setUint8(0, values.rateHz);
+  view.setUint16(1, values.channelMask, true);
+  return payload;
+}
+
+/** 新固件专用：10-byte原子写入。旧8-byte配置和16-byte读回格式仍保持不变。 */
+export function encodeAssistConfigWithLimitPayload(
+  values: AssistConfigValues, maximumNm: number,
+): Uint8Array<ArrayBuffer> {
+  const hardNm = (values.strategyId === AssistStrategy.ANGLE_THRESHOLD
+    ? EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM
+    : EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM) / 1000;
+  if (!Number.isFinite(maximumNm) || maximumNm < 0 || maximumNm > hardNm) {
+    fail("INVALID_PAYLOAD", `最大附加助力须在 0–${hardNm.toFixed(3)} N·m 内`);
+  }
+  const milliNm = Math.round(maximumNm * 1000);
+  if (Math.abs(maximumNm * 1000 - milliNm) > 1e-8) {
+    fail("INVALID_PAYLOAD", "最大附加助力精度为 0.001 N·m");
+  }
+  const payload = new Uint8Array(10);
+  payload.set(encodeAssistConfigPayload(values));
+  new DataView(payload.buffer).setUint16(8, milliNm, true);
+  return payload;
+}
+
+export type AngleAssistConfigResponse = CommonResponse & {
+  kind: "angleAssistConfig";
+  selectedValid: boolean;
+  activeValid: boolean;
+  selectedThresholdDegrees: number | null;
+  activeThresholdDegrees: number | null;
+  hysteresisDegrees: number;
+  rampMs: number;
+  pulseModel: boolean;
+  configGeneration: number;
+};
+
+/** 0x1D一次保存模式、运行方式、左右等级、力矩和人体正角阈值。 */
+export function encodeAngleAssistConfigPayload(values: AssistConfigValues,
+  maximumNm: number, thresholdDegrees: number): Uint8Array<ArrayBuffer> {
+  if (values.selectedMode !== AssistMode.ANGLE_THRESHOLD ||
+      values.strategyId !== AssistStrategy.ANGLE_THRESHOLD || values.profileId !== 0)
+    fail("INVALID_PAYLOAD", "角度策略的模式/策略ID/曲线ID不匹配");
+  if (!Number.isFinite(thresholdDegrees) || thresholdDegrees < 1 || thresholdDegrees > 60 ||
+      Math.abs(thresholdDegrees * 100 - Math.round(thresholdDegrees * 100)) > 1e-8)
+    fail("INVALID_PAYLOAD", "前抬角度阈值须在1–60°内，精度0.01°");
+  const payload = new Uint8Array(12);
+  payload.set(encodeAssistConfigWithLimitPayload(values, maximumNm));
+  new DataView(payload.buffer).setUint16(10, Math.round(thresholdDegrees * 100), true);
+  return payload;
+}
+
+function parseAngleAssistConfig(header: ParsedHeader): AngleAssistConfigResponse {
+  const v = header.view;
+  const flags = v.getUint8(5), selected = v.getUint16(6, true), active = v.getUint16(8, true);
+  const pulseModel = v.getUint8(4) === 2;
+  if (![1,2].includes(v.getUint8(4)) || (flags & ~3) !== 0 || selected > 6000 || active > 6000 ||
+      (!(flags & 1) && selected !== 0) || (!(flags & 2) && active !== 0) ||
+      ((flags & 2) !== 0 && (flags & 1) === 0) || v.getUint16(10, true) !== (pulseModel ? 0 : 100) ||
+      v.getUint16(12, true) !== (pulseModel ? 0 : 200) || v.getUint8(15) !== 0)
+    fail("INVALID_FIELD", "角度助力配置读回字段无效");
+  return {...commonResponse(header, "angleAssistConfig"), kind: "angleAssistConfig",
+    selectedValid: (flags & 1) !== 0, activeValid: (flags & 2) !== 0,
+    selectedThresholdDegrees: flags & 1 ? selected / 100 : null,
+    activeThresholdDegrees: flags & 2 ? active / 100 : null,
+    hysteresisDegrees: pulseModel ? 0 : 1, rampMs: pulseModel ? 0 : 200, pulseModel,
+    configGeneration: v.getUint8(14)};
+}
+
+export const PulseDurationMode = Object.freeze({ FIXED: 0, PERIOD_SCALED: 1 });
+export type PulseTimingValues = {
+  durationMode: number; peakNm: number; fixedMs: number; ratio: number;
+  minimumMs: number; maximumMs: number; periodMinimumMs: number; periodMaximumMs: number;
+};
+export type PulseTimingResponse = CommonResponse & PulseTimingValues & { kind: "pulseTiming" };
+export type PulseWindowResponse = CommonResponse & {
+  kind: "pulseWindow"; resetDegrees: number; maximumDegrees: number; eventSpeedDegreesPerSecond: number;
+};
+export type PulseStatusResponse = CommonResponse & {
+  kind: "pulseStatus"; side: number; state: number; periodTrusted: boolean; rateLimited: boolean;
+  armed: boolean; exitReason: number; eventCount: number; pulseCount: number;
+  frozenDurationMs: number; estimatedPeriodMs: number; frozenPeakNm: number; progress: number;
+};
+export const pulseStateDescriptions: Readonly<Record<number,string>> = Object.freeze({
+  0: "等待本侧复位", 1: "等待新的前抬事件", 2: "确认前抬事件", 3: "本次脉冲进行中", 4: "等待下一次复位",
+});
+export const pulseExitDescriptions: Readonly<Record<number,string>> = Object.freeze({
+  0: "无", 1: "本次脉冲结束", 2: "运动方向反转，已清零", 3: "超出角度窗口，已清零",
+  4: "事件未通过确认", 5: "本侧周期尚不可信，未产生助力", 6: "反馈失效，已清零",
+  7: "已停止摆腿或低速保持，提前清零",
+});
+function validatePulseTiming(t: PulseTimingValues): void {
+  const integer = (n: number, min: number, max: number) => Number.isInteger(n) && n >= min && n <= max;
+  if (!integer(t.durationMode,0,1) || !Number.isFinite(t.peakNm) || t.peakNm<0 || t.peakNm>15 ||
+      Math.abs(t.peakNm*1000-Math.round(t.peakNm*1000))>1e-7 ||
+      !integer(t.fixedMs,100,EXO_BLE.PULSE_FIXED_MAX_MS) || !Number.isFinite(t.ratio) || t.ratio<0.1 || t.ratio>0.6 ||
+      Math.abs(t.ratio*1000-Math.round(t.ratio*1000))>1e-7 ||
+      !integer(t.minimumMs,100,2000) || !integer(t.maximumMs,100,2000) || t.minimumMs>t.maximumMs ||
+      !integer(t.periodMinimumMs,300,5000) || !integer(t.periodMaximumMs,300,5000) ||
+      t.periodMinimumMs>=t.periodMaximumMs) fail("INVALID_PAYLOAD","脉冲参数范围或时长关系无效");
+}
+/** bit13原义是至少支持5 N·m，新范围必须核对已知固件版本。 */
+export function hasExtendedPulseLimits(capabilities: number, firmware: readonly number[] = []): boolean {
+  return ["0.10.12", "0.10.13"].includes(firmware.join(".")) &&
+    (capabilities & (Capability.ANGLE_ASSIST_5NM | Capability.SWING_EVENT_PULSE)) ===
+      (Capability.ANGLE_ASSIST_5NM | Capability.SWING_EVENT_PULSE);
+}
+export function assertPulseTimingCapability(t: PulseTimingValues, capabilities: number,
+  firmware: readonly number[] = []): void {
+  validatePulseTiming(t);
+  if ((capabilities & Capability.SWING_EVENT_PULSE) === 0 ||
+      (!hasExtendedPulseLimits(capabilities, firmware) && (t.peakNm > 5 || t.fixedMs > 2000)))
+    fail("INVALID_PAYLOAD", "15 N·m申请峰值与3000 ms固定脉冲需要0.10.12固件，草稿未写入");
+}
+/** 同一v1帧格式的历史固件保留其真实速率，不能给0.10.12显示20。 */
+export function pulseRiseLimitNmPerSecond(capabilities: number, firmware: readonly number[] = []): number | null {
+  if ((capabilities & Capability.SWING_EVENT_PULSE) === 0) return null;
+  const version=firmware.join(".");
+  if (version==="0.10.13") return 20;
+  return ["0.10.10", "0.10.11", "0.10.12"].includes(version) ? 10 : null;
+}
+export function encodePulseTimingPayload(t: PulseTimingValues): Uint8Array<ArrayBuffer> {
+  validatePulseTiming(t);
+  const b = new Uint8Array(16), v = new DataView(b.buffer);
+  b[0]=1; b[1]=t.durationMode;
+  [Math.round(t.peakNm*1000),t.fixedMs,Math.round(t.ratio*1000),t.minimumMs,t.maximumMs,
+    t.periodMinimumMs,t.periodMaximumMs].forEach((n,i)=>v.setUint16(2+i*2,n,true));
+  return b;
+}
+export function encodePulseWindowPayload(resetDegrees: number, maximumDegrees: number): Uint8Array<ArrayBuffer> {
+  if (![resetDegrees,maximumDegrees].every(Number.isFinite) || resetDegrees< -30 || resetDegrees>59 ||
+      maximumDegrees<3 || maximumDegrees>90 || maximumDegrees-resetDegrees<3 ||
+      [resetDegrees,maximumDegrees].some(n=>Math.abs(n*100-Math.round(n*100))>1e-7))
+    fail("INVALID_PAYLOAD","复位角/允许角度上限无效，精度0.01°");
+  const b=new Uint8Array(4),v=new DataView(b.buffer);
+  v.setInt16(0,Math.round(resetDegrees*100),true);v.setUint16(2,Math.round(maximumDegrees*100),true);
+  return b;
+}
+function readPulseTiming(v: DataView, offset: number): PulseTimingValues {
+  if(v.getUint8(offset)!==1) fail("INVALID_FIELD","不支持的脉冲参数格式");
+  const t={durationMode:v.getUint8(offset+1),peakNm:v.getUint16(offset+2,true)/1000,
+    fixedMs:v.getUint16(offset+4,true),ratio:v.getUint16(offset+6,true)/1000,
+    minimumMs:v.getUint16(offset+8,true),maximumMs:v.getUint16(offset+10,true),
+    periodMinimumMs:v.getUint16(offset+12,true),periodMaximumMs:v.getUint16(offset+14,true)};
+  validatePulseTiming(t);return t;
+}
+
 export function encodeRequest(
   opcode: number,
   requestId: number,
@@ -1039,10 +1514,31 @@ export function encodeRequest(
       payloadBytes[0] !== Side.LEFT && payloadBytes[0] !== Side.RIGHT) {
     fail("INVALID_PAYLOAD", `invalid side value ${payloadBytes[0]}`);
   }
+  if (opcode===Opcode.SET_PULSE_TIMING) readPulseTiming(new DataView(payloadBytes.buffer,payloadBytes.byteOffset,payloadBytes.byteLength),0);
+  if (opcode===Opcode.SET_PULSE_WINDOW) {
+    const v=new DataView(payloadBytes.buffer,payloadBytes.byteOffset,payloadBytes.byteLength);
+    encodePulseWindowPayload(v.getInt16(0,true)/100,v.getUint16(2,true)/100);
+  }
+  if ([Opcode.SET_ASSIST_CONFIG, Opcode.SET_ASSIST_CONFIG_WITH_LIMIT, Opcode.SET_ANGLE_ASSIST_CONFIG].some((candidate) => candidate === opcode)) {
+    const threshold = payloadBytes[3] === AssistStrategy.ANGLE_THRESHOLD;
+    if (threshold !== (opcode === Opcode.SET_ANGLE_ASSIST_CONFIG) || (threshold && payloadBytes[4] !== 0))
+      fail("INVALID_PAYLOAD", "角度策略必须通过专用原子配置命令写入");
+    if (threshold) {
+      const angle = new DataView(payloadBytes.buffer, payloadBytes.byteOffset, payloadBytes.byteLength).getUint16(10, true);
+      if (angle < 100 || angle > 6000) fail("INVALID_PAYLOAD", "前抬角度阈值须在1–60°内");
+    }
+  }
   if (opcode === Opcode.SET_CONTROL_CONFIG) {
     selectedControlModeName(payloadBytes[0], "selected mode");
     requireNamedCode(payloadBytes[1], referenceSourceNames, "selected reference");
   }
+  if (opcode === Opcode.TEACH_DIRECTION &&
+      ((payloadBytes[0] !== Side.LEFT && payloadBytes[0] !== Side.RIGHT) ||
+       payloadBytes[1] > DirectionTeachAction.CANCEL || payloadBytes[2] === 0)) {
+    fail("INVALID_PAYLOAD", "方向示教需要有效side、action和非零会话token");
+  }
+  if (opcode === Opcode.SAVED_ZERO_ACTION && (payloadBytes[0] > SavedZeroAction.CAPTURE_PAIR || payloadBytes[1] !== 1))
+    fail("INVALID_PAYLOAD", "零位候选操作需要有效action和明确确认标志");
   if (opcode === Opcode.SET_JOINT_COMMAND) {
     try {
       readJointCommandWire(new DataView(payloadBytes.buffer), 0);
@@ -1053,7 +1549,7 @@ export function encodeRequest(
       throw caught;
     }
   }
-  if (opcode === Opcode.SET_ASSIST_CONFIG) {
+  if (opcode === Opcode.SET_ASSIST_CONFIG || opcode === Opcode.SET_ASSIST_CONFIG_WITH_LIMIT || opcode === Opcode.SET_ANGLE_ASSIST_CONFIG) {
     try {
       readAssistConfigWire(new DataView(
         payloadBytes.buffer,
@@ -1065,6 +1561,25 @@ export function encodeRequest(
         fail("INVALID_PAYLOAD", caught.message);
       }
       throw caught;
+    }
+  }
+  if ((opcode === Opcode.SET_ASSIST_CONFIG_WITH_LIMIT || opcode === Opcode.SET_ANGLE_ASSIST_CONFIG) &&
+      new DataView(payloadBytes.buffer, payloadBytes.byteOffset, payloadBytes.byteLength)
+        .getUint16(8, true) > (opcode === Opcode.SET_ANGLE_ASSIST_CONFIG
+          ? EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM : EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM)) {
+    fail("INVALID_PAYLOAD", "maximum assistance exceeds firmware engineering limit");
+  }
+  if (opcode === Opcode.START_TELEMETRY) {
+    const rateHz = payloadBytes[0];
+    const channelMask = new DataView(
+      payloadBytes.buffer,
+      payloadBytes.byteOffset,
+      payloadBytes.byteLength,
+    ).getUint16(1, true);
+    if ((rateHz !== 5 && rateHz !== 10 && rateHz !== 20) ||
+        channelMask === 0 ||
+        (channelMask & ~EXO_BLE.TELEMETRY_CHANNEL_MASK) !== 0) {
+      fail("INVALID_PAYLOAD", "invalid telemetry rate or channel mask");
     }
   }
 
@@ -1259,6 +1774,38 @@ function parseJointStatus(header: ParsedHeader): JointStatusResponse {
   };
 }
 
+function parseCalibrationStatus(header: ParsedHeader): CalibrationStatusResponse {
+  const side = header.raw[4];
+  const actuator = header.raw[5];
+  const canId = header.raw[6];
+  const direction = header.raw[7];
+  const jointFlags = header.raw[8];
+  if ((side !== Side.LEFT && side !== Side.RIGHT) ||
+      (actuator !== 0 && actuator !== 1 && actuator !== 255) ||
+      (canId > 127 && canId !== 255) || header.raw[9] !== 0 ||
+      (jointFlags & ~EXO_BLE.JOINT_FLAGS_MASK) !== 0) {
+    fail("INVALID_FIELD", "invalid calibration side/mapping/flags/reserved field");
+  }
+  const flags = decodeJointFlags(jointFlags);
+  if (flags.mappingValid && (actuator === 255 || canId === 255)) {
+    fail("INVALID_FIELD", "valid calibration mapping cannot be unknown");
+  }
+  const raw = header.view.getInt32(10, true);
+  const zero = header.view.getInt32(14, true);
+  // INT32_MIN是缺失标志。离线/无零位时不能把传输填充值显示为真实人体角度。
+  return {
+    ...commonResponse(header, "calibrationStatus"),
+    kind: "calibrationStatus", side, actuator, canId, direction, jointFlags,
+    directionName: requireNamedCode(direction, directionNames, "calibration direction"),
+    decodedJointFlags: flags,
+    rawPositionDegrees: flags.feedbackValid && flags.online && raw !== -2147483648
+      ? mradToDegrees(raw) : null,
+    softwareZeroDegrees: flags.zeroValid && zero !== -2147483648
+      ? mradToDegrees(zero) : null,
+    feedbackAgeMs: header.view.getUint16(18, true),
+  };
+}
+
 function parseControlConfig(header: ParsedHeader): ControlConfigResponse {
   const selectedMode = header.raw[4];
   const activeMode = header.raw[5];
@@ -1412,6 +1959,46 @@ function parseGaitStatus(header: ParsedHeader): GaitStatusResponse {
   };
 }
 
+function parseAssistTorqueLimit(header: ParsedHeader): AssistTorqueLimitResponse {
+  const flags = header.raw[5];
+  const selected = header.view.getUint16(6, true);
+  const active = header.view.getUint16(8, true);
+  const hard = header.view.getUint16(10, true);
+  const selectedValid = Boolean(flags & 1);
+  const activeValid = Boolean(flags & 2);
+  if (header.raw[4] !== 1 || (flags & ~3) !== 0 ||
+      (hard !== EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM && hard !== EXO_BLE.LEGACY_ANGLE_ASSIST_TORQUE_HARD_MAX_MNM &&
+        hard !== EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM) ||
+      selected > hard || active > hard || (!selectedValid && selected !== 0) ||
+      (!activeValid && active !== 0) || (activeValid && !selectedValid)) {
+    fail("INVALID_FIELD", "invalid assistance torque limit snapshot");
+  }
+  return {...commonResponse(header, "assistTorqueLimit"), kind: "assistTorqueLimit",
+    selectedValid, activeValid, selectedMaximumNm: selectedValid ? selected / 1000 : null,
+    activeMaximumNm: activeValid ? active / 1000 : null, hardMaximumNm: hard / 1000};
+}
+
+/** INFO版本/能力和GET上限必须一致；网页新范围不放宽旧设备。 */
+export function assertAssistTorqueLimitCapability(response: AssistTorqueLimitResponse,
+  capabilities: number, firmware: readonly number[] = []): void {
+  const expected = (hasExtendedPulseLimits(capabilities, firmware) ? EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM
+    : (capabilities & Capability.ANGLE_ASSIST_5NM) !== 0
+      ? EXO_BLE.LEGACY_ANGLE_ASSIST_TORQUE_HARD_MAX_MNM : EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM) / 1000;
+  if (response.hardMaximumNm !== expected)
+    fail("INVALID_FIELD", "设备助力上限与INFO能力声明不一致，请重新连接核对固件");
+}
+
+/** 返回当前设备与策略共同允许的峰值。相位工程曲线始终保持0.5 N·m。 */
+export function assistTorqueMaximumNm(strategyId: number, capabilities: number,
+  reportedMaximumNm: number | null, firmware: readonly number[] = []): number {
+  const declared = strategyId === AssistStrategy.ANGLE_THRESHOLD &&
+    (capabilities & Capability.ANGLE_ASSIST_5NM) !== 0
+    ? (hasExtendedPulseLimits(capabilities, firmware) ? EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM
+        : EXO_BLE.LEGACY_ANGLE_ASSIST_TORQUE_HARD_MAX_MNM) / 1000
+    : EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM / 1000;
+  return Math.min(declared, reportedMaximumNm ?? EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM / 1000);
+}
+
 function parseAssistConfig(header: ParsedHeader): AssistConfigResponse {
   const schemaVersion = header.raw[4];
   const selectedMode = header.raw[5];
@@ -1497,6 +2084,177 @@ function parseAssistConfig(header: ParsedHeader): AssistConfigResponse {
   };
 }
 
+function parseTelemetryStatus(header: ParsedHeader): TelemetryStatusResponse {
+  const streamingRaw = header.raw[4];
+  const rateHz = header.raw[5];
+  const channelMask = header.view.getUint16(6, true);
+  const queuedSamples = header.raw[18];
+  const queueCapacity = header.raw[19];
+
+  if (streamingRaw > 1) {
+    fail("INVALID_FIELD", "telemetry streaming flag must be 0 or 1");
+  }
+  if (rateHz !== 0 && rateHz !== 5 && rateHz !== 10 && rateHz !== 20) {
+    fail("INVALID_FIELD", "telemetry status rate must be 0, 5, 10, or 20 Hz");
+  }
+  if ((channelMask & ~EXO_BLE.TELEMETRY_CHANNEL_MASK) !== 0) {
+    fail("INVALID_FIELD", "telemetry status contains unknown channel bits");
+  }
+  if (streamingRaw === 1 && (rateHz === 0 || channelMask === 0)) {
+    fail("INVALID_FIELD", "active telemetry stream needs a rate and at least one channel");
+  }
+  if (queuedSamples > queueCapacity) {
+    fail("INVALID_FIELD", "telemetry queued sample count exceeds capacity");
+  }
+
+  return {
+    ...commonResponse(header, "telemetryStatus"),
+    kind: "telemetryStatus",
+    streaming: streamingRaw === 1,
+    rateHz,
+    channelMask,
+    streamSequence: header.view.getUint16(8, true),
+    notifySuccessCount: header.view.getUint32(10, true),
+    droppedSampleCount: header.view.getUint32(14, true),
+    queuedSamples,
+    queueCapacity,
+  };
+}
+
+export const telemetryChannelNames: Readonly<Record<number, string>> = Object.freeze({
+  [TelemetryChannel.POSITION]: "POSITION",
+  [TelemetryChannel.VELOCITY]: "VELOCITY",
+  [TelemetryChannel.MOTOR_TORQUE]: "MOTOR_TORQUE",
+  [TelemetryChannel.GAIT_PHASE]: "GAIT_PHASE",
+  [TelemetryChannel.ASSIST_SUGGESTION]: "ASSIST_SUGGESTION",
+  [TelemetryChannel.GAIT_CONFIDENCE]: "GAIT_CONFIDENCE",
+  [TelemetryChannel.APPLIED_TORQUE]: "APPLIED_TORQUE",
+});
+
+/**
+ * 解析独立 Telemetry characteristic 的固定20字节 Notify。
+ * 注意它没有命令协议的4字节帧头，也不参与 request_id 事务关联。
+ */
+export function parseTelemetryPacket(source: BufferSource): ExoTelemetryPacket {
+  const raw = copyBufferSource(source, "telemetry packet");
+  if (raw.length !== EXO_BLE.TELEMETRY_PACKET_SIZE) {
+    fail(
+      "INVALID_FRAME_LENGTH",
+      `telemetry packet must be exactly ${EXO_BLE.TELEMETRY_PACKET_SIZE} bytes`,
+    );
+  }
+
+  const schemaVersion = raw[0];
+  const packetType = raw[1];
+  if (schemaVersion !== EXO_BLE.TELEMETRY_SCHEMA_VERSION ||
+      packetType !== TelemetryPacketType.SAMPLE) {
+    return { kind: "unknown", schemaVersion, packetType, raw };
+  }
+
+  const channel = raw[2];
+  const flags = raw[3];
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  const unsignedChannel = channel === TelemetryChannel.GAIT_PHASE ||
+    channel === TelemetryChannel.GAIT_CONFIDENCE;
+  const leftRaw = unsignedChannel ? view.getUint16(16, true) : view.getInt16(16, true);
+  const rightRaw = unsignedChannel ? view.getUint16(18, true) : view.getInt16(18, true);
+  const wireInvalid = unsignedChannel ? EXO_BLE.INVALID_U16 : EXO_BLE.TELEMETRY_INVALID_SIGNED;
+  const leftFlagValid = (flags & TelemetryFlag.LEFT_VALID) !== 0;
+  const rightFlagValid = (flags & TelemetryFlag.RIGHT_VALID) !== 0;
+  const leftValid = leftFlagValid && leftRaw !== wireInvalid;
+  const rightValid = rightFlagValid && rightRaw !== wireInvalid;
+
+  let unit: TelemetrySamplePacket["unit"] = "raw";
+  let convert = (value: number): number => value;
+  switch (channel) {
+    case TelemetryChannel.POSITION:
+      unit = "deg";
+      convert = mradToDegrees;
+      break;
+    case TelemetryChannel.VELOCITY:
+      unit = "deg/s";
+      convert = (value) => value * 0.01 * 180 / Math.PI;
+      break;
+    case TelemetryChannel.MOTOR_TORQUE:
+    case TelemetryChannel.ASSIST_SUGGESTION:
+    case TelemetryChannel.APPLIED_TORQUE:
+      unit = "N·m";
+      convert = (value) => value / 1000;
+      break;
+    case TelemetryChannel.GAIT_PHASE:
+    case TelemetryChannel.GAIT_CONFIDENCE:
+      unit = "%";
+      convert = (value) => value / 100;
+      break;
+  }
+
+  return {
+    kind: "sample",
+    schemaVersion,
+    packetType,
+    raw,
+    channel,
+    channelName: telemetryChannelNames[channel] ??
+      `UNKNOWN(0x${channel.toString(16).padStart(2, "0")})`,
+    flags,
+    unknownFlags: flags & ~EXO_BLE.TELEMETRY_FLAGS_MASK,
+    leftValid,
+    rightValid,
+    outputAllowed: (flags & TelemetryFlag.OUTPUT_ALLOWED) !== 0,
+    realOutputEnabled: (flags & TelemetryFlag.REAL_OUTPUT_ENABLED) !== 0,
+    systemState: (flags & TelemetryFlag.SYSTEM_STATE_MASK) >>
+      TelemetryFlag.SYSTEM_STATE_SHIFT,
+    droppedSincePrevious: (flags & TelemetryFlag.DROPPED_SINCE_PREVIOUS) !== 0,
+    streamSequence: view.getUint16(4, true),
+    sampleSequence: view.getUint32(6, true),
+    timestampMs: view.getUint32(10, true),
+    activationEpochLow16: view.getUint16(14, true),
+    leftRaw,
+    rightRaw,
+    sentinelMismatch: leftFlagValid !== (leftRaw !== wireInvalid) ||
+      rightFlagValid !== (rightRaw !== wireInvalid),
+    leftValue: leftValid ? convert(leftRaw) : null,
+    rightValue: rightValid ? convert(rightRaw) : null,
+    unit,
+  };
+}
+
+function parseCanStatus(header: ParsedHeader): CanStatusResponse {
+  const state = header.view.getUint8(4);
+  const flags = header.view.getUint8(5);
+  const a = header.view.getUint8(18), b = header.view.getUint8(19);
+  if (state > 4 || (flags & ~3) !== 0 || (a & ~31) !== 0 || (b & ~31) !== 0)
+    fail("INVALID_FIELD", "invalid CAN status flags/state");
+  return {
+    ...commonResponse(header, "canStatus"), kind: "canStatus", state,
+    stateName: ["STOPPED", "RUNNING", "BUS_OFF", "RECOVERING", "UNAVAILABLE"][state],
+    usable: (flags & 1) !== 0, restoreAllowed: (flags & 2) !== 0,
+    txErrorCounter: header.view.getUint16(6, true), rxErrorCounter: header.view.getUint16(8, true),
+    busErrorCount: header.view.getUint32(10, true), txFailedCount: header.view.getUint16(14, true),
+    rxMissedCount: header.view.getUint16(16, true), motorFlags: [a, b],
+  };
+}
+
+function parseSavedZeroStatus(header: ParsedHeader): SavedZeroStatusResponse {
+  const v = header.view;
+  const side = v.getUint8(4), actuator = v.getUint8(5), canId = v.getUint8(6), direction = v.getUint8(7);
+  const flags = v.getUint8(8), reason = v.getUint8(9);
+  const saved = v.getInt32(12, true), preview = v.getInt32(16, true), invalid = -2147483648;
+  const stored = (flags & 1) !== 0, bindingMatches = (flags & 2) !== 0;
+  const previewValid = (flags & 4) !== 0, reuseReady = (flags & 8) !== 0;
+  if ((side !== Side.LEFT && side !== Side.RIGHT) || (actuator > 1 && actuator !== 255) ||
+      (canId > 127 && canId !== 255) || direction > 2 || (flags & ~15) !== 0 || reason > 13 ||
+      v.getUint16(10, true) !== 0 || stored !== (saved !== invalid) || previewValid !== (preview !== invalid) ||
+      (bindingMatches && (!stored || actuator > 1 || canId > 127 || direction === 0)) ||
+      (stored && Math.abs(saved) > 720000) || (previewValid && (!stored || !bindingMatches || Math.abs(preview) > 720000)) ||
+      ((reason === 0) !== reuseReady) || (reuseReady && (flags !== 15 || Math.abs(preview) > 5000)))
+    fail("INVALID_FIELD", "invalid saved zero status or preview");
+  return {...commonResponse(header, "savedZeroStatus"), kind:"savedZeroStatus", side, actuator, canId, direction,
+    stored, bindingMatches, previewValid, reuseReady, reason,
+    savedZeroDegrees: stored ? saved / 1000 : null,
+    previewJointDegrees: previewValid ? preview / 1000 : null};
+}
+
 export function parseResponse(source: BufferSource): ExoBleResponse {
   const header = parseHeader(source);
 
@@ -1510,6 +2268,12 @@ export function parseResponse(source: BufferSource): ExoBleResponse {
   }
 
   switch (header.opcode) {
+    case responseOpcodes.SAVED_ZERO:
+      if (header.payloadLength !== 16) fail("INVALID_FRAME_LENGTH", "SAVED_ZERO payload must be 16 bytes");
+      return parseSavedZeroStatus(header);
+    case responseOpcodes.CAN_STATUS:
+      if (header.payloadLength !== 16) fail("INVALID_FRAME_LENGTH", "CAN_STATUS payload must be 16 bytes");
+      return parseCanStatus(header);
     case responseOpcodes.INFO:
       if (header.payloadLength !== 12) {
         fail("INVALID_FRAME_LENGTH", "INFO payload must be 12 bytes or a 4-byte ACK");
@@ -1525,6 +2289,11 @@ export function parseResponse(source: BufferSource): ExoBleResponse {
         fail("INVALID_FRAME_LENGTH", "JOINT_STATUS payload must be 13 bytes or a 4-byte ACK");
       }
       return parseJointStatus(header);
+    case responseOpcodes.CALIBRATION_STATUS:
+      if (header.payloadLength !== 16) {
+        fail("INVALID_FRAME_LENGTH", "CALIBRATION_STATUS payload must be 16 bytes or a 4-byte ACK");
+      }
+      return parseCalibrationStatus(header);
     case responseOpcodes.CONTROL_CONFIG:
       if (header.payloadLength !== 5) {
         fail("INVALID_FRAME_LENGTH", "CONTROL_CONFIG payload must be 5 bytes or a 4-byte ACK");
@@ -1545,6 +2314,41 @@ export function parseResponse(source: BufferSource): ExoBleResponse {
         fail("INVALID_FRAME_LENGTH", "ASSIST_CONFIG payload must be 16 bytes or a 4-byte ACK");
       }
       return parseAssistConfig(header);
+    case responseOpcodes.ANGLE_ASSIST_CONFIG:
+      if (header.payloadLength !== 12) fail("INVALID_FRAME_LENGTH", "ANGLE_ASSIST_CONFIG payload must be 12 bytes");
+      return parseAngleAssistConfig(header);
+    case responseOpcodes.PULSE_TIMING:
+      if(header.payloadLength!==16) fail("INVALID_FRAME_LENGTH","PULSE_TIMING长度须为16");
+      return {...commonResponse(header,"pulseTiming"),kind:"pulseTiming",...readPulseTiming(header.view,4)};
+    case responseOpcodes.PULSE_WINDOW: {
+      if(header.payloadLength!==8) fail("INVALID_FRAME_LENGTH","PULSE_WINDOW长度须为8");
+      const v=header.view,resetDegrees=v.getInt16(6,true)/100,maximumDegrees=v.getUint16(8,true)/100;
+      if(v.getUint8(4)!==1 || v.getUint8(5)!==0 || v.getUint16(10,true)!==500)
+        fail("INVALID_FIELD","脉冲角度窗口格式无效");
+      encodePulseWindowPayload(resetDegrees,maximumDegrees);
+      return {...commonResponse(header,"pulseWindow"),kind:"pulseWindow",resetDegrees,maximumDegrees,eventSpeedDegreesPerSecond:5};
+    }
+    case responseOpcodes.PULSE_STATUS: {
+      if(header.payloadLength!==16) fail("INVALID_FRAME_LENGTH","PULSE_STATUS长度须为16");
+      const v=header.view,side=v.getUint8(4),state=v.getUint8(5),flags=v.getUint8(6),exitReason=v.getUint8(7);
+      const frozenDurationMs=v.getUint16(12,true),estimatedPeriodMs=v.getUint16(14,true),
+        frozenPeakNm=v.getUint16(16,true)/1000,progress=v.getUint16(18,true)/10000;
+      if(side>1 || state>4 || (flags&~7)!==0 || exitReason>7 || frozenDurationMs>EXO_BLE.PULSE_FIXED_MAX_MS || estimatedPeriodMs>5000 ||
+        frozenPeakNm>15 || progress>1) fail("INVALID_FIELD","脉冲状态字段无效");
+      return {...commonResponse(header,"pulseStatus"),kind:"pulseStatus",side,state,periodTrusted:(flags&1)!==0,
+        rateLimited:(flags&2)!==0,armed:(flags&4)!==0,exitReason,eventCount:v.getUint16(8,true),
+        pulseCount:v.getUint16(10,true),frozenDurationMs,estimatedPeriodMs,frozenPeakNm,progress};
+    }
+    case responseOpcodes.ASSIST_TORQUE_LIMIT:
+      if (header.payloadLength !== 8) {
+        fail("INVALID_FRAME_LENGTH", "ASSIST_TORQUE_LIMIT payload must be 8 bytes or a 4-byte ACK");
+      }
+      return parseAssistTorqueLimit(header);
+    case responseOpcodes.TELEMETRY_STATUS:
+      if (header.payloadLength !== 16) {
+        fail("INVALID_FRAME_LENGTH", "TELEMETRY_STATUS payload must be 16 bytes or a 4-byte ACK");
+      }
+      return parseTelemetryStatus(header);
     default:
       return fail(
         "UNKNOWN_RESPONSE",

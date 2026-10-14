@@ -3,3 +3,6 @@ docs/baseline/evidence/raw/*.txt binary
 
 # Keep structured evidence stable across Windows and Unix checkouts.
 docs/baseline/evidence/*.json text eol=lf
+
+# 原始验收证据按字节保存，避免 Windows CRLF 转换改变已公布的 SHA256。
+docs/phase10/evidence/** -text

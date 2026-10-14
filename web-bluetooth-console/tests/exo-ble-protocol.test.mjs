@@ -1,6 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+test("CAN诊断固定20字节，保留历史大计数、区分上报意图与在线", () => {
+  const frame = new Uint8Array(20);
+  frame.set([1, 0x9b, 42, 16, 1, 3]);
+  const view = new DataView(frame.buffer);
+  view.setUint16(6, 0, true); view.setUint16(8, 124, true);
+  view.setUint32(10, 729178843, true);
+  view.setUint16(14, 65535, true); view.setUint16(16, 0, true);
+  frame[18] = 1 | 4 | 16; frame[19] = 1 | 2 | 4;
+  const status = parseResponse(frame);
+  assert.equal(status.kind, "canStatus");
+  assert.equal(status.busErrorCount, 729178843);
+  assert.equal(status.rxErrorCounter, 124);
+  assert.equal(status.txFailedCount, 65535);
+  assert.equal(status.motorFlags[0] & 2, 0);
+  assert.equal(status.motorFlags[1] & 2, 2);
+  assertCorrelated(status, Opcode.GET_CAN_STATUS, 42);
+  frame[4] = 2; frame[5] = 0;
+  const fault = parseResponse(frame);
+  assert.equal(fault.stateName, "BUS_OFF"); assert.equal(fault.restoreAllowed, false);
+  frame[4] = 5;
+  assert.throws(() => parseResponse(frame), /invalid CAN/);
+});
+
+test("反馈恢复请求为空负载ACK；不与START混淆，拒绝错误长度", () => {
+  assert.deepEqual([...encodeRequest(Opcode.RESTORE_FEEDBACK, 10)], [1, 0x1c, 10, 0]);
+  assert.deepEqual([...encodeRequest(Opcode.GET_CAN_STATUS, 11)], [1, 0x1b, 11, 0]);
+  const ack = parseResponse(Uint8Array.of(1, 0x9c, 10, 4, 1, 1, 0, 0));
+  assert.equal(ack.kind, "ack"); assertCorrelated(ack, Opcode.RESTORE_FEEDBACK, 10);
+  assert.throws(() => assertCorrelated(ack, Opcode.START, 10));
+  assert.throws(() => encodeRequest(Opcode.RESTORE_FEEDBACK, 10, Uint8Array.of(1)));
+  assert.throws(() => parseResponse(Uint8Array.of(1, 0x9b, 11, 1, 1)), /CAN_STATUS payload/);
+});
+
 import {
   AssistExecutionState,
   AssistMode,
@@ -8,6 +41,7 @@ import {
   AssistUnavailableReason,
   Capability,
   ControlMode,
+  DirectionTeachAction,
   EXO_BLE,
   ExoBleProtocolError,
   GaitEstimator,
@@ -16,7 +50,11 @@ import {
   Opcode,
   ReferenceSource,
   Side,
+  TelemetryChannel,
+  TelemetryPacketType,
   assertCorrelated,
+  assistUnavailableReasonDescriptions,
+  blockReasonDescriptions,
   blockReasonNames,
   decodeJointFlags,
   decodeSystemFlags,
@@ -24,9 +62,12 @@ import {
   encodeRequest,
   encodeControlConfigPayload,
   encodeAssistConfigPayload,
+  encodeAssistConfigWithLimitPayload,
   encodeJointCommandPayload,
+  encodeTelemetryStartPayload,
   mradToDegrees,
   parseResponse,
+  parseTelemetryPacket,
   resultNames,
   stateNames,
   stepNames,
@@ -50,12 +91,89 @@ function expectProtocolError(action, code) {
   });
 }
 
+test("0.10.3 atomically writes maximum Nm with assist configuration and preserves legacy format", () => {
+  const config = {selectedMode: AssistMode.ACTIVE_PHASE, requestedExecutionState: AssistExecutionState.ACTIVE,
+    strategyId: AssistStrategy.PHASE_PROFILE, profileId: 1, leftLevelPercent: 10, rightLevelPercent: 50};
+  const payload = encodeAssistConfigWithLimitPayload(config, 0.2);
+  assert.deepEqual(encodeRequest(Opcode.SET_ASSIST_CONFIG_WITH_LIMIT, 0x32, payload),
+    fromHex("01 19 32 0a 01 02 02 02 01 0a 32 00 c8 00"));
+  assert.equal(encodeAssistConfigWithLimitPayload(config, 0).at(8), 0);
+  assert.deepEqual(encodeAssistConfigWithLimitPayload(config, 0.5).slice(8), fromHex("f4 01"));
+  for (const invalid of [-0.001, 0.501, NaN, Infinity, 0.1234]) {
+    expectProtocolError(() => encodeAssistConfigWithLimitPayload(config, invalid), "INVALID_PAYLOAD");
+  }
+  const invalid = Uint8Array.from(payload); invalid[8] = 245; invalid[9] = 1;
+  expectProtocolError(() => encodeRequest(Opcode.SET_ASSIST_CONFIG_WITH_LIMIT, 0x32, invalid), "INVALID_PAYLOAD");
+  assert.equal(encodeAssistConfigPayload(config).length, 8);
+  assert.equal(encodeRequest(Opcode.SET_ASSIST_CONFIG, 0x32, encodeAssistConfigPayload(config)).length, 12);
+});
+
+test("torque readback distinguishes selected and active, converts mNm at the boundary", () => {
+  assert.deepEqual(encodeRequest(Opcode.GET_ASSIST_TORQUE_LIMIT, 0x31), fromHex("01 0a 31 00"));
+  const raw = fromHex("01 8a 31 08 01 01 c8 00 00 00 f4 01");
+  const saved = parseResponse(raw);
+  assert.equal(saved.kind, "assistTorqueLimit");
+  assert.equal(saved.selectedMaximumNm, 0.2);
+  assert.equal(saved.activeMaximumNm, null);
+  assert.equal(saved.hardMaximumNm, 0.5);
+  assertCorrelated(saved, Opcode.GET_ASSIST_TORQUE_LIMIT, 0x31);
+  const active = Uint8Array.from(raw); active[5] = 3; active[8] = 123;
+  assert.equal(parseResponse(active).activeMaximumNm, 0.123);
+  active[5] = 1;
+  expectProtocolError(() => parseResponse(active), "INVALID_FIELD");
+  const oversized = Uint8Array.from(raw); oversized[6] = 245; oversized[7] = 1;
+  expectProtocolError(() => parseResponse(oversized), "INVALID_FIELD");
+});
+
+test("direction teaching keeps side/action/session token distinct and correlates ACK", () => {
+  for (const side of [Side.LEFT, Side.RIGHT]) {
+    for (const action of Object.values(DirectionTeachAction)) {
+      const frame = encodeRequest(Opcode.TEACH_DIRECTION, 0x33, Uint8Array.of(side, action, 0x52));
+      assert.deepEqual(frame, Uint8Array.of(1, 0x1a, 0x33, 3, side, action, 0x52));
+    }
+  }
+  for (const payload of [[], [0, 0], [0, 0, 1, 2], [2, 0, 1], [0, 3, 1], [0, 0, 0]]) {
+    expectProtocolError(() => encodeRequest(Opcode.TEACH_DIRECTION, 0x33, Uint8Array.from(payload)), "INVALID_PAYLOAD");
+  }
+  const ack = parseResponse(fromHex("01 9a 33 04 00 01 21 02"));
+  assert.equal(ack.kind, "ack");
+  assert.equal(ack.detail, 2);
+  assertCorrelated(ack, Opcode.TEACH_DIRECTION, 0x33);
+  const failed = parseResponse(fromHex("01 9a 33 04 10 01 21 07"));
+  assert.equal(failed.resultName, "REJECTED_NOT_READY");
+  assert.equal(failed.detail, 7);
+  assert.equal(Capability.DIRECTION_TEACHING, 0x0400);
+});
+
+test("calibration reads actual mapping and uses absent markers instead of false zero", () => {
+  assert.deepEqual(encodeRequest(Opcode.GET_CALIBRATION_STATUS, 0x31, Uint8Array.of(Side.LEFT)),
+    fromHex("01 09 31 01 00"));
+  const raw = fromHex("01 89 25 10 00 01 20 01 1b 00 0b 02 00 00 00 00 00 80 01 00");
+  const parsed = parseResponse(raw);
+  assert.equal(parsed.kind, "calibrationStatus");
+  assert.equal(parsed.side, Side.LEFT);
+  assert.equal(parsed.actuator, 1);
+  assert.equal(parsed.canId, 0x20);
+  assert.equal(parsed.softwareZeroDegrees, null);
+  assert.ok(Math.abs(parsed.rawPositionDegrees - mradToDegrees(523)) < 1e-9);
+  const offline = Uint8Array.from(raw);
+  offline[8] = 3;
+  assert.equal(parseResponse(offline).rawPositionDegrees, null);
+  const corrupt = Uint8Array.from(raw);
+  corrupt[9] = 1;
+  expectProtocolError(() => parseResponse(corrupt), "INVALID_FIELD");
+  const wrongSide = Uint8Array.from(raw);
+  wrongSide[4] = 2;
+  expectProtocolError(() => parseResponse(wrongSide), "INVALID_FIELD");
+});
+
 test("exports the product BLE v1 constants", () => {
   assert.deepEqual(EXO_BLE, {
     DEVICE_NAME: "ESP-EXO",
     SERVICE_UUID: "f7a10001-6b5a-4d92-9e7c-3a1c8b640001",
     COMMAND_CHARACTERISTIC_UUID: "f7a10002-6b5a-4d92-9e7c-3a1c8b640001",
     RESPONSE_CHARACTERISTIC_UUID: "f7a10003-6b5a-4d92-9e7c-3a1c8b640001",
+    TELEMETRY_CHARACTERISTIC_UUID: "f7a10004-6b5a-4d92-9e7c-3a1c8b640001",
     PROTOCOL_VERSION: 1,
     HEADER_SIZE: 4,
     MAX_PAYLOAD_SIZE: 16,
@@ -69,13 +187,23 @@ test("exports the product BLE v1 constants", () => {
     ASSIST_FLAGS_MASK: 0x7f,
     ASSIST_EXECUTION_PACKED_RESERVED_MASK: 0xcc,
     SENSOR_MASK: 0x00ff,
-    CAPABILITIES_MASK: 0x003f,
+    CAPABILITIES_MASK: 0xffff,
+    ASSIST_TORQUE_HARD_MAX_MNM: 500,
+    ANGLE_ASSIST_TORQUE_HARD_MAX_MNM: 15000,
+    LEGACY_ANGLE_ASSIST_TORQUE_HARD_MAX_MNM: 5000,
+    PULSE_FIXED_MAX_MS: 3000,
     INVALID_U16: 0xffff,
     PHASE_X10000_MAX: 9999,
     CADENCE_X100_MAX: 30000,
     CONFIDENCE_X10000_MAX: 10000,
     ASSIST_CONFIG_SCHEMA_VERSION: 1,
     ASSIST_LEVEL_PERCENT_MAX: 100,
+    TELEMETRY_SCHEMA_VERSION: 1,
+    TELEMETRY_PACKET_SIZE: 20,
+    TELEMETRY_FLAGS_MASK: 0xff,
+    TELEMETRY_CHANNEL_MASK: 0x007f,
+    TELEMETRY_DEFAULT_CHANNEL_MASK: 0x0078,
+    TELEMETRY_INVALID_SIGNED: -32768,
     JOINT_POSITION_MRAD_MIN: -12570,
     JOINT_POSITION_MRAD_MAX: 12570,
     JOINT_VELOCITY_MRAD_S_MIN: -44000,
@@ -90,11 +218,17 @@ test("exports the product BLE v1 constants", () => {
   assert.equal(Capability.CONTROL_CONFIGURATION, 1 << 3);
   assert.equal(Capability.GAIT_STATUS, 1 << 4);
   assert.equal(Capability.ASSIST_CONFIGURATION, 1 << 5);
+  assert.equal(Capability.TELEMETRY_STREAM, 1 << 6);
+  assert.equal(Capability.ENGINEERING_TEST_STIMULUS, 1 << 7);
   assert.equal(Opcode.GET_GAIT_STATUS, 0x06);
   assert.equal(Opcode.GET_ASSIST_CONFIG, 0x07);
   assert.equal(Opcode.SET_ASSIST_CONFIG, 0x16);
+  assert.equal(Opcode.GET_TELEMETRY_STATUS, 0x08);
+  assert.equal(Opcode.START_TELEMETRY, 0x17);
+  assert.equal(Opcode.STOP_TELEMETRY, 0x18);
   assert.equal(ControlMode.IMPEDANCE, 6);
   assert.equal(ReferenceSource.SINE, 1);
+  assert.equal(ReferenceSource.ALTERNATING_SINE_TEST, 2);
 });
 
 test("encodes every published request as exactly one v1 frame", () => {
@@ -107,6 +241,7 @@ test("encodes every published request as exactly one v1 frame", () => {
     [Opcode.GET_JOINT_COMMAND, 0x35, Uint8Array.of(Side.LEFT), "01 05 35 01 00"],
     [Opcode.GET_GAIT_STATUS, 0x38, undefined, "01 06 38 00"],
     [Opcode.GET_ASSIST_CONFIG, 0x39, undefined, "01 07 39 00"],
+    [Opcode.GET_TELEMETRY_STATUS, 0x3a, undefined, "01 08 3A 00"],
     [Opcode.START, 0x2e, undefined, "01 10 2E 00"],
     [Opcode.STOP, 0x2f, undefined, "01 11 2F 00"],
     [Opcode.CAPTURE_ZERO, 0x30, Uint8Array.of(Side.LEFT), "01 12 30 01 00"],
@@ -145,11 +280,102 @@ test("encodes every published request as exactly one v1 frame", () => {
       }),
       "01 16 44 08 01 02 01 02 07 1E 28 00",
     ],
+    [
+      Opcode.START_TELEMETRY,
+      0x45,
+      encodeTelemetryStartPayload({ rateHz: 20, channelMask: 0x0078 }),
+      "01 17 45 03 14 78 00",
+    ],
+    [Opcode.STOP_TELEMETRY, 0x46, undefined, "01 18 46 00"],
   ];
 
   for (const [opcode, requestId, payload, expected] of vectors) {
     assert.equal(toHex(encodeRequest(opcode, requestId, payload)), expected);
   }
+});
+
+test("encodes and validates the stage 10 telemetry start payload", () => {
+  assert.equal(
+    toHex(encodeTelemetryStartPayload({ rateHz: 5, channelMask: TelemetryChannel.GAIT_PHASE })),
+    "05 08 00",
+  );
+  assert.equal(TelemetryPacketType.SAMPLE, 1);
+  expectProtocolError(
+    () => encodeTelemetryStartPayload({ rateHz: 7, channelMask: 0x08 }),
+    "INVALID_ARGUMENT",
+  );
+  expectProtocolError(
+    () => encodeTelemetryStartPayload({ rateHz: 20, channelMask: 0 }),
+    "INVALID_ARGUMENT",
+  );
+  expectProtocolError(
+    () => encodeRequest(Opcode.START_TELEMETRY, 1, Uint8Array.of(20, 0x80, 0x00)),
+    "INVALID_PAYLOAD",
+  );
+});
+
+test("parses the stage 10 telemetry status golden frame", () => {
+  const status = parseResponse(fromHex(
+    "01 88 55 10 01 14 78 00 34 12 04 03 02 01 05 00 00 00 02 10",
+  ));
+  assert.equal(status.kind, "telemetryStatus");
+  assert.equal(status.streaming, true);
+  assert.equal(status.rateHz, 20);
+  assert.equal(status.channelMask, 0x0078);
+  assert.equal(status.streamSequence, 0x1234);
+  assert.equal(status.notifySuccessCount, 0x01020304);
+  assert.equal(status.droppedSampleCount, 5);
+  assert.equal(status.queuedSamples, 2);
+  assert.equal(status.queueCapacity, 16);
+});
+
+test("parses typed stage 10 telemetry Notify without a command header", () => {
+  const phase = parseTelemetryPacket(fromHex(
+    "01 01 08 DF 34 12 04 03 02 01 44 33 22 11 67 45 C4 09 4C 1D",
+  ));
+  assert.equal(phase.kind, "sample");
+  assert.equal(phase.channel, TelemetryChannel.GAIT_PHASE);
+  assert.equal(phase.channelName, "GAIT_PHASE");
+  assert.equal(phase.streamSequence, 0x1234);
+  assert.equal(phase.sampleSequence, 0x01020304);
+  assert.equal(phase.timestampMs, 0x11223344);
+  assert.equal(phase.activationEpochLow16, 0x4567);
+  assert.equal(phase.leftValue, 25);
+  assert.equal(phase.rightValue, 75);
+  assert.equal(phase.droppedSincePrevious, true);
+  assert.equal(phase.systemState, 3);
+  assert.equal(phase.outputAllowed, true);
+  assert.equal(phase.realOutputEnabled, true);
+
+  const suggestion = parseTelemetryPacket(fromHex(
+    "01 01 10 C3 34 12 05 03 02 01 45 33 22 11 67 45 E8 03 0C FE",
+  ));
+  assert.equal(suggestion.kind, "sample");
+  assert.equal(suggestion.leftValue, 1);
+  assert.equal(suggestion.rightValue, -0.5);
+  assert.equal(suggestion.unit, "N·m");
+});
+
+test("keeps unknown telemetry packet types observable and detects sentinel mismatch", () => {
+  const unknown = parseTelemetryPacket(fromHex(
+    "02 7E 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+  ));
+  assert.equal(unknown.kind, "unknown");
+  assert.equal(unknown.schemaVersion, 2);
+  assert.equal(unknown.packetType, 0x7e);
+
+  const mismatch = parseTelemetryPacket(fromHex(
+    "01 01 20 03 01 00 01 00 00 00 01 00 00 00 01 00 FF FF 10 27",
+  ));
+  assert.equal(mismatch.kind, "sample");
+  assert.equal(mismatch.leftValue, null);
+  assert.equal(mismatch.rightValue, 100);
+  assert.equal(mismatch.sentinelMismatch, true);
+
+  expectProtocolError(
+    () => parseTelemetryPacket(Uint8Array.of(1, 1, 0)),
+    "INVALID_FRAME_LENGTH",
+  );
 });
 
 test("encodeRequest copies BufferSource payloads and enforces request schema", () => {
@@ -212,13 +438,14 @@ test("parses the current 0.7.1 INFO layout", () => {
   assert.deepEqual(response.firmware, [0, 7, 1]);
 });
 
-test("preserves unknown INFO capability bits for forward compatibility", () => {
+test("preserves the high INFO bit, now assigned to SWING_EVENT_PULSE", () => {
   const response = parseResponse(
     fromHex("01 81 01 0C 01 01 00 09 00 3F 80 14 78 56 34 12"),
   );
   assert.equal(response.kind, "info");
   assert.equal(response.capabilities, 0x803f);
-  assert.equal(response.unknownCapabilities, 0x8000);
+  assert.equal(response.capabilities & Capability.SWING_EVENT_PULSE, 0x8000);
+  assert.equal(response.unknownCapabilities, 0);
 });
 
 test("parses the Python SYSTEM_STATUS golden frame as little-endian", () => {
@@ -242,6 +469,21 @@ test("parses the Python SYSTEM_STATUS golden frame as little-endian", () => {
   assert.equal(response.lastRequestResult, 1);
   assert.equal(response.lastFailedStep, 0);
   assert.equal(response.transitionCount, 0x12345678);
+});
+
+test("parses RUN_CONTRACT_INVALID from SYSTEM_STATUS and START ACK", () => {
+  const status = parseResponse(fromHex(
+    "01 82 2C 0A 01 00 23 13 10 01 79 56 34 12",
+  ));
+  assert.equal(status.kind, "systemStatus");
+  assert.equal(status.startBlockReason, 0x13);
+  assert.equal(status.startBlockReasonName, "RUN_CONTRACT_INVALID");
+
+  const ack = parseResponse(fromHex("01 90 5A 04 10 01 23 13"));
+  assert.equal(ack.kind, "ack");
+  assert.equal(ack.requestOpcode, Opcode.START);
+  assert.equal(ack.resultName, "REJECTED_NOT_READY");
+  assert.equal(ack.detail, 0x13);
 });
 
 test("parses signed JOINT_STATUS values and converts mrad to degrees", () => {
@@ -300,13 +542,31 @@ test("encodes and parses stage 8 control configuration without ACK ambiguity", (
     "INVALID_ARGUMENT",
   );
   expectProtocolError(
-    () => encodeControlConfigPayload(ControlMode.HOLD, 2),
+    () => encodeControlConfigPayload(ControlMode.HOLD, 3),
     "INVALID_FIELD",
   );
   expectProtocolError(
     () => encodeControlConfigPayload(ControlMode.HOLD, ReferenceSource.SINE),
     "INVALID_ARGUMENT",
   );
+  assert.equal(
+    toHex(encodeControlConfigPayload(
+      ControlMode.IMPEDANCE,
+      ReferenceSource.ALTERNATING_SINE_TEST,
+    )),
+    "06 02",
+  );
+  expectProtocolError(
+    () => encodeControlConfigPayload(
+      ControlMode.DAMPING,
+      ReferenceSource.ALTERNATING_SINE_TEST,
+    ),
+    "INVALID_ARGUMENT",
+  );
+
+  const engineering = parseResponse(fromHex("01 84 41 05 06 00 02 00 01"));
+  assert.equal(engineering.kind, "controlConfig");
+  assert.equal(engineering.selectedReferenceName, "ALTERNATING_SINE_TEST");
 });
 
 test("encodes and parses one side five-element command with degree display units", () => {
@@ -451,6 +711,22 @@ test("parses the effective execution state from the packed high nibble", () => {
   assert.equal(response.executionState, AssistExecutionState.SHADOW);
   assert.equal(response.decodedAssistFlags.selectedValid, true);
   assert.equal(response.decodedAssistFlags.activeValid, true);
+});
+
+test("parses WAITING_NEW_GAIT_EVENTS and exposes its operator-facing meaning", () => {
+  const response = parseResponse(fromHex(
+    "01 87 45 10 01 02 00 02 02 01 01 0A 0A 3D 08 0A 03 00 0F 00",
+  ));
+  assert.equal(response.kind, "assistConfig");
+  assert.equal(
+    response.unavailableReason,
+    AssistUnavailableReason.WAITING_NEW_GAIT_EVENTS,
+  );
+  assert.equal(response.unavailableReasonName, "WAITING_NEW_GAIT_EVENTS");
+  assert.equal(
+    assistUnavailableReasonDescriptions[AssistUnavailableReason.WAITING_NEW_GAIT_EVENTS],
+    "等待本次 START 后左右髋各自出现新的屈曲峰",
+  );
 });
 
 test("stage 9 response enums and future flag bits remain observable", () => {
@@ -714,7 +990,7 @@ test("strictly rejects invalid sides, directions, and stable wire enums", () => 
     "INVALID_FIELD",
   );
   expectProtocolError(
-    () => parseResponse(fromHex("01 82 01 0A 01 00 23 13 01 00 00 00 00 00")),
+    () => parseResponse(fromHex("01 82 01 0A 01 00 23 14 01 00 00 00 00 00")),
     "INVALID_FIELD",
   );
 });
@@ -760,7 +1036,13 @@ test("exports stable wire-code names", () => {
   assert.equal(stepNames[10], "VERIFY_DISABLED");
   assert.equal(blockReasonNames[10], "LEFT_ZERO_INVALID");
   assert.equal(blockReasonNames[18], "SYSTEM_ERROR");
+  assert.equal(blockReasonNames[19], "RUN_CONTRACT_INVALID");
+  assert.equal(
+    blockReasonDescriptions[19],
+    "控制模式/参考源与助力执行状态不兼容",
+  );
   assert.equal(directionNames[2], "NEGATIVE");
+  assert.equal(AssistUnavailableReason.WAITING_NEW_GAIT_EVENTS, 8);
 });
 
 test("formats bytes and converts only finite mrad values", () => {

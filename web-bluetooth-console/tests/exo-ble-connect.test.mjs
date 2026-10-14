@@ -1,5 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { withGattStageTimeout } from "../lib/exo-ble-connect.ts";
+
+test("服务发现无响应时有限超时，迟到结果不会把拒绝变成成功", async () => {
+  let resolve;
+  const pending = new Promise((done) => { resolve = done; });
+  const result = withGattStageTimeout(pending, "发现产品服务", 10);
+  await assert.rejects(result, /发现产品服务超时/);
+  resolve("late service");
+  await assert.rejects(result, /超时/);
+});
+
+test("服务成功/原始失败保留结果并释放握手计时器", async () => {
+  assert.equal(await withGattStageTimeout(Promise.resolve("service"), "发现产品服务", 1000), "service");
+  const failure = new Error("disconnected");
+  await assert.rejects(withGattStageTimeout(Promise.reject(failure), "Notify", 1000), failure);
+});
 
 import { connectGattWithOneRetry } from "../lib/exo-ble-connect.ts";
 

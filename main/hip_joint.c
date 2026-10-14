@@ -4,6 +4,8 @@
 #include <string.h>
 
 #include "exo_config.h"
+#include "exo_factory_direction.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "rs01_driver.h"
 
@@ -19,7 +21,7 @@
  */
 
 /*
- * 内部长期状态比公开快照更小：只保存不会随每帧反馈改变的映射和 RAM 零位。
+ * 内部长期状态比公开快照更小：保存映射、从NVS加载的出厂方向和RAM穿戴零位。
  * 最新电机反馈仍由 rs01_driver 保存，读取快照时再组合，避免维护两份反馈真相。
  */
 typedef struct {
@@ -46,6 +48,31 @@ static bool s_initialized;
  * 临界区内不调用 CAN、不打印日志、不做慢速等待，以免阻塞另一个 CPU 核。
  */
 static portMUX_TYPE s_joint_lock = portMUX_INITIALIZER_UNLOCKED;
+
+/* 只有一个短期示教会话，固定分配；不创建第二个采样/控制任务。 */
+typedef struct {
+	bool active;
+	exo_hip_joint_id_t joint;
+	uint8_t token;
+	uint64_t started_us;
+	float baseline_deg[EXO_HIP_JOINT_COUNT];
+	uint32_t position_epoch[EXO_HIP_JOINT_COUNT];
+	uint32_t feedback_count[EXO_HIP_JOINT_COUNT];
+	uint64_t timestamp_us[EXO_HIP_JOINT_COUNT];
+} direction_teach_session_t;
+static direction_teach_session_t s_direction_teach;
+#define DIRECTION_TEACH_TIMEOUT_US 60000000ULL
+#define DIRECTION_TEACH_FRESH_US 50000ULL
+
+/* 必须持有s_joint_lock；过期只结束会话，不恢复已撤销的零位。 */
+static bool direction_teach_active_locked(uint64_t now_us) {
+	if (s_direction_teach.active &&
+		(now_us < s_direction_teach.started_us ||
+		 now_us - s_direction_teach.started_us > DIRECTION_TEACH_TIMEOUT_US)) {
+		s_direction_teach.active = false;
+	}
+	return s_direction_teach.active;
+}
 
 /* 枚举也可能由错误强制转换产生越界值，公开接口入口统一做范围校验。 */
 static bool joint_id_is_valid(exo_hip_joint_id_t joint) {
@@ -144,13 +171,20 @@ esp_err_t hip_joint_init(void) {
 		joints[i].joint = joint;
 		joints[i].side = config->side;
 		joints[i].actuator = config->actuator;
-		joints[i].direction = config->direction;
+		exo_direction_t saved_direction = EXO_DIRECTION_UNKNOWN;
+		if (config->mapping_valid) {
+			const esp_err_t error = exo_factory_direction_load(joint, config->actuator,
+				g_exo_hardware_config.actuator[config->actuator].can_id, &saved_direction);
+			if (error != ESP_OK) return error;
+		}
+		joints[i].direction = saved_direction;
 		joints[i].software_zero_motor_deg = config->software_zero_deg;
 		joints[i].software_zero_periodic_motor_deg =
 			config->software_zero_deg;
 		joints[i].mapping_valid = config->mapping_valid;
-		joints[i].direction_valid = config->direction_valid;
-		joints[i].zero_valid = config->software_zero_valid;
+		joints[i].direction_valid = direction_is_valid(saved_direction);
+		/* 每次上电必须重新取得本次穿戴零位，绝不能把出厂时站姿当作当前姿态。 */
+		joints[i].zero_valid = false;
 	}
 
 	if (joints[EXO_HIP_JOINT_LEFT].mapping_valid &&
@@ -232,6 +266,7 @@ bool hip_joint_get_snapshot(exo_hip_joint_id_t joint,
 	snapshot->feedback_valid = feedback.valid;
 	snapshot->continuous_position_valid = feedback.continuous_position_valid;
 	snapshot->online = feedback.online;
+	snapshot->motor_fault = feedback.faults.present;
 	snapshot->zero_epoch_matches =
 		state.zero_valid && feedback.position_epoch != 0U &&
 		state.zero_source_position_epoch == feedback.position_epoch;
@@ -272,13 +307,20 @@ esp_err_t hip_joint_set_zero_from_current(exo_hip_joint_id_t joint) {
 
 	exo_actuator_id_t actuator = EXO_ACTUATOR_COUNT;
 	bool mapping_valid = false;
+	bool direction_valid = false;
+	const uint64_t now_us = (uint64_t)esp_timer_get_time();
 	portENTER_CRITICAL(&s_joint_lock);
+	if (direction_teach_active_locked(now_us)) {
+		portEXIT_CRITICAL(&s_joint_lock);
+		return ESP_ERR_INVALID_STATE;
+	}
 	if (s_initialized) {
 		actuator = s_joints[joint].actuator;
 		mapping_valid = s_joints[joint].mapping_valid;
+		direction_valid = s_joints[joint].direction_valid;
 	}
 	portEXIT_CRITICAL(&s_joint_lock);
-	if (!mapping_valid || !actuator_id_is_valid(actuator)) {
+	if (!mapping_valid || !direction_valid || !actuator_id_is_valid(actuator)) {
 		return ESP_ERR_INVALID_STATE;
 	}
 
@@ -293,6 +335,10 @@ esp_err_t hip_joint_set_zero_from_current(exo_hip_joint_id_t joint) {
 
 	/* 零位值和其来源时间/序号一次性更新，读取者不会看到一半新一半旧。 */
 	portENTER_CRITICAL(&s_joint_lock);
+	if (s_direction_teach.active || !s_joints[joint].direction_valid) {
+		portEXIT_CRITICAL(&s_joint_lock);
+		return ESP_ERR_INVALID_STATE;
+	}
 	s_joints[joint].software_zero_motor_deg =
 		exo_radians_to_degrees(feedback.continuous_position_rad);
 	s_joints[joint].software_zero_periodic_motor_deg =
@@ -323,6 +369,268 @@ esp_err_t hip_joint_clear_zero(exo_hip_joint_id_t joint) {
 	s_joints[joint].zero_source_position_epoch = 0U;
 	s_joints[joint].zero_valid = false;
 	portEXIT_CRITICAL(&s_joint_lock);
+	return ESP_OK;
+}
+
+/*
+ * 示教使用原始连续角，不能使用尚未归零/符号尚未确定的人体角。先复制映射，
+ * 再在锁外读取双驱动快照；两侧保持REST并停稳，只允许操作者自己抬腿。
+ */
+static bool read_direction_teach_feedback(rs01_feedback_snapshot_t feedback[2],
+	uint64_t *now_us, hip_direction_teach_result_t *result) {
+	exo_actuator_id_t actuators[2];
+	portENTER_CRITICAL(&s_joint_lock);
+	const bool mapped = s_initialized && s_joints[0].mapping_valid &&
+		s_joints[1].mapping_valid && s_joints[0].actuator != s_joints[1].actuator;
+	actuators[0] = s_joints[0].actuator;
+	actuators[1] = s_joints[1].actuator;
+	portEXIT_CRITICAL(&s_joint_lock);
+	*result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
+	if (!mapped || !rs01_get_feedback(actuators[0], &feedback[0]) ||
+		!rs01_get_feedback(actuators[1], &feedback[1])) return false;
+	const int64_t clock_us = esp_timer_get_time();
+	if (clock_us <= 0) return false;
+	*now_us = (uint64_t)clock_us;
+	for (unsigned i = 0; i < 2U; ++i) {
+		const rs01_feedback_snapshot_t *sample = &feedback[i];
+		if (!sample->valid || !sample->online || !sample->continuous_position_valid ||
+			!sample->position_epoch || !sample->feedback_count || !sample->timestamp_us ||
+			sample->timestamp_us > *now_us ||
+			*now_us - sample->timestamp_us > DIRECTION_TEACH_FRESH_US ||
+			!motion_sample_is_finite(&sample->sample) ||
+			!isfinite(sample->continuous_position_rad) ||
+			!isfinite(exo_radians_to_degrees(sample->continuous_position_rad))) return false;
+		if (sample->faults.present) {
+			*result = HIP_DIRECTION_TEACH_MOTOR_FAULT;
+			return false;
+		}
+		if (sample->mode != RS01_MODE_STATUS_RESET) {
+			*result = HIP_DIRECTION_TEACH_MOTOR_NOT_REST;
+			return false;
+		}
+		if (fabsf(exo_radians_to_degrees(sample->sample.velocity_rad_s)) > 5.0f) {
+			*result = HIP_DIRECTION_TEACH_NOT_STILL;
+			return false;
+		}
+	}
+	return true;
+}
+
+esp_err_t hip_joint_capture_zero_pair(const hip_joint_snapshot_t expected_joints[2],
+    const rs01_feedback_snapshot_t expected_feedback[2]) {
+    if (!expected_joints || !expected_feedback) return ESP_ERR_INVALID_ARG;
+    rs01_feedback_snapshot_t feedback[2];
+    hip_direction_teach_result_t reason;
+    uint64_t now_us;
+    if (!read_direction_teach_feedback(feedback, &now_us, &reason))
+        return ESP_ERR_INVALID_STATE;
+    /* 两个CAN反馈无法在物理上同时到达；100 Hz下允许最多两帧间隔。
+     * 不能把一侧的新帧与另一侧虽未超时但明显较早的帧当成同一次中立姿态。 */
+    const uint64_t skew_us = feedback[0].timestamp_us > feedback[1].timestamp_us ?
+        feedback[0].timestamp_us - feedback[1].timestamp_us :
+        feedback[1].timestamp_us - feedback[0].timestamp_us;
+    if (skew_us > 20000ULL) return ESP_ERR_INVALID_STATE;
+    float continuous_deg[2], periodic_deg[2];
+    for (unsigned i = 0; i < 2U; ++i) {
+        continuous_deg[i] = exo_radians_to_degrees(feedback[i].continuous_position_rad);
+        periodic_deg[i] = exo_radians_to_degrees(feedback[i].sample.position_rad);
+        if (!expected_joints[i].mapping_valid || !expected_joints[i].direction_valid ||
+            feedback[i].position_epoch != expected_feedback[i].position_epoch ||
+            feedback[i].feedback_count < expected_feedback[i].feedback_count ||
+            feedback[i].timestamp_us < expected_feedback[i].timestamp_us ||
+            !isfinite(expected_feedback[i].continuous_position_rad) ||
+            fabsf(exo_radians_to_degrees(feedback[i].continuous_position_rad -
+                expected_feedback[i].continuous_position_rad)) > 1.0f ||
+            !isfinite(continuous_deg[i]) || !isfinite(periodic_deg[i]) ||
+            fabsf(periodic_deg[i]) > 720.001f) return ESP_ERR_INVALID_STATE;
+    }
+    portENTER_CRITICAL(&s_joint_lock);
+    if (!s_initialized || direction_teach_active_locked(now_us) ||
+        s_joints[0].actuator == s_joints[1].actuator) {
+        portEXIT_CRITICAL(&s_joint_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+    /* 先验证整对，再写整对，右侧拒绝时不会留下已经更新的左侧。 */
+    for (unsigned i = 0; i < 2U; ++i) {
+        if (!s_joints[i].mapping_valid || !s_joints[i].direction_valid ||
+            s_joints[i].actuator != expected_joints[i].actuator ||
+            s_joints[i].direction != expected_joints[i].direction) {
+            portEXIT_CRITICAL(&s_joint_lock);
+            return ESP_ERR_INVALID_STATE;
+        }
+    }
+    for (unsigned i = 0; i < 2U; ++i) {
+        /* 使用本次采集的当前位置，左右都重写，不检查/沿用原来的zero_valid。 */
+        s_joints[i].software_zero_motor_deg = continuous_deg[i];
+        s_joints[i].software_zero_periodic_motor_deg = periodic_deg[i];
+        s_joints[i].zero_source_timestamp_us = feedback[i].timestamp_us;
+        s_joints[i].zero_source_feedback_count = feedback[i].feedback_count;
+        s_joints[i].zero_source_position_epoch = feedback[i].position_epoch;
+        s_joints[i].zero_valid = true;
+    }
+    portEXIT_CRITICAL(&s_joint_lock);
+    return ESP_OK;
+}
+
+esp_err_t hip_joint_restore_zero_pair(const float periodic_zero_deg[2],
+    const rs01_feedback_snapshot_t expected_feedback[2]) {
+    if (!periodic_zero_deg || !expected_feedback) return ESP_ERR_INVALID_ARG;
+    rs01_feedback_snapshot_t feedback[2];
+    hip_direction_teach_result_t reason;
+    uint64_t now_us;
+    if (!read_direction_teach_feedback(feedback, &now_us, &reason))
+        return ESP_ERR_INVALID_STATE;
+    float continuous_zero_deg[2];
+    for (unsigned i = 0; i < 2U; ++i) {
+        if (!isfinite(periodic_zero_deg[i]) || fabsf(periodic_zero_deg[i]) > 720.0f ||
+            feedback[i].position_epoch != expected_feedback[i].position_epoch ||
+            feedback[i].feedback_count < expected_feedback[i].feedback_count ||
+            feedback[i].timestamp_us < expected_feedback[i].timestamp_us ||
+            !isfinite(expected_feedback[i].continuous_position_rad) ||
+            fabsf(exo_radians_to_degrees(feedback[i].continuous_position_rad -
+                expected_feedback[i].continuous_position_rad)) > 1.0f)
+            return ESP_ERR_INVALID_STATE;
+        const float delta_deg = remainderf(exo_radians_to_degrees(feedback[i].sample.position_rad) -
+            periodic_zero_deg[i], 1440.0f);
+        /* 不能靠“恢复”把明显不同的姿态强制认成中立位。 */
+        if (!isfinite(delta_deg) || fabsf(delta_deg) > 5.0f) return ESP_ERR_INVALID_STATE;
+        continuous_zero_deg[i] = exo_radians_to_degrees(feedback[i].continuous_position_rad) - delta_deg;
+        if (!isfinite(continuous_zero_deg[i])) return ESP_ERR_INVALID_STATE;
+    }
+    portENTER_CRITICAL(&s_joint_lock);
+    if (!s_initialized || direction_teach_active_locked(now_us) ||
+        !s_joints[0].direction_valid || !s_joints[1].direction_valid) {
+        portEXIT_CRITICAL(&s_joint_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+    for (unsigned i = 0; i < 2U; ++i) {
+        s_joints[i].software_zero_motor_deg = continuous_zero_deg[i];
+        s_joints[i].software_zero_periodic_motor_deg = periodic_zero_deg[i];
+        s_joints[i].zero_source_timestamp_us = feedback[i].timestamp_us;
+        s_joints[i].zero_source_feedback_count = feedback[i].feedback_count;
+        s_joints[i].zero_source_position_epoch = feedback[i].position_epoch;
+        s_joints[i].zero_valid = true;
+    }
+    portEXIT_CRITICAL(&s_joint_lock);
+    return ESP_OK;
+}
+
+esp_err_t hip_joint_teach_direction(exo_hip_joint_id_t joint,
+	hip_direction_teach_action_t action, uint8_t token,
+	hip_direction_teach_result_t *result, exo_direction_t *direction) {
+	if (result) *result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
+	if (direction) *direction = EXO_DIRECTION_UNKNOWN;
+	if (!result || !direction || !joint_id_is_valid(joint) || !token ||
+		(unsigned)action > HIP_DIRECTION_TEACH_CANCEL) return ESP_ERR_INVALID_ARG;
+	const uint64_t check_us = (uint64_t)esp_timer_get_time();
+	direction_teach_session_t session;
+	portENTER_CRITICAL(&s_joint_lock);
+	session = s_direction_teach;
+	const bool active = direction_teach_active_locked(check_us);
+	portEXIT_CRITICAL(&s_joint_lock);
+	/* 取消是单向撤销：不改方向、不恢复零位。重连后即使丢失token也可结束旧会话。 */
+	if (action == HIP_DIRECTION_TEACH_CANCEL) {
+		portENTER_CRITICAL(&s_joint_lock);
+		s_direction_teach.active = false;
+		portEXIT_CRITICAL(&s_joint_lock);
+		*result = HIP_DIRECTION_TEACH_OK;
+		return ESP_OK;
+	}
+	if (action == HIP_DIRECTION_TEACH_BEGIN && active) {
+		*result = HIP_DIRECTION_TEACH_BUSY;
+		return ESP_ERR_INVALID_STATE;
+	}
+	if (action != HIP_DIRECTION_TEACH_BEGIN) {
+		if (!active) {
+			*result = session.active ? HIP_DIRECTION_TEACH_EXPIRED : HIP_DIRECTION_TEACH_NO_SESSION;
+			return ESP_ERR_INVALID_STATE;
+		}
+		if (session.joint != joint || session.token != token) {
+			*result = HIP_DIRECTION_TEACH_TOKEN_MISMATCH;
+			return ESP_ERR_INVALID_STATE;
+		}
+	}
+	rs01_feedback_snapshot_t feedback[2];
+	uint64_t now_us = 0U;
+	if (!read_direction_teach_feedback(feedback, &now_us, result))
+		return ESP_ERR_INVALID_STATE;
+	if (action == HIP_DIRECTION_TEACH_BEGIN) {
+		direction_teach_session_t next = {.active = true, .joint = joint,
+			.token = token, .started_us = now_us};
+		for (unsigned i = 0; i < 2U; ++i) {
+			next.baseline_deg[i] = exo_radians_to_degrees(feedback[i].continuous_position_rad);
+			next.position_epoch[i] = feedback[i].position_epoch;
+			next.feedback_count[i] = feedback[i].feedback_count;
+			next.timestamp_us[i] = feedback[i].timestamp_us;
+		}
+		portENTER_CRITICAL(&s_joint_lock);
+		if (s_direction_teach.active) {
+			portEXIT_CRITICAL(&s_joint_lock);
+			*result = HIP_DIRECTION_TEACH_BUSY;
+			return ESP_ERR_INVALID_STATE;
+		}
+		s_direction_teach = next;
+		s_joints[joint].zero_valid = false;
+		s_joints[joint].direction_valid = false;
+		portEXIT_CRITICAL(&s_joint_lock);
+		*result = HIP_DIRECTION_TEACH_OK;
+		return ESP_OK;
+	}
+	float delta_deg[2];
+	for (unsigned i = 0; i < 2U; ++i) {
+		if (feedback[i].position_epoch != session.position_epoch[i]) {
+			portENTER_CRITICAL(&s_joint_lock);
+			s_direction_teach.active = false;
+			portEXIT_CRITICAL(&s_joint_lock);
+			*result = HIP_DIRECTION_TEACH_EPOCH_CHANGED;
+			return ESP_ERR_INVALID_STATE;
+		}
+		if (feedback[i].feedback_count == session.feedback_count[i] ||
+			feedback[i].timestamp_us <= session.timestamp_us[i]) {
+			*result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
+			return ESP_ERR_INVALID_STATE;
+		}
+		delta_deg[i] = exo_radians_to_degrees(feedback[i].continuous_position_rad) - session.baseline_deg[i];
+		if (!isfinite(delta_deg[i])) {
+			*result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
+			return ESP_ERR_INVALID_STATE;
+		}
+	}
+	const float movement_deg = fabsf(delta_deg[joint]);
+	if (movement_deg < 3.0f || movement_deg > 30.0f) {
+		*result = movement_deg < 3.0f ? HIP_DIRECTION_TEACH_TOO_SMALL : HIP_DIRECTION_TEACH_TOO_LARGE;
+		return ESP_ERR_INVALID_STATE;
+	}
+	/* 对侧允许少量身体摆动，但不能把双腿一起动误认成指定腿示教。 */
+	if (fabsf(delta_deg[1U - (unsigned)joint]) > fmaxf(2.0f, movement_deg * 0.25f)) {
+		*result = HIP_DIRECTION_TEACH_OTHER_LEG_MOVED;
+		return ESP_ERR_INVALID_STATE;
+	}
+	const exo_direction_t learned = delta_deg[joint] > 0.0f ?
+		EXO_DIRECTION_POSITIVE : EXO_DIRECTION_NEGATIVE;
+	/* Flash写入在关节临界区之外，且调用者持有IDLE维护权；控制任务不访问NVS。 */
+	portENTER_CRITICAL(&s_joint_lock);
+	const exo_actuator_id_t actuator = s_joints[joint].actuator;
+	portEXIT_CRITICAL(&s_joint_lock);
+	if (exo_factory_direction_save(joint, actuator,
+		g_exo_hardware_config.actuator[actuator].can_id, learned) != ESP_OK) {
+		*result = HIP_DIRECTION_TEACH_STORAGE_FAILED;
+		return ESP_ERR_INVALID_STATE;
+	}
+	portENTER_CRITICAL(&s_joint_lock);
+	if (!direction_teach_active_locked(now_us) || s_direction_teach.token != token ||
+		s_direction_teach.joint != joint) {
+		portEXIT_CRITICAL(&s_joint_lock);
+		*result = HIP_DIRECTION_TEACH_TOKEN_MISMATCH;
+		return ESP_ERR_INVALID_STATE;
+	}
+	s_joints[joint].direction = learned;
+	s_joints[joint].direction_valid = true;
+	s_joints[joint].zero_valid = false;
+	s_direction_teach.active = false;
+	portEXIT_CRITICAL(&s_joint_lock);
+	*direction = learned;
+	*result = HIP_DIRECTION_TEACH_OK;
 	return ESP_OK;
 }
 

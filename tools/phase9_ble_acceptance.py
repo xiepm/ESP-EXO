@@ -109,6 +109,7 @@ ASSIST_STRATEGY_TRANSPARENT = 1
 ASSIST_STRATEGY_PHASE_PROFILE = 2
 ASSIST_STRATEGY_AAN_RESIDUAL = 3
 ASSIST_UNAVAILABLE_ACTIVE_NOT_ALLOWED = 3
+ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS = 8
 
 GAIT_FIXED_INVALID = 0xFFFF
 GAIT_PHASE_MAX = 9999
@@ -330,7 +331,10 @@ def parse_assist_status(frame: Frame) -> AssistStatus:
     require(payload[7] <= 100, "left assist level exceeds 100 percent")
     require(payload[8] <= 100, "right assist level exceeds 100 percent")
     require((payload[9] & ~ASSIST_FLAGS_MASK) == 0, "unknown assist flag bits")
-    require(payload[10] <= 7, "invalid unavailable_reason")
+    require(
+        payload[10] <= ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS,
+        "invalid unavailable_reason",
+    )
 
     selected_valid = bool(payload[9] & ASSIST_FLAG_SELECTED_VALID)
     active_valid = bool(payload[9] & ASSIST_FLAG_ACTIVE_VALID)
@@ -725,7 +729,9 @@ def run_self_test(reporter: Reporter) -> None:
         require(gait.cadence_steps_per_minute == 100.0, "cadence mismatch")
         require(gait.confidence == 0.8, "confidence mismatch")
 
-    def assist_frame(execution_states: int, *, active: bool = False) -> Frame:
+    def assist_frame(
+        execution_states: int, *, active: bool = False, unavailable: int | None = None
+    ) -> Frame:
         active_mode = 1 if active else 0
         flags = 0x0B if active else 0x09
         raw = bytes(
@@ -744,7 +750,7 @@ def run_self_test(reporter: Reporter) -> None:
                 0,
                 0,
                 flags,
-                0 if active else 6,
+                (0 if active else 6) if unavailable is None else unavailable,
                 2,
                 0,
                 0,
@@ -769,6 +775,21 @@ def run_self_test(reporter: Reporter) -> None:
         status = parse_assist_status(assist_frame(0x11, active=True))
         require(status.requested_execution == ASSIST_EXEC_SHADOW, "low nibble")
         require(status.effective_execution == ASSIST_EXEC_SHADOW, "high nibble")
+
+    @check("assist reason 8: waiting for new bilateral gait events")
+    def _assist_waiting_events() -> None:
+        status = parse_assist_status(
+            assist_frame(
+                0x11,
+                active=True,
+                unavailable=ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS,
+            )
+        )
+        require(
+            status.unavailable_reason
+            == ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS,
+            "waiting-new-events reason was not preserved",
+        )
 
     @check("illegal assist 0x03 low nibble is rejected")
     def _assist_reject_03() -> None:

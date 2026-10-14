@@ -79,6 +79,8 @@ typedef struct {
 	bool zero_valid;
 	bool feedback_valid;
 	bool online;
+	/* 与该侧运动量来自同一份反馈；有故障时禁止整机继续周期输出。 */
+	bool motor_fault;
 	bool joint_valid;
 } exo_sensor_joint_snapshot_t;
 

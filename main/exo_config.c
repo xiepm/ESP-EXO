@@ -19,17 +19,27 @@
 #define EXO_CONFIG_DEFAULT_ACTUATOR EXO_ACTUATOR_A
 
 /*
- * 阶段 7 行为参数也是阶段 8 的默认配置。参考轨迹是“中心位置 + 正弦偏移”：幅值 90 deg、频率
- * 0.5 Hz（每 2 秒一周期），前 3 秒由 0 平滑增加到满幅。人体关节幅值映射到
- * RS01 时才转换为 pi/2 rad，因此物理波形与已经通过实机验收的版本保持一致。
- * KP/KD 是 RS01 Motion/MIT 形式命令中的默认参数，不是在 ESP32 上另跑一个力矩环。
- * 五元 selected 参数可在 IDLE 修改，但正弦轨迹本身仍是编译期只读配置。
+ * 阶段 7 行为参数也是阶段 8 的默认配置。参考轨迹是“中心位置 + 正弦偏移”：幅值
+ * 90 deg、频率 0.5 Hz（每 2 秒一周期），前 3 秒由 0
+ * 平滑增加到满幅。人体关节幅值映射到 RS01 时才转换为 pi/2
+ * rad，因此物理波形与已经通过实机验收的版本保持一致。 KP/KD 是 RS01 Motion/MIT
+ * 形式命令中的默认参数，不是在 ESP32 上另跑一个力矩环。 五元 selected 参数可在
+ * IDLE 修改，但正弦轨迹本身仍是编译期只读配置。
  */
 #define EXO_CONFIG_IMPEDANCE_KP 0.2f
 #define EXO_CONFIG_IMPEDANCE_KD 0.10f
 #define EXO_CONFIG_SINE_AMPLITUDE_DEG 90.0f
 #define EXO_CONFIG_SINE_FREQUENCY_HZ 0.5f
 #define EXO_CONFIG_SINE_RAMP_TIME_S 3.0f
+
+/*
+ * 工程交替激励不是产品步态发生器。首轮真机验收只使用单侧 10 deg（峰峰值
+ * 20 deg）、0.5 Hz 和 3 s 五次渐入，幅值足以越过当前 6 deg 步态事件门槛，
+ * 同时明显低于阶段7原有的 90 deg 同相正弦。以后调整必须升级版本并重新验收。
+ */
+#define EXO_CONFIG_ALTERNATING_TEST_AMPLITUDE_DEG 10.0f
+#define EXO_CONFIG_ALTERNATING_TEST_FREQUENCY_HZ 0.5f
+#define EXO_CONFIG_ALTERNATING_TEST_RAMP_TIME_S 3.0f
 
 /*
  * 阶段 9 传感与步态基线参数。
@@ -231,6 +241,13 @@ const exo_sine_impedance_config_t g_exo_sine_impedance_config = {
 	.kd = EXO_CONFIG_IMPEDANCE_KD,
 };
 
+/* 仅提供轨迹数值；编译开关和运行合同仍由 controller 强制执行。 */
+const sine_reference_config_t g_exo_alternating_sine_test_config = {
+	.amplitude_deg = EXO_CONFIG_ALTERNATING_TEST_AMPLITUDE_DEG,
+	.frequency_hz = EXO_CONFIG_ALTERNATING_TEST_FREQUENCY_HZ,
+	.ramp_time_s = EXO_CONFIG_ALTERNATING_TEST_RAMP_TIME_S,
+};
+
 /* 当前能力位只声明已经接入并由代码提供的双髋运动量和电机估算力矩。 */
 const exo_sensor_snapshot_config_t g_exo_sensor_snapshot_config = {
 	.feedback_freshness_us = EXO_CONFIG_SENSOR_FRESHNESS_US,
@@ -241,10 +258,8 @@ const exo_sensor_snapshot_config_t g_exo_sensor_snapshot_config = {
 /* HIP_EVENT_TBE 的第一版固定参数；后续调参必须经过回放和真机重新验收。 */
 const exo_gait_estimator_config_t g_exo_gait_estimator_config = {
 	.filter_alpha = EXO_CONFIG_GAIT_FILTER_ALPHA,
-	.trend_velocity_threshold_deg_s =
-		EXO_CONFIG_GAIT_TREND_VELOCITY_DEG_S,
-	.motion_velocity_threshold_deg_s =
-		EXO_CONFIG_GAIT_MOTION_VELOCITY_DEG_S,
+	.trend_velocity_threshold_deg_s = EXO_CONFIG_GAIT_TREND_VELOCITY_DEG_S,
+	.motion_velocity_threshold_deg_s = EXO_CONFIG_GAIT_MOTION_VELOCITY_DEG_S,
 	.minimum_excursion_deg = EXO_CONFIG_GAIT_MINIMUM_EXCURSION_DEG,
 	.minimum_period_s = EXO_CONFIG_GAIT_MINIMUM_PERIOD_S,
 	.maximum_period_s = EXO_CONFIG_GAIT_MAXIMUM_PERIOD_S,

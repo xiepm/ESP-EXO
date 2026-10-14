@@ -34,3 +34,21 @@ export async function connectGattWithOneRetry<T>(
     return connect();
   }
 }
+
+/** 浏览器的服务发现/Notify Promise可能一直不结束。超时只结束本次握手，
+ * 调用页面随后关闭GATT；不能把超时当作已连接，也不自动重发任何运动命令。 */
+export async function withGattStageTimeout<T>(
+  operation: Promise<T>, label: string, timeoutMs = 15000,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}超时，请重试已选设备。`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}

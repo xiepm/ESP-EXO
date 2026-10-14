@@ -1185,6 +1185,42 @@ static void fill_private_maintenance_payload(uint8_t payload[8],
 	payload[7] = 0x08;
 }
 
+/* 缺少电机ACK时，普通CAN帧可能由控制器不断重传。恢复请求使用SS标志：
+ * 一次入队只尝试一次总线发送，不会形成无人应答的后台重传风暴。
+ * 该有限原语与实时运动出口分开；不清BUS_OFF、不使能电机。 */
+esp_err_t rs01_request_feedback_once(exo_actuator_id_t actuator,
+                                    uint32_t interval_ms) {
+    if (!actuator_is_valid(actuator) || interval_ms < 10U ||
+        (interval_ms - 10U) % 5U != 0U ||
+        (interval_ms - 10U) / 5U > UINT16_MAX) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = try_take_tx_lock();
+    if (err != ESP_OK) return err;
+    uint8_t payload[8] = {0};
+    write_u16_le(payload, RS01_PARAMETER_REPORT_INTERVAL);
+    write_u16_le(&payload[4], (uint16_t)((interval_ms - 10U) / 5U));
+    for (unsigned step = 0; step < 2U; ++step) {
+        twai_status_info_t can;
+        if (twai_get_status_info(&can) != ESP_OK || can.state != TWAI_STATE_RUNNING ||
+            can.tx_error_counter >= 128U || can.rx_error_counter >= 128U) {
+            err = ESP_ERR_INVALID_STATE;
+            break;
+        }
+        if (step == 1U) fill_private_maintenance_payload(payload, 1U);
+        twai_message_t frame = {0};
+        frame.flags = TWAI_MSG_FLAG_EXTD | TWAI_MSG_FLAG_SS;
+        frame.identifier = make_extended_id(current_can_id(actuator),
+            g_exo_hardware_config.twai.master_id,
+            step == 0U ? RS01_PRIVATE_TYPE_PARAMETER_WRITE : RS01_PRIVATE_TYPE_REPORT);
+        frame.data_length_code = 8U;
+        memcpy(frame.data, payload, sizeof(payload));
+        err = twai_transmit(&frame, 0);
+        if (err != ESP_OK) break;
+    }
+    if (err == ESP_OK) set_reporting_requested(actuator, true);
+    give_tx_lock();
+    return err;
+}
+
 /*
  * 发送私有协议 type-24 主动上报开关。它只改变开关，不写 0x7026；发送成功后
  * reporting_requested=true 也只是本地请求记录，是否真正上报要看反馈计数和年龄。

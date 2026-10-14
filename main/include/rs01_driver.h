@@ -12,6 +12,11 @@
 extern "C" {
 #endif
 
+/* 待机恢复专用：配置上报周期并开启上报，两帧均single-shot/零等待。
+ * 入队成功不证明反馈恢复；调用者必须取得整机维护权并观察新的反馈。
+ * 普通运动/启停发送路径不使用此接口。 */
+esp_err_t rs01_request_feedback_once(exo_actuator_id_t actuator, uint32_t interval_ms);
+
 /*
  * RS01 驱动公开接口导读
  * =====================

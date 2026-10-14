@@ -13,9 +13,10 @@
  * 3. ESP32 外设名称叫 TWAI，本质上就是经典 CAN 控制器；板外仍需 CAN 收发器，
  *    TX/RX GPIO 不能直接接到电机的 CANH/CANL。
  *
- * 初始化顺序固定为：RS01 对象 -> 髋关节对象 -> TWAI/RX -> 主动反馈 -> 系统 INIT
+ * 初始化顺序固定为：NVS -> RS01对象 -> 髋关节/出厂方向 -> TWAI/RX -> 系统 INIT
  * -> UART/BLE 命令入口 -> 唯一 100 Hz 控制任务 -> 发布 IDLE。app_main 本身不
- * 承担周期控制，也不会根据 CAN ID 猜测人体左右侧。
+ * 承担周期控制，也不会根据 CAN ID 猜测人体左右侧。发布IDLE后，现有执行器负责
+ * 有界请求主动反馈；电机后上电时不再只依赖启动瞬间的一次普通CAN请求。
  */
 
 #include "debug_console.h"
@@ -27,7 +28,10 @@
 #include "exo_config.h"
 #include "exo_control_loop.h"
 #include "exo_controller.h"
+#include "exo_factory_direction.h"
+#include "exo_wear_zero.h"
 #include "exo_system.h"
+#include "exo_telemetry.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hip_joint.h"
@@ -53,12 +57,21 @@ static void twai_rx_task(void *arg) {
 	/* 两个时间戳用于“限速打印”，避免坏帧很多时串口日志拖慢系统。 */
 	TickType_t last_invalid_log = 0;
 	TickType_t last_unhandled_log = 0;
+	TickType_t last_rx_error_log = 0;
+	bool rx_error_logged = false;
 	ESP_LOGI(TAG, "TWAI RX task started");
 
 	while (1) {
 		esp_err_t err = twai_receive(&rx_msg, portMAX_DELAY);
 		if (err != ESP_OK) {
-			ESP_LOGW(TAG, "RX error: %s", esp_err_to_name(err));
+			/* 驱动异常若立即返回，必须让出CPU，不能高优先级空转刷串口。 */
+			const TickType_t now = xTaskGetTickCount();
+			if (!rx_error_logged || now - last_rx_error_log >= pdMS_TO_TICKS(1000)) {
+				ESP_LOGW(TAG, "RX error: %s", esp_err_to_name(err));
+				last_rx_error_log = now;
+				rx_error_logged = true;
+			}
+			vTaskDelay(pdMS_TO_TICKS(10) > 0U ? pdMS_TO_TICKS(10) : 1U);
 			continue;
 		}
 
@@ -155,19 +168,30 @@ void app_main(void) {
 		g_exo_hardware_config.twai.tx_gpio, g_exo_hardware_config.twai.rx_gpio,
 		(unsigned long)(g_exo_hardware_config.twai.bitrate_bps / 1000000U));
 
+	/* NVS先于关节/BLE初始化。出厂方向和候选零位断电保存，本次零位仍只在RAM。
+	 * NVS异常不自动擦除；初始化失败时CAN尚未启动，不能带着未知方向进入运行。 */
+	ESP_ERROR_CHECK(exo_factory_direction_storage_init());
 	/* 先创建纯软件对象，此时还没有启动 CAN 外设，也不会让电机运动。 */
 	ESP_ERROR_CHECK(rs01_driver_init());
 	ESP_ERROR_CHECK(hip_joint_init());
+	ESP_ERROR_CHECK(exo_wear_zero_init()); /* 只读候选，不自动恢复本次RAM零位。 */
 	/*
-	 * 通用控制器只初始化静态默认配置，不创建任务、不发送 CAN。默认仍为阶段 7
-	 * 已验收的 IMPEDANCE + SINE，真正锁存模式要等 START 的 fresh feedback 之后。
+	 * 通用控制器只初始化静态默认配置，不创建任务、不发送 CAN。产品默认是
+	 * DAMPING + CONSTANT；工程交替激励必须由上位机显式选择，并受编译开关隔离。
 	 */
 	ESP_ERROR_CHECK(exo_controller_init());
 	/*
-	 * 阶段9助力对象只建立版本化selected配置和SHADOW诊断，不创建任务，也不会
-	 * 发送CAN。真正的周期调用仍由后面的唯一100 Hz控制任务完成。
+	 * 助力对象建立版本化 selected 配置和固定策略工作区，不创建第二个周期任务。
+	 * 阶段10真实助力仍只能经唯一控制器合成/发送出口；周期调用继续由后面的
+	 * 唯一100 Hz控制任务完成。
 	 */
 	ESP_ERROR_CHECK(exo_assist_init());
+	/*
+	 * 遥测对象只有一个固定大小环形缓冲区；初始化不会创建任务、发送 BLE 或
+	 * 启动数据流。只有上位机订阅并显式请求 START_TELEMETRY 后，100 Hz 控制
+	 * 任务才会按配置分频写入样本。
+	 */
+	ESP_ERROR_CHECK(exo_telemetry_init() ? ESP_OK : ESP_FAIL);
 
 	/* 启动 CAN 控制器后才能向 RS01 发配置命令或接收反馈。 */
 	twai_init();
@@ -177,26 +201,8 @@ void app_main(void) {
 		twai_rx_task, "twai_rx", 4096, NULL, 8, NULL, EXO_TWAI_RX_TASK_CORE);
 	ESP_ERROR_CHECK(rx_task_result == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
-	/*
-	 * 逐个请求 A/B 电机开启主动反馈，并把上报周期配置为 10 ms（即 100 Hz）。
-	 * 特别注意：主动反馈只要求电机“定期告诉 ESP32 当前状态”，不会使能电机力矩。
-	 * CAN 发送成功也只代表请求进入了总线；驱动收到该电机的有效反馈之后，online
-	 * 才会变为 true。
-	 */
-	for (exo_actuator_id_t actuator = EXO_ACTUATOR_A;
-		 actuator < EXO_ACTUATOR_COUNT;
-		 actuator = (exo_actuator_id_t)(actuator + 1)) {
-		esp_err_t err = rs01_set_report_interval_ms(
-			actuator, g_exo_hardware_config.rs01_report_interval_ms);
-		if (err == ESP_OK) {
-			err = rs01_start_reporting(actuator);
-		}
-		if (err != ESP_OK) {
-			ESP_LOGW(TAG, "Actuator %c active reporting request failed: %s",
-					 actuator == EXO_ACTUATOR_A ? 'A' : 'B',
-					 esp_err_to_name(err));
-		}
-	}
+	/* 主动反馈由现有执行器在IDLE中有界恢复，避免电机尚未上电时普通CAN
+	 * 反复硬件重传。真正收到新的反馈才在线，不把请求成功当作验收。 */
 
 	/*
 	 * 状态机执行器启动在 INIT 状态，平时阻塞等待 START/STOP

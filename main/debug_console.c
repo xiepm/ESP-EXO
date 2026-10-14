@@ -28,6 +28,7 @@
 #include "exo_control_loop.h"
 #include "exo_controller.h"
 #include "exo_system.h"
+#include "exo_telemetry.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -228,11 +229,11 @@ static const console_cmd_t s_cmd_table[] = {
 	 CONSOLE_CMD_MAINTENANCE, cmd_joint_zero_clear},
 	{"motion_mode",
 	 "Select product mode: <hold|position|velocity|torque|damping|impedance> "
-	 "[constant|sine]",
+	 "[constant|sine|alternating_sine_test]",
 	 1, CONSOLE_CMD_MAINTENANCE, cmd_motion_mode},
 	{"joint_command",
-	 "Set IDLE five-tuple: <left|right> <deg> <deg/s> <Nm> <kp> <kd>",
-	 6, CONSOLE_CMD_MAINTENANCE, cmd_joint_command},
+	 "Set IDLE five-tuple: <left|right> <deg> <deg/s> <Nm> <kp> <kd>", 6,
+	 CONSOLE_CMD_MAINTENANCE, cmd_joint_command},
 	{"control_status", "Show the permanent 100 Hz control loop", 0,
 	 CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_control_status},
 	{"sensor_status", "Show latest phase-9 sensor snapshot", 0,
@@ -242,7 +243,8 @@ static const console_cmd_t s_cmd_table[] = {
 	{"assist_status", "Show high-level assistance strategy", 0,
 	 CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_assist_status},
 	{"assist_config",
-	 "Set assist: <mode> <disabled|shadow> <strategy> <profile> <left%> <right%>",
+	 "Set assist: <mode> <disabled|shadow|active> <strategy> <profile> <left%> "
+	 "<right%>",
 	 6, CONSOLE_CMD_MAINTENANCE, cmd_assist_config},
 	{"can_status", "Show TWAI controller and error counters", 0,
 	 CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_can_status},
@@ -819,12 +821,12 @@ static void cmd_status(int argc, char *argv[]) {
 	debug_printf("  Angle raw:   %.3f deg (periodic)\r\n",
 				 (double)exo_radians_to_degrees(snapshot.sample.position_rad));
 	if (snapshot.continuous_position_valid) {
-		debug_printf("  Angle cont.:  %.3f deg (periods=%ld epoch=%lu rebase=%lu)\r\n",
-					 (double)exo_radians_to_degrees(
-						 snapshot.continuous_position_rad),
-					 (long)snapshot.position_wrap_count,
-					 (unsigned long)snapshot.position_epoch,
-					 (unsigned long)snapshot.position_rebase_count);
+		debug_printf(
+			"  Angle cont.:  %.3f deg (periods=%ld epoch=%lu rebase=%lu)\r\n",
+			(double)exo_radians_to_degrees(snapshot.continuous_position_rad),
+			(long)snapshot.position_wrap_count,
+			(unsigned long)snapshot.position_epoch,
+			(unsigned long)snapshot.position_rebase_count);
 	} else {
 		debug_printf("  Angle cont.:  N/A (%s)\r\n",
 					 snapshot.position_reset_pending
@@ -927,25 +929,26 @@ static void print_joint_status(exo_hip_joint_id_t joint) {
 				 joint_direction_name(snapshot.direction),
 				 snapshot.direction_valid ? "valid" : "INVALID");
 	if (snapshot.zero_valid) {
-		debug_printf("  Software zero: %.3f deg continuous (valid, RAM only)\r\n",
-					 (double)snapshot.software_zero_motor_deg);
+		debug_printf(
+			"  Software zero: %.3f deg continuous (valid, RAM only)\r\n",
+			(double)snapshot.software_zero_motor_deg);
 		debug_printf("  Zero on wire:  %.3f deg periodic\r\n",
 					 (double)snapshot.software_zero_periodic_motor_deg);
-		debug_printf(
-			"  Zero source:   feedback count=%lu timestamp=%llu us epoch=%lu (%s)\r\n",
-			(unsigned long)snapshot.zero_source_feedback_count,
-			(unsigned long long)snapshot.zero_source_timestamp_us,
-			(unsigned long)snapshot.zero_source_position_epoch,
-			snapshot.zero_epoch_matches ? "current" : "STALE");
+		debug_printf("  Zero source:   feedback count=%lu timestamp=%llu us "
+					 "epoch=%lu (%s)\r\n",
+					 (unsigned long)snapshot.zero_source_feedback_count,
+					 (unsigned long long)snapshot.zero_source_timestamp_us,
+					 (unsigned long)snapshot.zero_source_position_epoch,
+					 snapshot.zero_epoch_matches ? "current" : "STALE");
 	} else if (snapshot.zero_source_feedback_count != 0U) {
 		debug_printf("  Software zero: %.3f deg (STALE, RAM only)\r\n",
 					 (double)snapshot.software_zero_motor_deg);
-		debug_printf(
-			"  Zero source:   feedback count=%lu timestamp=%llu us old_epoch=%lu current_epoch=%lu\r\n",
-			(unsigned long)snapshot.zero_source_feedback_count,
-			(unsigned long long)snapshot.zero_source_timestamp_us,
-			(unsigned long)snapshot.zero_source_position_epoch,
-			(unsigned long)snapshot.actuator_position_epoch);
+		debug_printf("  Zero source:   feedback count=%lu timestamp=%llu us "
+					 "old_epoch=%lu current_epoch=%lu\r\n",
+					 (unsigned long)snapshot.zero_source_feedback_count,
+					 (unsigned long long)snapshot.zero_source_timestamp_us,
+					 (unsigned long)snapshot.zero_source_position_epoch,
+					 (unsigned long)snapshot.actuator_position_epoch);
 	} else {
 		debug_printf("  Software zero: N/A (INVALID, RAM only)\r\n");
 		debug_printf("  Zero source:   none\r\n");
@@ -1051,8 +1054,7 @@ static void cmd_joint_zero_clear(int argc, char *argv[]) {
 		joint_name(joint));
 }
 
-static bool parse_control_mode_arg(const char *text,
-							   exo_control_mode_t *mode) {
+static bool parse_control_mode_arg(const char *text, exo_control_mode_t *mode) {
 	if (text == NULL || mode == NULL) {
 		return false;
 	}
@@ -1087,6 +1089,10 @@ static bool parse_reference_arg(const char *text,
 		*reference = EXO_REFERENCE_SINE;
 		return true;
 	}
+	if (strcasecmp(text, "alternating_sine_test") == 0) {
+		*reference = EXO_REFERENCE_ALTERNATING_SINE_TEST;
+		return true;
+	}
 	return false;
 }
 
@@ -1097,7 +1103,8 @@ static void cmd_motion_mode(int argc, char *argv[]) {
 	 */
 	if (argc < 2 || argc > 3) {
 		debug_printf("Usage: motion_mode <hold|position|velocity|torque|"
-					 "damping|impedance> [constant|sine]\r\n");
+					 "damping|impedance> "
+					 "[constant|sine|alternating_sine_test]\r\n");
 		return;
 	}
 	exo_control_mode_t mode;
@@ -1148,9 +1155,8 @@ static void cmd_joint_command(int argc, char *argv[]) {
 	debug_printf("OK: %s selected q=%.3f deg dq=%.3f deg/s tau=%.3f Nm "
 				 "kp=%.3f kd=%.3f\r\n",
 				 joint_name(joint), (double)command.position_deg,
-				 (double)command.velocity_deg_s,
-				 (double)command.torque_ff_nm, (double)command.kp,
-				 (double)command.kd);
+				 (double)command.velocity_deg_s, (double)command.torque_ff_nm,
+				 (double)command.kp, (double)command.kd);
 }
 
 static void cmd_control_status(int argc, char *argv[]) {
@@ -1268,19 +1274,48 @@ static void cmd_control_status(int argc, char *argv[]) {
 				 (unsigned long long)controller.output_count,
 				 (unsigned long long)controller.output_error_count,
 				 esp_err_to_name(controller.last_error));
+	/*
+	 * 阶段10把“算出建议、合成接纳、真正发出”拆成三个布尔量。调试时必须
+	 * 分开看，不能因为 suggestion=YES 就认定电机已经收到助力。
+	 */
+	const exo_controller_tick_result_t *tick = &controller.last_tick_result;
+	debug_printf(
+		"  Last assist route: gate=%s suggested=%s accepted=%s applied=%s\r\n",
+		tick->output_gate_open ? "OPEN" : "closed",
+		tick->assist_suggested ? "YES" : "no",
+		tick->assist_accepted ? "YES" : "no",
+		tick->assist_applied ? "YES" : "no");
+	debug_printf(
+		"  Last send/reject:  attempted=%s pair=%s A=%s B=%s partial=%s "
+		"reason=%u result=%s\r\n",
+		tick->send_attempted ? "YES" : "no",
+		tick->send_succeeded ? "YES" : "no",
+		tick->actuator_a_send_succeeded ? "YES" : "no",
+		tick->actuator_b_send_succeeded ? "YES" : "no",
+		tick->send_partially_succeeded ? "YES" : "no",
+		(unsigned)tick->assist_reject_reason,
+		esp_err_to_name(tick->send_result));
+	debug_printf("  Partial sends:     %llu\r\n",
+				 (unsigned long long)controller.partial_send_count);
+	debug_printf("  Assist delta L/R:  %.3f / %.3f N.m\r\n",
+				 (double)tick->assist_delta.left.torque_ff_nm,
+				 (double)tick->assist_delta.right.torque_ff_nm);
+	debug_printf("  Assist accepted/applied/rejected: %llu/%llu/%llu\r\n",
+				 (unsigned long long)controller.assist_accepted_count,
+				 (unsigned long long)controller.assist_applied_count,
+				 (unsigned long long)controller.assist_rejected_count);
 }
 
 /* 阶段9三个状态命令都只复制最近发布快照，绝不会触发一次新的传感器采样。 */
 static void print_sensor_side(const char *name,
-				  const exo_sensor_joint_snapshot_t *joint) {
-	debug_printf(
-		"  %-5s: available=%s valid=%s online=%s age=%lu us count=%lu "
-		"epoch=%lu\r\n",
-		name, joint->snapshot_available ? "YES" : "no",
-		joint->joint_valid ? "YES" : "no", joint->online ? "YES" : "no",
-		(unsigned long)joint->age_us,
-		(unsigned long)joint->source_feedback_count,
-		(unsigned long)joint->position_epoch);
+							  const exo_sensor_joint_snapshot_t *joint) {
+	debug_printf("  %-5s: available=%s valid=%s online=%s age=%lu us count=%lu "
+				 "epoch=%lu\r\n",
+				 name, joint->snapshot_available ? "YES" : "no",
+				 joint->joint_valid ? "YES" : "no",
+				 joint->online ? "YES" : "no", (unsigned long)joint->age_us,
+				 (unsigned long)joint->source_feedback_count,
+				 (unsigned long)joint->position_epoch);
 	debug_printf(
 		"         q=%.3f deg dq=%.3f deg/s motor_tau_est=%.3f Nm temp=%.1f C "
 		"source=%llu us\r\n",
@@ -1305,11 +1340,11 @@ static void cmd_sensor_status(int argc, char *argv[]) {
 				 (unsigned long)sensor->sequence,
 				 (long long)sensor->captured_us,
 				 (unsigned long)sensor->reset_epoch);
-	debug_printf(
-		"  Sensor masks:      available=0x%08lX valid=0x%08lX quality=0x%08lX\r\n",
-		(unsigned long)sensor->available_sensor_mask,
-		(unsigned long)sensor->valid_sensor_mask,
-		(unsigned long)sensor->quality_flags);
+	debug_printf("  Sensor masks:      available=0x%08lX valid=0x%08lX "
+				 "quality=0x%08lX\r\n",
+				 (unsigned long)sensor->available_sensor_mask,
+				 (unsigned long)sensor->valid_sensor_mask,
+				 (unsigned long)sensor->quality_flags);
 	debug_printf("  Pair source skew:  %lu us\r\n",
 				 (unsigned long)sensor->pair_skew_us);
 	print_sensor_side("LEFT", &sensor->left);
@@ -1339,13 +1374,14 @@ static void cmd_gait_status(int argc, char *argv[]) {
 				 exo_gait_phase_origin_name(gait->phase_origin));
 	debug_printf(
 		"  LEFT phase:       %s %.2f %% period=%.3f s event=0x%02X\r\n",
-		left_valid ? "VALID" : "invalid", (double)(gait->left_phase_01 * 100.0f),
-		(double)gait->left_period_s, (unsigned)gait->left_event_flags);
+		left_valid ? "VALID" : "invalid",
+		(double)(gait->left_phase_01 * 100.0f), (double)gait->left_period_s,
+		(unsigned)gait->left_event_flags);
 	debug_printf(
 		"  RIGHT phase:      %s %.2f %% period=%.3f s event=0x%02X\r\n",
 		right_valid ? "VALID" : "invalid",
-		(double)(gait->right_phase_01 * 100.0f),
-		(double)gait->right_period_s, (unsigned)gait->right_event_flags);
+		(double)(gait->right_phase_01 * 100.0f), (double)gait->right_period_s,
+		(unsigned)gait->right_event_flags);
 	debug_printf("  Cadence/confidence: %.2f spm / %.1f %%\r\n",
 				 (double)gait->cadence_spm,
 				 (double)(gait->confidence_01 * 100.0f));
@@ -1375,55 +1411,70 @@ static void cmd_assist_status(int argc, char *argv[]) {
 		return;
 	}
 	debug_printf("===== High-level Assistance =====\r\n");
-	debug_printf("  Selected:          %s / %s strategy=%u profile=%u gen=%lu\r\n",
-				 exo_assist_mode_name(assist.selected.mode),
-				 exo_assist_execution_state_name(
-					 assist.selected.requested_execution_state),
-				 (unsigned)assist.selected.strategy_id,
-				 (unsigned)assist.selected.profile_id,
-				 (unsigned long)assist.selected_generation);
+	debug_printf(
+		"  Selected:          %s / %s strategy=%u profile=%u gen=%lu\r\n",
+		exo_assist_mode_name(assist.selected.mode),
+		exo_assist_execution_state_name(
+			assist.selected.requested_execution_state),
+		(unsigned)assist.selected.strategy_id,
+		(unsigned)assist.selected.profile_id,
+		(unsigned long)assist.selected_generation);
 	debug_printf("  Active/locked:     %s / %s / %s\r\n",
-				 assist.active_valid
-					 ? exo_assist_mode_name(assist.active.mode)
-					 : "NONE",
+				 assist.active_valid ? exo_assist_mode_name(assist.active.mode)
+									 : "NONE",
 				 exo_assist_execution_state_name(assist.execution_state),
 				 assist.config_locked ? "LOCKED" : "unlocked");
-	debug_printf("  Strategy metadata: version=%u active_gen=%lu activation_epoch=%lu\r\n",
+	debug_printf("  Strategy metadata: version=%u active_gen=%lu "
+				 "activation_epoch=%lu\r\n",
 				 (unsigned)assist.strategy_version,
 				 (unsigned long)assist.active_generation,
 				 (unsigned long)assist.activation_epoch);
 	debug_printf("  Levels L/R:        %u %% / %u %%\r\n",
 				 (unsigned)assist.selected.left_level_percent,
 				 (unsigned)assist.selected.right_level_percent);
+	debug_printf("  Max assist:        selected=%.3f active=%.3f N.m (RAM)\r\n",
+				 (double)assist.selected.maximum_assist_torque_mnm * 0.001,
+				 assist.active_valid
+					? (double)assist.active.maximum_assist_torque_mnm * 0.001 : 0.0);
+	debug_printf("  Sensors:           required=0x%08lX available=0x%08lX "
+				 "valid=0x%08lX\r\n",
+				 (unsigned long)assist.required_sensor_mask,
+				 (unsigned long)assist.available_sensor_mask,
+				 (unsigned long)assist.valid_sensor_mask);
+	debug_printf("  Gait requirement:  flags=0x%08lX min_confidence=%.1f %% "
+				 "ready=%s\r\n",
+				 (unsigned long)assist.required_gait_valid_flags,
+				 (double)(assist.minimum_gait_confidence_01 * 100.0f),
+				 assist.required_gait_ready ? "YES" : "no");
 	debug_printf(
-		"  Sensors:           required=0x%08lX available=0x%08lX valid=0x%08lX\r\n",
-		(unsigned long)assist.required_sensor_mask,
-		(unsigned long)assist.available_sensor_mask,
-		(unsigned long)assist.valid_sensor_mask);
-	debug_printf(
-		"  Gait requirement:  flags=0x%08lX min_confidence=%.1f %% ready=%s\r\n",
-		(unsigned long)assist.required_gait_valid_flags,
-		(double)(assist.minimum_gait_confidence_01 * 100.0f),
-		assist.required_gait_ready ? "YES" : "no");
-	debug_printf("  Ready/suggestion:  strategy=%s sensors=%s suggestion=%s\r\n",
-				 assist.strategy_ready ? "YES" : "no",
-				 assist.required_sensors_ready ? "YES" : "no",
-				 assist.suggestion_valid ? "VALID" : "invalid");
+		"  Ready/suggestion:  strategy=%s sensors=%s suggestion=%s\r\n",
+		assist.strategy_ready ? "YES" : "no",
+		assist.required_sensors_ready ? "YES" : "no",
+		assist.suggestion_valid ? "VALID" : "invalid");
 	debug_printf("  Unavailable:       %s\r\n",
-				 exo_assist_unavailable_reason_name(
-					 assist.unavailable_reason));
-	debug_printf(
-		"  REAL OUTPUT:       %s (phase 9 SHADOW never changes CAN output)\r\n",
-		assist.real_output_enabled ? "ENABLED" : "DISABLED");
-	debug_printf("  Steps/suggestions: %llu / %llu\r\n",
+				 exo_assist_unavailable_reason_name(assist.unavailable_reason));
+	if (assist.unavailable_reason ==
+		EXO_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS) {
+		debug_printf("  Waiting gate:      need NEW LEFT and RIGHT hip-flexion "
+					 "peaks after this START\r\n");
+	}
+	debug_printf("  REAL OUTPUT:       %s (only a successful ACTIVE send "
+				 "enables it)\r\n",
+				 assist.real_output_enabled ? "ENABLED" : "DISABLED");
+	debug_printf("  Steps/suggest/applied: %llu / %llu / %llu\r\n",
 				 (unsigned long long)assist.step_count,
-				 (unsigned long long)assist.valid_suggestion_count);
-	debug_printf(
-		"  Last result:       valid=%s sensor_seq=%lu gait_seq=%lu activation=%lu\r\n",
-		assist.last_result.valid ? "YES" : "no",
-		(unsigned long)assist.last_result.source_sensor_sequence,
-		(unsigned long)assist.last_result.source_gait_sequence,
-		(unsigned long)assist.last_result.activation_epoch);
+				 (unsigned long long)assist.valid_suggestion_count,
+				 (unsigned long long)assist.applied_output_count);
+	debug_printf("  Last result:       valid=%s kind=%u sensor_seq=%lu "
+				 "gait_seq=%lu activation=%lu\r\n",
+				 assist.last_result.valid ? "YES" : "no",
+				 (unsigned)assist.last_result.output_kind,
+				 (unsigned long)assist.last_result.source_sensor_sequence,
+				 (unsigned long)assist.last_result.source_gait_sequence,
+				 (unsigned long)assist.last_result.activation_epoch);
+	debug_printf("  Suggested tau L/R: %.3f / %.3f N.m\r\n",
+				 (double)assist.last_result.suggestion.left.torque_ff_nm,
+				 (double)assist.last_result.suggestion.right.torque_ff_nm);
 }
 
 static bool parse_assist_mode_arg(const char *text, exo_assist_mode_t *mode) {
@@ -1446,8 +1497,8 @@ static bool parse_assist_mode_arg(const char *text, exo_assist_mode_t *mode) {
 	return false;
 }
 
-static bool parse_assist_execution_arg(
-	const char *text, exo_assist_execution_state_t *state) {
+static bool parse_assist_execution_arg(const char *text,
+									   exo_assist_execution_state_t *state) {
 	if (text == NULL || state == NULL) {
 		return false;
 	}
@@ -1459,11 +1510,15 @@ static bool parse_assist_execution_arg(
 		*state = EXO_ASSIST_EXEC_SHADOW;
 		return true;
 	}
+	if (strcasecmp(text, "active") == 0) {
+		*state = EXO_ASSIST_EXEC_ACTIVE;
+		return true;
+	}
 	return false;
 }
 
 static bool parse_assist_strategy_arg(const char *text,
-					  exo_assist_strategy_id_t *strategy) {
+									  exo_assist_strategy_id_t *strategy) {
 	if (text == NULL || strategy == NULL) {
 		return false;
 	}
@@ -1481,7 +1536,7 @@ static bool parse_assist_strategy_arg(const char *text,
 	}
 	long numeric = 0;
 	if (parse_long_arg(text, EXO_ASSIST_STRATEGY_TRANSPARENT,
-				   EXO_ASSIST_STRATEGY_AAN_RESIDUAL, &numeric)) {
+					   EXO_ASSIST_STRATEGY_AAN_RESIDUAL, &numeric)) {
 		*strategy = (exo_assist_strategy_id_t)numeric;
 		return true;
 	}
@@ -1492,7 +1547,7 @@ static void cmd_assist_config(int argc, char *argv[]) {
 	if (argc != 7) {
 		debug_printf(
 			"Usage: assist_config <transparent|active_phase|aan> "
-			"<disabled|shadow> <transparent|phase_profile|aan_residual> "
+			"<disabled|shadow|active> <transparent|phase_profile|aan_residual> "
 			"<profile 0..255> <left 0..100> <right 0..100>\r\n");
 		return;
 	}
@@ -1511,6 +1566,11 @@ static void cmd_assist_config(int argc, char *argv[]) {
 		debug_printf("ERROR: invalid assistance configuration\r\n");
 		return;
 	}
+	exo_assist_snapshot_t current;
+	if (!exo_assist_get_snapshot(&current) || !current.selected_valid) {
+		debug_printf("ERROR: assistance configuration unavailable\r\n");
+		return;
+	}
 	const exo_assist_config_t config = {
 		.schema_version = EXO_ASSIST_CONFIG_SCHEMA_VERSION,
 		.mode = mode,
@@ -1520,6 +1580,9 @@ static void cmd_assist_config(int argc, char *argv[]) {
 		.left_level_percent = (uint8_t)left_percent,
 		.right_level_percent = (uint8_t)right_percent,
 		.reserved_flags = 0U,
+		/* UART旧命令也不能把网页保存的最大附加力矩默默恢复为默认值。 */
+		.maximum_assist_torque_mnm = current.selected.maximum_assist_torque_mnm,
+		.angle_threshold_cdeg = current.selected.angle_threshold_cdeg,
 	};
 	const esp_err_t err = exo_assist_set_config(&config);
 	if (err != ESP_OK) {
@@ -1529,10 +1592,10 @@ static void cmd_assist_config(int argc, char *argv[]) {
 	}
 	debug_printf(
 		"OK: assist selected=%s execution=%s strategy=%u profile=%u L/R=%u/%u; "
-		"SHADOW never changes CAN output\r\n",
-		exo_assist_mode_name(mode),
-		exo_assist_execution_state_name(execution), (unsigned)strategy,
-		(unsigned)profile, (unsigned)left_percent, (unsigned)right_percent);
+		"effective execution is latched on next START\r\n",
+		exo_assist_mode_name(mode), exo_assist_execution_state_name(execution),
+		(unsigned)strategy, (unsigned)profile, (unsigned)left_percent,
+		(unsigned)right_percent);
 }
 
 static void cmd_can_status(int argc, char *argv[]) {
@@ -1565,11 +1628,15 @@ static void cmd_can_status(int argc, char *argv[]) {
 
 	debug_printf("===== TWAI Status =====\r\n");
 	debug_printf("  State:             %s\r\n", state);
+	debug_printf("  Configured bus:    TX GPIO%d / RX GPIO%d, %lu bit/s\r\n",
+		g_exo_hardware_config.twai.tx_gpio, g_exo_hardware_config.twai.rx_gpio,
+		(unsigned long)g_exo_hardware_config.twai.bitrate_bps);
+	/* 单次GPIO读数不能代替CAN差分波形；未供电的收发器更不能据此判断总线。 */
+	const int rx_level = gpio_get_level(g_exo_hardware_config.twai.rx_gpio);
 	debug_printf(
 		"  RX GPIO%d level:   %d (%s)\r\n", g_exo_hardware_config.twai.rx_gpio,
-		gpio_get_level(g_exo_hardware_config.twai.rx_gpio),
-		gpio_get_level(g_exo_hardware_config.twai.rx_gpio) ? "recessive/idle"
-														   : "dominant/busy");
+		rx_level, rx_level ? "digital high" : "digital low");
+	debug_printf("  RX level alone is not a CAN_H/CAN_L waveform or supply check.\r\n");
 	debug_printf("  TX queued:         %lu\r\n",
 				 (unsigned long)status.msgs_to_tx);
 	debug_printf("  RX queued:         %lu\r\n",
@@ -1656,6 +1723,9 @@ static void cmd_ble_status(int argc, char *argv[]) {
 	debug_printf("  Response notify:   %s\r\n", snapshot.response_subscribed
 													? "subscribed"
 													: "not subscribed");
+	debug_printf("  Telemetry notify:  %s\r\n", snapshot.telemetry_subscribed
+													? "subscribed"
+													: "not subscribed");
 	debug_printf("  Connection handle: 0x%04X\r\n", snapshot.connection_handle);
 	debug_printf("  Negotiated MTU:    %u\r\n", snapshot.negotiated_mtu);
 	debug_printf("  Session generation:%lu\r\n",
@@ -1668,6 +1738,10 @@ static void cmd_ble_status(int argc, char *argv[]) {
 				 (void *)snapshot.worker_task_identity);
 	debug_printf("  Worker stack min:  %lu bytes free\r\n",
 				 (unsigned long)snapshot.worker_stack_free_min_bytes);
+	debug_printf("  Telemetry task:    %s identity=%p stack_min=%lu bytes\r\n",
+				 snapshot.telemetry_task_alive ? "alive" : "not alive",
+				 (void *)snapshot.telemetry_task_identity,
+				 (unsigned long)snapshot.telemetry_stack_free_min_bytes);
 	debug_printf("  RX/queue/process:  %lu/%lu/%lu\r\n",
 				 (unsigned long)snapshot.rx_write_count,
 				 (unsigned long)snapshot.queued_count,
@@ -1684,6 +1758,33 @@ static void cmd_ble_status(int argc, char *argv[]) {
 				 (unsigned long)snapshot.notify_failure_count);
 	debug_printf("  Notify TX failures:    %lu\r\n",
 				 (unsigned long)snapshot.notify_tx_failure_count);
+	debug_printf("  Telemetry notify ok/fail/TX-fail: %lu/%lu/%lu\r\n",
+				 (unsigned long)snapshot.telemetry_notify_success_count,
+				 (unsigned long)snapshot.telemetry_notify_failure_count,
+				 (unsigned long)snapshot.telemetry_notify_tx_failure_count);
+	debug_printf("  Telemetry retry-ok/exhausted/last-rc: %lu/%lu/%ld\r\n",
+				 (unsigned long)snapshot.telemetry_notify_retry_success_count,
+				 (unsigned long)snapshot.telemetry_notify_exhausted_count,
+				 (long)snapshot.last_telemetry_notify_error);
+	debug_printf(
+		"  Telemetry alloc-fail/submit-fail: %lu/%lu\r\n",
+		(unsigned long)snapshot.telemetry_mbuf_allocation_failure_count,
+		(unsigned long)snapshot.telemetry_submit_failure_count);
+
+	/* BLE snapshot 以帧计数；遥测模块的 queue/drop 则以完整采样点计数。 */
+	exo_telemetry_status_t telemetry;
+	if (exo_telemetry_get_status(&telemetry)) {
+		debug_printf(
+			"  Stream:            %s rate=%u Hz mask=0x%04X sequence=%u\r\n",
+			telemetry.streaming ? "RUNNING" : "stopped",
+			(unsigned)telemetry.rate_hz, (unsigned)telemetry.channel_mask,
+			(unsigned)telemetry.stream_sequence);
+		debug_printf("  Stream frames/drop/queue: %lu/%lu/%u of %u samples\r\n",
+					 (unsigned long)telemetry.notify_success_count,
+					 (unsigned long)telemetry.dropped_sample_count,
+					 (unsigned)telemetry.queued_samples,
+					 (unsigned)telemetry.queue_capacity);
+	}
 }
 
 static void cmd_system_status(int argc, char *argv[]) {
@@ -1742,6 +1843,20 @@ static void cmd_system_status(int argc, char *argv[]) {
 				 (long)snapshot.last_error);
 	debug_printf("  Last failed step:  %s\r\n",
 				 exo_system_step_name(snapshot.last_failed_step));
+	debug_printf("  Runtime faults:    %lu; last=%s (%s)\r\n",
+		(unsigned long)snapshot.runtime_fault_count,
+		exo_system_runtime_fault_name(snapshot.last_runtime_fault),
+		esp_err_to_name(snapshot.runtime_fault_error));
+	debug_printf("  Runtime fault at:  %llu us\r\n",
+		(unsigned long long)snapshot.runtime_fault_us);
+	debug_printf("  Fault CAN sample:  valid=%s state=%lu TEC/REC=%lu/%lu\r\n",
+		snapshot.runtime_can_status_valid ? "YES" : "no",
+		(unsigned long)snapshot.runtime_can_state,
+		(unsigned long)snapshot.runtime_can_tx_errors,
+		(unsigned long)snapshot.runtime_can_rx_errors);
+	debug_printf("  Fault ages L/R:    %lu / %lu us\r\n",
+		(unsigned long)snapshot.runtime_left_age_us,
+		(unsigned long)snapshot.runtime_right_age_us);
 	debug_printf("  State entered:     %llu us\r\n",
 				 (unsigned long long)snapshot.state_entered_us);
 	debug_printf("  Last request at:   %llu us\r\n",

@@ -12,9 +12,9 @@
 #include "sine_reference.h"
 
 /*
- * 本文件只声明“配置长什么样”，具体取值统一放在 exo_config.c。
- * 这样驱动、关节、控制器和 BLE 都读取同一个只读配置源，不会出现某个文件认为
- * 左腿是 A、另一个文件却认为左腿是 B 的情况。
+ * 本文件只声明“配置长什么样”，硬件默认取值统一放在exo_config.c。
+ * 左右腿到A/B的映射只有这一个只读来源。实际方向由hip_joint加载NVS出厂记录，
+ * 穿戴零位由hip_joint管理RAM标定；控制器与BLE都读取关节对象，不能各自改符号。
  */
 
 typedef struct {
@@ -78,8 +78,9 @@ typedef struct {
 } exo_sine_impedance_config_t;
 
 /*
- * 固件运行期唯一可读的硬件配置对象。const 表示业务模块只读；若要修改产品
- * 硬件映射，应改 exo_config.c 后重新编译，不能在运行期偷偷覆盖。
+ * 硬件默认配置对象。const表示业务模块只读；左右腿到A/B的映射变更仍需改
+ * exo_config.c后重新编译。0.10.4的实际方向来自与映射绑定的NVS出厂记录，
+ * 不能仅凭此对象的历史方向认定已标定；应读取hip_joint方向有效位。
  */
 extern const exo_hardware_config_t g_exo_hardware_config;
 
@@ -88,6 +89,13 @@ extern const exo_hardware_config_t g_exo_hardware_config;
  * BLE/UART 修改，但正弦幅值/频率/ramp 仍是编译期只读值，且不写入 NVS。
  */
 extern const exo_sine_impedance_config_t g_exo_sine_impedance_config;
+
+/*
+ * 阶段10工程验收激励的只读轨迹参数。它与产品 SINE 使用相同的纯数学生成器，
+ * 但幅值独立固定为单侧 10 deg；控制器会对 LEFT/RIGHT 分别施加 +offset/-offset。
+ * 是否允许选择该参考由 CONFIG_EXO_ENGINEERING_GAIT_STIMULUS 决定。
+ */
+extern const sine_reference_config_t g_exo_alternating_sine_test_config;
 
 /*
  * 阶段 9 的传感时效和步态算法参数仍采用编译期只读配置。这样主机回放、真机固件
