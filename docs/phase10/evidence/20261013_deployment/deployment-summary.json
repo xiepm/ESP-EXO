@@ -1,0 +1,32 @@
+{
+  "client_date": "2026-10-13",
+  "firmware": "0.10.13",
+  "status": "FLASH_AND_IDLE_PARAMETER_READBACK_PASS",
+  "boot_id": "0x215B41F2",
+  "verified_source_build_evidence_files": 233,
+  "flash_hash_regions": 3,
+  "INFO_capabilities": "0xFF7F",
+  "pulse_strategy_version": 4,
+  "rise_limit_Nm_per_s": 20,
+  "rise_limit_evidence": "frozen source/build + verified target identity; mechanical measurement NOT_RUN",
+  "hard_maximum_Nm": 15,
+  "fixed_maximum_ms": 3000,
+  "boundary_parameter_write_readback": "PASS,DISABLED0percent; restored default0.5Nm/600ms",
+  "start_stop_requests_this_boot": 0,
+  "controller_motion_outputs_this_boot": 0,
+  "output_allowed": false,
+  "motor_power": "operator confirmedOFF this turn",
+  "human_active_hil": "NOT_RUN",
+  "web_button_hardware_e2e": "NOT_RUN",
+  "on_power_feedback_recovery": "NOT_RUN, motorOFF",
+  "CAN_final_power_OFF_sample": {
+    "state": "RUNNING",
+    "TEC_REC": [
+      0,
+      0
+    ],
+    "bus_errors": 0,
+    "does_not_prove_motors_online": true
+  },
+  "configured_bus_console_final": "Configured bus:    TX GPIO4 / RX GPIO1, 1000000 bit/s"
+}

@@ -1,0 +1,140 @@
+[
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/ble-parameter-acceptance.json",
+    "archived": "docs/phase10/evidence/20261013_deployment/ble-parameter-acceptance.json",
+    "bytes": 2760,
+    "sha256": "9152c29c0ac3a4867d2c966ed4df80fa186e3fd93f8539ad04497cc782d4f7e6"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/ble-readonly.json",
+    "archived": "docs/phase10/evidence/20261013_deployment/ble-readonly.json",
+    "bytes": 1883,
+    "sha256": "c52b3ed601ebcc00e3b330d59bf0ba59f47ab33f4eefb0fdb0dd2515dbcfbae2"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/deployment-summary.json",
+    "archived": "docs/phase10/evidence/20261013_deployment/deployment-summary.json",
+    "bytes": 1136,
+    "sha256": "113287f4c54bd2884223dd590df968c7ad1456ad21de19a723c25db0892a8a59"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/flash.log",
+    "archived": "docs/phase10/evidence/20261013_deployment/flash.log",
+    "bytes": 1936,
+    "sha256": "5556a6244f6a1bbff8d5af14202edf9cc07df9791b675856f1d3c797e57f129a"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/preflash-integrity.log",
+    "archived": "docs/phase10/evidence/20261013_deployment/preflash-integrity.log",
+    "bytes": 95,
+    "sha256": "7a4e5ae7c588c2093b840600180f591e71bc3d608c87d4a5f2ecc0f1c1969c4e"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/preflash-uart.log",
+    "archived": "docs/phase10/evidence/20261013_deployment/preflash-uart.log",
+    "bytes": 4488,
+    "sha256": "03a1adbfb97c0f186c06cb106252da36a11781b5c86de128e23e987858e22f6a"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/postflash-uart.log",
+    "archived": "docs/phase10/evidence/20261013_deployment/postflash-uart.log",
+    "bytes": 363724,
+    "sha256": "507ad13635522e0db751b1ee3625af25f87ce46f9bcdbd84549f16f166e13d5f"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/deployment-0.10.13-20261013/final-uart.log",
+    "archived": "docs/phase10/evidence/20261013_deployment/final-uart.log",
+    "bytes": 120812,
+    "sha256": "e97b9c228f598179ae9a10ede563882d23cc766f7dca5d65b9a64a10f2c227a3"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/host-pulse.log",
+    "archived": "docs/phase10/evidence/20261013_software/host-pulse.log",
+    "bytes": 1418,
+    "sha256": "e0ea21e260f352c774af93adeb6547d039f86f44b1836be7bf95f11d76f58590"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/host-runtime-fault.log",
+    "archived": "docs/phase10/evidence/20261013_software/host-runtime-fault.log",
+    "bytes": 658,
+    "sha256": "8a78ff0da3a10351dc9c8d5e2f799787039907af87423231dec7bd6dd8ee0240"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/host-sanitizers.log",
+    "archived": "docs/phase10/evidence/20261013_software/host-sanitizers.log",
+    "bytes": 1418,
+    "sha256": "e0ea21e260f352c774af93adeb6547d039f86f44b1836be7bf95f11d76f58590"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/idf-build.log",
+    "archived": "docs/phase10/evidence/20261013_software/idf-build.log",
+    "bytes": 11133,
+    "sha256": "cb79641d2650888cc8b6fcd46cba7357123e1a042711e79f8387a548517d48e7"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/web-tests.log",
+    "archived": "docs/phase10/evidence/20261013_software/web-tests.log",
+    "bytes": 12358,
+    "sha256": "6ecf4318cc334075cb4515ee17329678c4320c474926eda350bad41cac148980"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/web-lint.log",
+    "archived": "docs/phase10/evidence/20261013_software/web-lint.log",
+    "bytes": 108,
+    "sha256": "26b204d1fdf39a1676afb04be86f04aba4b823efe1646407f82720438df1b08e"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/web-types.log",
+    "archived": "docs/phase10/evidence/20261013_software/web-types.log",
+    "bytes": 10,
+    "sha256": "dc713d8113d6066c377750a0df7261c12678a7628f2909112be5e971d14f6fe5"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/release-ready.json",
+    "archived": "docs/phase10/evidence/20261013_software/release-ready.json",
+    "bytes": 362,
+    "sha256": "2366b39f703700563f16b885f89a20461a3ec23952798ad17bb6fb39b62e0f14"
+  },
+  {
+    "source": "output/phase10/20261013_assist_stops/20261013-170326-uart.log",
+    "archived": "docs/phase10/evidence/20261013_assist_stops/20261013-170326-uart.log",
+    "bytes": 83929,
+    "sha256": "c7873191ad234baa88c5c8929c120b6ff3a8b57191c797eb1aa5113c7601a3e1"
+  },
+  {
+    "source": "output/phase10/20261013_assist_stops/20261013-170646-uart.log",
+    "archived": "docs/phase10/evidence/20261013_assist_stops/20261013-170646-uart.log",
+    "bytes": 81684,
+    "sha256": "ec1a699517feb2ef9d707892f0e6a8a69a6252c7529602ad54dd326ab22e2d88"
+  },
+  {
+    "source": "output/phase10/20261013_assist_stops/20261013-170646-status-extract.log",
+    "archived": "docs/phase10/evidence/20261013_assist_stops/20261013-170646-status-extract.log",
+    "bytes": 9090,
+    "sha256": "f867267ed225b0878cfafe299975b566448f1e2afbee9c023b25e6f414cc15cd"
+  },
+  {
+    "source": "output/phase10/20261013_assist_stops/capture_readonly.py",
+    "archived": "docs/phase10/evidence/20261013_assist_stops/capture_readonly.py",
+    "bytes": 2081,
+    "sha256": "af699a13d0f3aba3d1f6d895f694dc971db0761b88a374ef47ced19314d66ba4"
+  },
+  {
+    "source": "output/phase10/20261012_realtime_scope/scope-evidence.json",
+    "archived": "docs/phase10/evidence/20261012_scope/scope-evidence.json",
+    "bytes": 1777,
+    "sha256": "0344efa2394f1f4cdf0cfe9d231f7f01134555bf5678d0a9fb606179e39febdb"
+  },
+  {
+    "source": "output/phase10/20261012_realtime_scope/pause-proof.json",
+    "archived": "docs/phase10/evidence/20261012_scope/pause-proof.json",
+    "bytes": 76,
+    "sha256": "11f70d3bda2ed9bbaf422f3417cbe2f120f5c493235c0be015edf471e75f3a6d"
+  },
+  {
+    "source": "output/phase10/20261013_rise20/candidate-0.10.13/manifest.json",
+    "archived": "docs/phase10/evidence/20261013_software/manifest.json",
+    "bytes": 42293,
+    "sha256": "a9ba4daefb2ab4bb447abe51c7c2fd36d145cd133bb998a6b0548e2677a158a5"
+  }
+]

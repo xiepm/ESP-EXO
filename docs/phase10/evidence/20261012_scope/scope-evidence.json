@@ -1,0 +1,64 @@
+{
+  "client_date": "2026-10-12",
+  "firmware": "0.10.10",
+  "boot_id": "0x2BD55D97",
+  "web_tests_passed": 106,
+  "scope_tests_passed": 13,
+  "typescript": "PASS",
+  "eslint": "PASS",
+  "data_source": "actual browser UI JSONL export, not simulated",
+  "groups": [
+    {
+      "web_session": 11,
+      "stream": 2,
+      "samples": 548,
+      "source_span_s": 54.7,
+      "rate_hz": 10.0,
+      "sequence_gaps": 0,
+      "full_six_channel_samples": 548,
+      "valid_angle_samples": 548,
+      "valid_velocity_samples": 548,
+      "valid_phase_samples": 0,
+      "real_output_samples": 0
+    },
+    {
+      "web_session": 14,
+      "stream": 3,
+      "samples": 1389,
+      "source_span_s": 138.8,
+      "rate_hz": 10.0,
+      "sequence_gaps": 0,
+      "full_six_channel_samples": 1389,
+      "valid_angle_samples": 1389,
+      "valid_velocity_samples": 1389,
+      "valid_phase_samples": 0,
+      "real_output_samples": 0
+    },
+    {
+      "web_session": 14,
+      "stream": 4,
+      "samples": 471,
+      "source_span_s": 47.0,
+      "rate_hz": 10.0,
+      "sequence_gaps": 0,
+      "full_six_channel_samples": 470,
+      "valid_angle_samples": 471,
+      "valid_velocity_samples": 471,
+      "valid_phase_samples": 0,
+      "real_output_samples": 0
+    }
+  ],
+  "pause_proof": {
+    "sampleCountA": 1104,
+    "sampleCountB": 1372,
+    "svgPathsFrozen": true
+  },
+  "time_window_scale_side_toggle_expand": "WEB_UI_PASS",
+  "manual_stop_reenter_does_not_restart": "WEB_UI_PASS",
+  "automatic_start_after_user_enables": "WEB_UI_PASS",
+  "scope_rate_hz": 10,
+  "scope_mask": "0x007B",
+  "agent_started_exoskeleton": false,
+  "agent_changed_assist_or_zero": false,
+  "walking_phase_or_active_assist_hil": "NOT_RUN"
+}

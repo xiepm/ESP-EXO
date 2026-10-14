@@ -1,0 +1,102 @@
+{
+  "status": "PASS",
+  "firmware": "0.10.13",
+  "motor_power": "operator confirmed OFF this turn",
+  "boundary_values_accepted": {
+    "maximum_Nm": 15,
+    "peak_Nm": 15,
+    "fixed_ms": 3000
+  },
+  "out_of_range_rejected": [
+    "15001 mNm",
+    "3001 ms"
+  ],
+  "pulse_strategy_metadata_version": 4,
+  "rate_limit_Nm_per_s": 20,
+  "rate_limit_evidence": "frozen0.10.13source/build plus target INFO/policy-version; not a mechanical measurement",
+  "final_selected": {
+    "mode": "TRANSPARENT",
+    "execution": "DISABLED",
+    "levels": [
+      0,
+      0
+    ],
+    "maximum_Nm": 0.5,
+    "fixed_ms": 600
+  },
+  "restored": true,
+  "motion_commands": false,
+  "web_button_e2e": false,
+  "records": [
+    {
+      "opcode": 1,
+      "request": "01 01 15 00",
+      "response": "01 81 15 0c 01 01 00 0a 0d 7f ff 14 f2 41 5b 21"
+    },
+    {
+      "opcode": 2,
+      "request": "01 02 16 00",
+      "response": "01 82 16 0a 01 00 21 0a 7f 00 01 00 00 00"
+    },
+    {
+      "opcode": 29,
+      "request": "01 1d 17 0c 01 04 00 04 00 00 00 00 98 3a e8 03",
+      "response": "01 9d 17 04 00 01 21 00"
+    },
+    {
+      "opcode": 7,
+      "request": "01 07 18 00",
+      "response": "01 87 18 10 01 04 00 00 04 04 00 00 00 09 06 02 03 00 0f 00"
+    },
+    {
+      "opcode": 10,
+      "request": "01 0a 19 00",
+      "response": "01 8a 19 08 01 01 98 3a 00 00 98 3a"
+    },
+    {
+      "opcode": 33,
+      "request": "01 21 1a 10 01 00 98 3a b8 0b 2c 01 96 00 dc 05 90 01 b8 0b",
+      "response": "01 a1 1a 04 00 01 21 00"
+    },
+    {
+      "opcode": 32,
+      "request": "01 20 1b 00",
+      "response": "01 a0 1b 10 01 00 98 3a b8 0b 2c 01 96 00 dc 05 90 01 b8 0b"
+    },
+    {
+      "opcode": 33,
+      "request": "01 21 1c 10 01 00 98 3a b9 0b 2c 01 96 00 dc 05 90 01 b8 0b",
+      "response": "01 a1 1c 04 24 01 21 00"
+    },
+    {
+      "opcode": 29,
+      "request": "01 1d 1d 0c 01 04 00 04 00 00 00 00 99 3a e8 03",
+      "response": "01 9d 1d 04 24 01 21 00"
+    },
+    {
+      "opcode": 32,
+      "request": "01 20 1e 00",
+      "response": "01 a0 1e 10 01 00 98 3a b8 0b 2c 01 96 00 dc 05 90 01 b8 0b"
+    },
+    {
+      "opcode": 25,
+      "request": "01 19 1f 0a 01 01 00 01 00 00 00 00 f4 01",
+      "response": "01 99 1f 04 00 01 21 00"
+    },
+    {
+      "opcode": 10,
+      "request": "01 0a 20 00",
+      "response": "01 8a 20 08 01 01 f4 01 00 00 98 3a"
+    },
+    {
+      "opcode": 32,
+      "request": "01 20 21 00",
+      "response": "01 a0 21 10 01 00 f4 01 58 02 2c 01 96 00 dc 05 90 01 b8 0b"
+    },
+    {
+      "opcode": 2,
+      "request": "01 02 22 00",
+      "response": "01 82 22 0a 01 00 21 0a 7f 00 01 00 00 00"
+    }
+  ]
+}

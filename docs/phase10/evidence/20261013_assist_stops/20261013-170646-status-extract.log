@@ -1,0 +1,214 @@
+READ ONLY 20261013-170646; port=COM6; DTR/RTS=False before open
+>>> system_status
+===== Exoskeleton System =====
+  Initialized:       YES
+  State:             ERROR
+  Active step:       NONE
+  Ready to start:    no
+  Start block:       SYSTEM_ERROR
+  Run requested:     no
+  Output allowed:    no
+  Maintenance:       inactive
+  Executor alive:    YES
+  Executor identity: 0x3fca20bc
+  Transitions:       25
+  START:             requests=5 success=5 failure=0 cancelled=0
+  STOP:              requests=4 success=4 failure=0
+  Rejected requests: 0
+  Last result:       ACCEPTED
+  Last error:        ESP_ERR_INVALID_STATE (259)
+  Last failed step:  NONE
+  Runtime faults:    3; last=CAN_ERROR_PASSIVE (ESP_ERR_INVALID_STATE)
+  Runtime fault at:  1202820636 us
+  Fault CAN sample:  valid=YES state=1 TEC/REC=0/133
+  Fault ages L/R:    2986 / 4821 us
+  State entered:     1202960717 us
+  Last request at:   1158164122 us
+  Last failure:      1202820636 us
+  Last completed:    1202960717 us
+>>> control_status
+===== 100 Hz Control Loop =====
+  Initialized:       YES
+  Task alive:        YES
+  Task identity:     0x3fca0e64
+  Configured rate:   100 Hz (10000 us)
+  Cycle count:       164084
+  Period samples:    164083; outside +/- 1000 us: 0
+  Last cycle:        1641049131 us
+  Period us:         last=10000 min=9229 max=10765 mean=9999 (100.010 Hz)
+  Period error us:   last=0 max_abs=771
+  Execution us:      last=841 max=4665
+  Deadline misses:   0
+  Skipped cycles:    0
+  Output errors:     3 (last=ESP_OK)
+  Stack free min:    1020 bytes
+  LEFT input:        valid=YES count=186603 timestamp=1641044037 us
+  RIGHT input:       valid=YES count=186562 timestamp=1641040935 us
+===== Joint Controller =====
+  Armed/tick:        no/idle
+  Selected:          DAMPING + CONSTANT (generation=1)
+  Active:            NONE + CONSTANT (generation=0)
+  Selected LEFT:     q=0.000 deg dq=0.000 deg/s tau=0.000 Nm kp=0.000 kd=0.100
+  Selected RIGHT:    q=0.000 deg dq=0.000 deg/s tau=0.000 Nm kp=0.000 kd=0.100
+  Last LEFT output:  q=26.419 deg dq=0.000 deg/s tau=0.000 Nm kp=0.000 kd=0.100
+  Last RIGHT output: q=21.012 deg dq=0.000 deg/s tau=0.000 Nm kp=0.000 kd=0.100
+  Output/error:      31867/0 (last=ESP_OK)
+  Last assist route: gate=closed suggested=no accepted=no applied=no
+  Last send/reject:  attempted=no pair=no A=no B=no partial=no reason=0 result=ESP_OK
+  Partial sends:     0
+  Assist delta L/R:  0.000 / 0.000 N.m
+  Assist accepted/applied/rejected: 31867/31867/0
+>>> assist_status
+===== High-level Assistance =====
+  Selected:          ANGLE_THRESHOLD / ACTIVE strategy=4 profile=0 gen=15
+  Active/locked:     NONE / DISABLED / unlocked
+  Strategy metadata: version=4 active_gen=15 activation_epoch=13
+  Levels L/R:        100 % / 100 %
+  Max assist:        selected=15.000 active=0.000 N.m (RAM)
+  Sensors:           required=0x00000003 available=0x0000000F valid=0x0000000F
+  Gait requirement:  flags=0x00000000 min_confidence=0.0 % ready=no
+  Ready/suggestion:  strategy=YES sensors=no suggestion=invalid
+  Unavailable:       NOT_ARMED
+  REAL OUTPUT:       DISABLED (only a successful ACTIVE send enables it)
+  Steps/suggest/applied: 164165 / 31870 / 31867
+  Last result:       valid=no kind=0 sensor_seq=164165 gait_seq=164165 activation=13
+  Suggested tau L/R: 0.000 / 0.000 N.m
+>>> sensor_status
+===== Phase 9 Sensor Snapshot =====
+  Sequence/time:     164246 / 1642669132 us; reset_epoch=3
+  Sensor masks:      available=0x0000000F valid=0x0000000F quality=0x00000000
+  Pair source skew:  2825 us
+  LEFT : available=YES valid=YES online=YES age=4678 us count=186765 epoch=1
+         q=76.224 deg dq=0.423 deg/s motor_tau_est=0.000 Nm temp=30.6 C source=1642664454 us
+  RIGHT: available=YES valid=YES online=YES age=7503 us count=186724 epoch=1
+         q=83.873 deg dq=-0.654 deg/s motor_tau_est=-0.000 Nm temp=31.3 C source=1642661629 us
+>>> gait_status
+===== Gait Estimate (encoder proxy) =====
+  Estimator/state:   1 / STANDING; valid=no motion=no
+  Phase origin:      HIP_FLEXION_PEAK (not heel strike)
+  LEFT phase:       invalid 0.00 % period=0.000 s event=0x00
+  RIGHT phase:      invalid 0.00 % period=0.000 s event=0x00
+  Cadence/confidence: 0.00 spm / 0.0 %
+  Flags:             valid=0x00000000 quality=0x00000004
+  Algorithm us:      snapshot=231/328 gait=155/738 assist=180/1058 (last/max)
+  Algorithm errors:  0 (last=ESP_OK)
+>>> can_status
+===== TWAI Status =====
+  State:             RUNNING
+  Configured bus:    TX GPIO4 / RX GPIO1, 1000000 bit/s
+  RX GPIO1 level:   1 (digital high)
+  RX level alone is not a CAN_H/CAN_L waveform or supply check.
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  36
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   855
+  Arbitration lost:  4
+  RX missed:         0
+>>> ble_status
+===== Product BLE =====
+  Initialized:       YES
+  Host synced:       YES
+  Connected:         YES
+  Response notify:   subscribed
+  Telemetry notify:  subscribed
+  Connection handle: 0x0001
+  Negotiated MTU:    23
+  Session generation:1
+  Boot ID:           0x7C9317A5
+  Worker alive:      YES
+  Worker identity:   0x3fca45e0
+  Worker stack min:  1088 bytes free
+  Telemetry task:    alive identity=0x3fca3488 stack_min=1528 bytes
+  RX/queue/process:  6983/6983/6983
+  Bad/duplicate/id:  0/0/0
+  Full/stale:        0/0
+  Notify submit ok/fail: 6983/0
+  Notify TX failures:    0
+  Telemetry notify ok/fail/TX-fail: 83914/979/567
+  Telemetry retry-ok/exhausted/last-rc: 268/0/6
+  Telemetry alloc-fail/submit-fail: 412/567
+  Stream:            RUNNING rate=10 Hz mask=0x007B sequence=1
+  Stream frames/drop/queue: 83914/0/1 of 32 samples
+>>> joint_status left
+===== Hip Joint LEFT =====
+  Mapping:       actuator B (valid)
+  Direction:     -1 (valid)
+  Software zero: 5.198 deg continuous (valid, RAM only)
+  Zero on wire:  5.198 deg periodic
+  Zero source:   feedback count=1357 timestamp=106596422 us epoch=1 (current)
+  Feedback:      valid / online, count=187092, age=2497 us
+  Raw actuator:  q=-71.026 deg dq=0.808 deg/s tau=-0.000 Nm temp=30.6 C
+  Continuous q: -71.026 deg (periods=0 epoch=1)
+  Joint:         q=76.224 deg dq=-0.808 deg/s tau=0.000 Nm
+  Joint valid:   YES
+>>> joint_status right
+===== Hip Joint RIGHT =====
+  Mapping:       actuator A (valid)
+  Direction:     +1 (valid)
+  Software zero: -26.738 deg continuous (valid, RAM only)
+  Zero on wire:  -26.738 deg periodic
+  Zero source:   feedback count=1357 timestamp=106599173 us epoch=1 (current)
+  Feedback:      valid / online, count=187133, age=1109 us
+  Raw actuator:  q=57.157 deg dq=-2.654 deg/s tau=-0.000 Nm temp=31.3 C
+  Continuous q: 57.157 deg (periods=0 epoch=1)
+  Joint:         q=83.895 deg dq=-2.654 deg/s tau=-0.000 Nm
+  Joint valid:   YES
+>>> system_status
+===== Exoskeleton System =====
+  Initialized:       YES
+  State:             ERROR
+  Active step:       NONE
+  Ready to start:    no
+  Start block:       SYSTEM_ERROR
+  Run requested:     no
+  Output allowed:    no
+  Maintenance:       inactive
+  Executor alive:    YES
+  Executor identity: 0x3fca20bc
+  Transitions:       25
+  START:             requests=5 success=5 failure=0 cancelled=0
+  STOP:              requests=4 success=4 failure=0
+  Rejected requests: 0
+  Last result:       ACCEPTED
+  Last error:        ESP_ERR_INVALID_STATE (259)
+  Last failed step:  NONE
+  Runtime faults:    3; last=CAN_ERROR_PASSIVE (ESP_ERR_INVALID_STATE)
+  Runtime fault at:  1202820636 us
+  Fault CAN sample:  valid=YES state=1 TEC/REC=0/133
+  Fault ages L/R:    2986 / 4821 us
+  State entered:     1202960717 us
+  Last request at:   1158164122 us
+  Last failure:      1202820636 us
+  Last completed:    1202960717 us
+>>> assist_status
+===== High-level Assistance =====
+  Selected:          ANGLE_THRESHOLD / ACTIVE strategy=4 profile=0 gen=15
+  Active/locked:     NONE / DISABLED / unlocked
+  Strategy metadata: version=4 active_gen=15 activation_epoch=13
+  Levels L/R:        100 % / 100 %
+  Max assist:        selected=15.000 active=0.000 N.m (RAM)
+  Sensors:           required=0x00000003 available=0x0000000F valid=0x0000000F
+  Gait requirement:  flags=0x00000000 min_confidence=0.0 % ready=no
+  Ready/suggestion:  strategy=YES sensors=no suggestion=invalid
+  Unavailable:       NOT_ARMED
+  REAL OUTPUT:       DISABLED (only a successful ACTIVE send enables it)
+  Steps/suggest/applied: 164819 / 31870 / 31867
+  Last result:       valid=no kind=0 sensor_seq=164819 gait_seq=164819 activation=13
+  Suggested tau L/R: 0.000 / 0.000 N.m
+>>> can_status
+===== TWAI Status =====
+  State:             RUNNING
+  Configured bus:    TX GPIO4 / RX GPIO1, 1000000 bit/s
+  RX GPIO1 level:   1 (digital high)
+  RX level alone is not a CAN_H/CAN_L waveform or supply check.
+  TX queued:         0
+  RX queued:         0
+  TX error counter:  36
+  RX error counter:  0
+  TX failed count:   0
+  Bus error count:   855
+  Arbitration lost:  4
+  RX missed:         0
+SERIAL CLOSED

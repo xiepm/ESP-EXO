@@ -1,0 +1,8 @@
+{
+  "candidate": "D:\\ESP32\\esp_can\\output\\phase10\\20261013_rise20\\candidate-0.10.13",
+  "verified_files": 233,
+  "app_size": 683328,
+  "app_sha256": "e4002a0a2945009cb96402b88f1c17f94c8d326d7aff2b0e177afaec8c97532a",
+  "manifest_sha256": "a9ba4daefb2ab4bb447abe51c7c2fd36d145cd133bb998a6b0548e2677a158a5",
+  "status": "SOFTWARE_PASS_NOT_FLASHED"
+}

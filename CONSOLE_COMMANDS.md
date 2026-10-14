@@ -1,7 +1,22 @@
 # ESP-EXO RS01 与髋关节 UART 调试控制台命令手册
 
+网页用户请先阅读[五栏目操作说明](docs/web/WEB_OPERATION_GUIDE.md)。下方带日期的部署状态
+是各次历史快照；2026-10-13另有运动中CAN_ERROR_PASSIVE停机证据，见
+[助力中断诊断](docs/phase10/PHASE_10_ASSIST_INTERRUPTION_20261013.md)，物理根因未解决。
+
+0.10.13已烧录并实际BLE核对版本/策略version4及15/3000参数边界，最终IDLE/输出0；事件脉冲上升速率20 N·m/s，原UART格式不变。完整15 N·m/3秒只通过软件命令回放，真人与电机力矩实测未执行。见[说明](docs/phase10/PHASE_10_RISE_20_20261013.md)及[部署](docs/phase10/PHASE_10_0_10_13_DEPLOYMENT_20261013.md)。
+
+0.10.12事件脉冲新增FIXED3000 ms、申请/START上限15.000 N·m；10 N·m/s使3秒实际峰值≤9.5493。参数范围由产品BLE及网页核对，UART旧助力配置格式不变。包含成对零位修复并同步BLE INFO版本；本次运动HIL未执行。见[新增边界说明](docs/phase10/PHASE_10_EXTENDED_PULSE_20261013.md)。
+
+0.10.11为未烧录候选：产品网页双髋重新校准使用BLE `0x1F/action=3`一次采集/成对提交，并读回两侧近0°；UART `joint_zero`和BLE `0x12`仍是明确分侧的工程调试入口。不要以两次分侧命令替代产品按钮E2E验收。见[成对零位说明](docs/phase10/PHASE_10_PAIR_ZERO_CAPTURE_20261012.md)。
+
+0.10.10已于2026-10-12从冻结产物烧录，网页实际读回版本/0xFF7F及事件脉冲参数；新启动IDLE/START0/运动输出0，方向和上次零位候选保留，RAM零位未启用。随后上电双电机自动恢复约100 Hz REST/故障0反馈、CAN错误0，无运动恢复一轮通过；新策略参数写入和运动HIL待验。策略4为新摆腿事件的一次sin²脉冲，复位后下一事件才允许再触发。脉冲时长/峰值/窗口使用产品网页专用协议，UART旧`assist_config`只保留原格式，IDLE修改会采用扩展默认值，不能用它模拟周期性脉冲。见[事件脉冲说明](docs/phase10/PHASE_10_SWING_EVENT_PULSE_20261012.md)和[部署证据](docs/phase10/PHASE_10_0_10_10_DEPLOYMENT_20261012.md)。
+
+0.10.9新增网页“沿用上次零位 / 重新校准”。UART原`joint_zero`仍只更新本次RAM，不自动保存候选；候选保存/恢复/忘记经产品BLE执行，仅IDLE维护，不发送机械归零或运动命令。用户确认当前动力断电后已从冻结版本烧录，IDLE/START请求0/运动输出0；网页INFO待重连核对，候选保存/复位/沿用HIL未执行。见[零位沿用说明](docs/phase10/PHASE_10_SAVED_WEAR_ZERO_20261010.md)和[0.10.9部署](docs/phase10/PHASE_10_0_10_9_DEPLOYMENT_20261010.md)。
+
 > 这是仅通过烧录 UART 使用的工程调试接口，不是阶段 6 的手机产品协议。固件上电后会为
-> A/B 两台 RS01 写入 10 ms 上报周期并请求开启主动反馈；该操作不会使能电机。手机 BLE
+> A/B 两台 RS01 在IDLE有限请求10 ms上报周期与主动反馈；已烧录0.10.6在双侧失联时
+> 还等待RX高采样与空发送队列。请求不使能电机，也不证明节点已在线。手机 BLE
 > 接口见 `docs/phase6/BLE_PROTOCOL_V1.md`，不接受本页的 ASCII 命令。
 
 本控制台从固件 `0.8.0` 起，运动控制命令和状态快照中的角度、角速度、角加速度
@@ -9,7 +24,19 @@
 弧度，并在 UART 边界后立即显式换算；旧的弧度制运动参数不能直接复用。裸寄存器
 读写（`read_param`、`mit_read`、`mit_write`）仍透传手册原始值，不做单位推断或换算。
 
+已部署0.10.7新增单向角度阈值助力，参数通过产品网页专用原子命令配置并读回。0.10.8已从冻结版本烧录，将该策略的峰值范围提高到5.000 N·m、最大上升速率设为10 N·m/s，网页已写入并读回5.000 N·m/10.00°/双侧0%/DISABLED；相位工程曲线仍受0.500 N·m限制。现有UART `assist_config`保持旧参数格式并保留已保存阈值，不能用其旧字段直接选择新策略。说明见[角度阈值证据](docs/phase10/PHASE_10_ANGLE_THRESHOLD_ASSIST_20261010.md)和[5 N·m证据](docs/phase10/PHASE_10_5NM_ASSIST_20261010.md)。
+
 ## 命令通道
+
+已烧录0.10.6的`system_status`包含运行故障首因/计数/时间、CAN采样和双髋年龄；
+运行中CAN状态异常、错误被动阈值、双髋反馈/故障或控制输出失败会关闭周期门并由原执行器
+清理，随后保持ERROR。0.10.5曾在EN复位后恢复双侧新REST反馈、CAN TEC/REC=0/0；
+13:43再次重新连接/上电后最后采样boot ID为0x8E6D6A32，本次启动双侧反馈0、TEC/REC=144/0、IDLE/输出0，网页BLE已重连。
+此前动力后上电曾TEC=144。没有`can_recover`命令，不能反复START尝试恢复。
+`can_status`显示TX/RX/位率与单次数字电平；GPIO电平不能代替CAN差分波形。
+14:22已烧录0.10.6，断电状态下IDLE、输出0、RX低、发送队列0、CAN错误0；14:27～14:28同一boot ID后上电自动恢复双侧新REST反馈约100 Hz、CAN错误0，一轮通过。多轮/长时耐久待做。
+最新部署见 `docs/phase10/PHASE_10_0_10_6_DEPLOYMENT_20261010.md`；上述0.10.5为历史记录。
+详见 [当前CAN排查](docs/phase10/PHASE_10_CAN_DIAGNOSIS_20261009.md)。
 
 调试命令只支持**烧录串口**：115200 baud，发送 ASCII 命令并以 `\r` 或
 `\n` 结束。可直接在 ESP-IDF monitor 中输入命令后按 Enter。
@@ -46,8 +73,12 @@ status
 idf.py -p COMx monitor
 ```
 
-> **CAN 总线**：TX=GPIO4，RX=GPIO2，1 Mbps；当前值集中定义在
-> `g_exo_hardware_config`，不是通过 Kconfig 修改。
+> **CAN 总线**：当前工程配置为 TX=GPIO4，RX=GPIO1，1 Mbps。TX/RX 接线均于
+> 2026-10-09 由操作者确认。GPIO 从 `sdkconfig` 的
+> `CONFIG_EXAMPLE_TX_GPIO_NUM/CONFIG_EXAMPLE_RX_GPIO_NUM` 读取并集中进入
+> `g_exo_hardware_config`；可通过 Kconfig 配置，修改后需重新编译。
+> 2026-10-09本轮COM6已烧录0.10.2产品构建，网页读回与双电机100 Hz反馈已验证。
+> 上电后的RAM零位仍需按本次装配和中立位重新标定；详情见阶段10产品标定记录。
 
 ---
 
@@ -464,8 +495,9 @@ control_status
 按需输出常驻 100 Hz 控制任务的任务身份、周期数、目标及实测周期、执行时间、
 超期和跳周期数、输出错误、栈最低余量，以及 LEFT/RIGHT 本周期反馈来源与
 `joint_valid`。阶段 8 还会显示 selected/active 模式、参考源、左右 selected 五元
-参数和最近实际输出。该命令只是 UART 文本诊断，不是连续遥测，也不会启动、停止
-或修改控制任务。
+参数和最近实际输出。阶段10继续显示最近一周期的输出门、建议/接纳/实际施加、
+拒绝原因、最终发送结果、左右助力增量和累计统计。该命令只是 UART 文本诊断，
+不是连续遥测，也不会启动、停止或修改控制任务。
 
 ### sensor_status — 显示统一传感快照
 
@@ -496,25 +528,38 @@ assist_status
 ```
 
 显示 selected/requested 与 active/effective 配置、策略版本、START activation epoch、
-所需传感器/步态条件、SHADOW 结果绑定的 sensor/gait sequence，以及不可用原因。
-阶段 9 的 `REAL OUTPUT` 必须始终为 `DISABLED`。
+所需传感器/步态条件、结果绑定的 sensor/gait sequence、建议力矩、实际施加累计和
+不可用原因。SHADOW 的 `REAL OUTPUT` 必须始终为 `DISABLED`；ACTIVE 也只有在
+建议被最终命令合成器接纳且左右命令成功发送的那个周期才显示 `ENABLED`。
 
 ### assist_config — 设置下一次 START 的高层策略
 
 ```text
-assist_config <transparent|active_phase|aan> <disabled|shadow> \
+assist_config <transparent|active_phase|aan> <disabled|shadow|active> \
               <transparent|phase_profile|aan_residual> \
               <profile 0..255> <left 0..100> <right 0..100>
 ```
 
-只允许整机 IDLE 时修改。阶段 9 只有 `transparent + transparent` 已实现；
-`phase_profile` 与 `aan_residual` 是为后续算法保留的静态接口，当前会明确显示
-`STRATEGY_NOT_IMPLEMENTED`。UART 不提供 ACTIVE 参数，SHADOW 建议也不会进入 CAN。
+只允许整机 IDLE 时修改。阶段10实现 `transparent` 和 `phase_profile`；
+`aan_residual` 仍明确显示 `STRATEGY_NOT_IMPLEMENTED`。ACTIVE 只允许
+`active_phase + phase_profile`，并且下一次 START 的基础控制必须是
+`damping + constant`；其他 ACTIVE 组合会被拒绝。profile 0 是全零诊断曲线，
+profile 1 是峰值0.5 N·m的工程测试曲线，两者都不是论文复现曲线。
+
+0.10.3候选增加网页“最大附加助力力矩”：0～0.500 N·m，步长0.001 N·m，
+默认0.500 N·m，保存在RAM并与左右等级一同于START锁存。
+`assist_status` 显示保存/活动上限；本UART旧写入命令保留网页已保存的上限。
+协议新增capability bit9、GET `0x0A`和原子配置写入 `0x19`，完整线格式见
+`docs/phase10/PHASE_10_ASSIST_TORQUE_LIMIT_20261009.md`。未烧录候选前板上不支持新命令。
 
 示例：
 
 ```text
 assist_config transparent shadow transparent 0 0 0
+assist_status
+
+motion_mode damping constant
+assist_config active_phase shadow phase_profile 1 10 10
 assist_status
 ```
 
@@ -532,10 +577,12 @@ can_status
 ble_status
 ```
 
-输出产品 BLE 是否初始化、Host 是否同步、手机是否连接并订阅 Response Notify、连接
-代际、协商 MTU、BLE 命令任务栈余量，以及接收、排队、畸形帧、重复请求、请求号冲突、
-队列满、过期请求、通知同步提交成功/失败和异步 TX 失败计数。该命令只读，不发送产品 BLE
-命令，也不影响电机。
+输出产品 BLE 是否初始化、Host 是否同步、手机是否连接并订阅 Response/Telemetry
+Notify、连接代际、协商 MTU、两个 BLE 任务的栈余量，以及命令和遥测各自的通知统计。
+还会显示当前遥测流的速率、通道 mask、stream sequence、设备丢弃数和32样本静态
+队列深度。`alloc-fail` 表示NimBLE临时没有mbuf，若随后 `retry-ok` 增加且
+`exhausted` 仍为0，说明背压已由低优先级任务恢复，并不等于样本丢失；真正的完整
+样本丢弃以 `Stream ... drop` 为准。该命令只读，不发送产品 BLE 命令，也不影响电机。
 
 ### motor_type — 查看电机型号参数
 ```

@@ -1,0 +1,42 @@
+{
+  "client_date": "2026-10-14",
+  "scope": "software-only; no serial/BLE/flash/zero/enable/START",
+  "firmware": "0.10.13",
+  "source_commit": "c40c600a43558f44e58dc7be6e47b406fc4aadd3",
+  "node": "24.19.0",
+  "idf": "5.5",
+  "checks": {
+    "web_build_and_tests": {
+      "status": "PASS",
+      "passed": 123,
+      "failed": 0
+    },
+    "typescript_no_emit": "PASS",
+    "eslint": "PASS",
+    "swing_pulse": {
+      "status": "PASS",
+      "passed": 17,
+      "original_integration_passed": 4
+    },
+    "runtime_fault": {
+      "status": "PASS",
+      "passed": 8
+    },
+    "pair_zero": {
+      "status": "PASS",
+      "passed": 8,
+      "saved_zero_passed": 10,
+      "factory_direction_passed": 11
+    },
+    "idf_build": "PASS",
+    "guide_relative_links": "PASS",
+    "evidence_copy_sha256": "PASS",
+    "source_staged_whitespace": "PASS"
+  },
+  "app_bytes": 683328,
+  "app_sha256": "e4002a0a2945009cb96402b88f1c17f94c8d326d7aff2b0e177afaec8c97532a",
+  "physical_CAN_root_cause": "UNRESOLVED",
+  "human_ACTIVE_acceptance": "INCOMPLETE",
+  "phase10": "INCOMPLETE",
+  "phase11": "INCOMPLETE"
+}

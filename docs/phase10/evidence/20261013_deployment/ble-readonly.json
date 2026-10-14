@@ -1,0 +1,81 @@
+{
+  "status": "READ_ONLY_PASS",
+  "device": "14:C1:9F:C5:26:82",
+  "info": {
+    "protocol_min": 1,
+    "protocol_max": 1,
+    "firmware": [
+      0,
+      10,
+      13
+    ],
+    "capabilities": 65407,
+    "max_frame_size": 20,
+    "boot_id": 559628786
+  },
+  "system": {
+    "state": 1,
+    "active_step": 0,
+    "flags": 33,
+    "start_block_reason": 10,
+    "last_result": 127,
+    "last_failed_step": 0,
+    "transition_count": 1
+  },
+  "hard_maximum_Nm": 15.0,
+  "selected_maximum_Nm": 0.5,
+  "pulse_timing": {
+    "peak_Nm": 0.5,
+    "fixed_ms": 600
+  },
+  "RAM_wear_zero": "invalid; no automatic restore",
+  "configuration_writes": false,
+  "motion_commands": false,
+  "observations": [
+    {
+      "opcode": 1,
+      "request_id": 1,
+      "raw": "01 81 01 0c 01 01 00 0a 0d 7f ff 14 f2 41 5b 21"
+    },
+    {
+      "opcode": 2,
+      "request_id": 2,
+      "raw": "01 82 02 0a 01 00 21 0a 7f 00 01 00 00 00"
+    },
+    {
+      "opcode": 10,
+      "request_id": 3,
+      "raw": "01 8a 03 08 01 01 f4 01 00 00 98 3a"
+    },
+    {
+      "opcode": 32,
+      "request_id": 4,
+      "raw": "01 a0 04 10 01 00 f4 01 58 02 2c 01 96 00 dc 05 90 01 b8 0b"
+    },
+    {
+      "opcode": 9,
+      "request_id": 5,
+      "raw": "01 89 05 10 00 01 20 02 03 00 00 00 00 80 00 00 00 80 ff ff"
+    },
+    {
+      "opcode": 30,
+      "request_id": 7,
+      "raw": "01 9e 07 10 00 01 20 02 03 03 00 00 21 22 00 00 00 00 00 80"
+    },
+    {
+      "opcode": 9,
+      "request_id": 6,
+      "raw": "01 89 06 10 01 00 10 01 03 00 00 00 00 80 00 00 00 80 ff ff"
+    },
+    {
+      "opcode": 30,
+      "request_id": 8,
+      "raw": "01 9e 08 10 01 00 10 01 03 03 00 00 7c 8f ff ff 00 00 00 80"
+    },
+    {
+      "opcode": 2,
+      "request_id": 9,
+      "raw": "01 82 09 0a 01 00 21 0a 7f 00 01 00 00 00"
+    }
+  ]
+}

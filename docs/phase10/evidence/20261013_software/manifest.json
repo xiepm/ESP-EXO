@@ -1,0 +1,1229 @@
+{
+  "version": "0.10.13",
+  "client_date": "2026-10-13",
+  "created_at": "2026-10-13T10:42:56.796159+08:00",
+  "status": "SOFTWARE_PASS_NOT_FLASHED",
+  "hardware_motion_hil": "NOT_RUN",
+  "human_active_hil": "NOT_RUN",
+  "git_head": "9225bb300dde0f722d0f0ad0a30443a30b90c8bc",
+  "user_changes_preserved": true,
+  "current_motor_power_condition": "PENDING_THIS_TURN",
+  "parameters": {
+    "rise_Nm_per_s": 20,
+    "peak_max_Nm": 15,
+    "fixed_max_ms": 3000,
+    "minimum_full15Nm_ms": 2357,
+    "actual_command_peak_at3000ms_and100percent": 15,
+    "maximum_positive_slope_for15Nm_3s": 15.707963267948964,
+    "short_pulse_rate_limit": true,
+    "phase_profile_max_Nm": 0.5,
+    "default_peak_Nm": 0.5,
+    "default_fixed_ms": 600,
+    "default_execution": "DISABLED",
+    "default_levels": [
+      0,
+      0
+    ],
+    "strategy_version": 4,
+    "automatic_repeat": false
+  },
+  "build_environment": {
+    "IDF": "5.5",
+    "target": "esp32s3",
+    "flash_MB": 16,
+    "CAN_TX_GPIO": 4,
+    "CAN_RX_GPIO": 1,
+    "engineering_stimulus": false
+  },
+  "tests": {
+    "pulse_C": "17/17",
+    "original_integration": "4/4",
+    "O2_ASAN_UBSAN": "PASS",
+    "runtime_fault": "8/8",
+    "web": "123/123",
+    "typescript": "PASS",
+    "lint": "PASS",
+    "IDF_build": "PASS",
+    "UI_preview": "OFFLINE PASS"
+  },
+  "version_consistency": "CMake/INFO macro0.10.13 PASS",
+  "pair_zero_capture": true,
+  "actions_this_turn": {
+    "hardware_serial": false,
+    "hardware_BLE": false,
+    "flash": false,
+    "zero": false,
+    "start_stop": false
+  },
+  "source_files": [
+    {
+      "path": ".gitignore",
+      "size": 468,
+      "sha256": "e5c7f33209d903dc64267658a5b1b98f36ae332687de117c987912402ef068fb"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "size": 607,
+      "sha256": "fa276de27e82f20209468136cb8877176966be3f42f28c55e02bddd0e80cd28c"
+    },
+    {
+      "path": "CONSOLE_COMMANDS.md",
+      "size": 24747,
+      "sha256": "f33f0bba7267aef0427cd9a5ab3b8040f5059cc4b4a68d8c9f22aa8c33eae8ab"
+    },
+    {
+      "path": "README.md",
+      "size": 21850,
+      "sha256": "419f4854f98c8e956bc19437b9dd96fe21632c5ae35c019151c75b9db401a19b"
+    },
+    {
+      "path": "docs/baseline/PHASE_0_BASELINE.md",
+      "size": 7744,
+      "sha256": "47787324bcff603aec872aabe10715446111d7e778b3b9a6e4b528fc6ec2d6cc"
+    },
+    {
+      "path": "docs/baseline/SMOKE_TEST.md",
+      "size": 5083,
+      "sha256": "d6d1f423468469e6fc051e14157244c024ab4e0200bfc925a69e80a8a5fbe059"
+    },
+    {
+      "path": "docs/baseline/evidence/hardware_smoke_20260806.json",
+      "size": 6149,
+      "sha256": "49e30ed4e0aaa8ea7728b23a33c860315a3b2ab96c54411410e4b46460964617"
+    },
+    {
+      "path": "docs/baseline/evidence/impedance_analysis_20260806.json",
+      "size": 6868,
+      "sha256": "243f4935c751c09a8d9039f9a16c0508e197fd80a8913a3d41c3f63330010de7"
+    },
+    {
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_ble_gatt_20260806.txt",
+      "size": 8821,
+      "sha256": "3d01fc1af253ee657ed9fda5b0557db7a9a99278c76d0d3c4c1152e43af71acc"
+    },
+    {
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_flash_20260806.txt",
+      "size": 7668,
+      "sha256": "2b9489ce411c478bf709dd08373c7a38f189132118a23235c24c47600045afaa"
+    },
+    {
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_impedance_20260806.txt",
+      "size": 57689,
+      "sha256": "121aab98c0966126ad6ef3fc6fcbecc4678ad24cd20f6a7e1f6ca5af1c824a89"
+    },
+    {
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_motor_feedback_20260806.txt",
+      "size": 64009,
+      "sha256": "72d5361520483f4ad5beb83c3be22b178b8d0313531ccb19e28d19a5d910a0fb"
+    },
+    {
+      "path": "docs/baseline/evidence/raw/esp_exo_phase0_uart_pass_20260806.txt",
+      "size": 8756,
+      "sha256": "faeb6ad19be2b4ed7a25fd9da810de6a839a8b484915799f06e007c04f041a6e"
+    },
+    {
+      "path": "docs/baseline/json/metric_contract.json",
+      "size": 5004,
+      "sha256": "d8cd2be301c5d1d66634ee15ecb7da15178f57118f49bfa0c1ff7ce30a4afe73"
+    },
+    {
+      "path": "docs/phase1/PHASE_1_ACCEPTANCE.md",
+      "size": 3959,
+      "sha256": "45a85ec09f946f8bd2b393e74adfe6ea6d245755b1a7d0cab27e6b163b0e8809"
+    },
+    {
+      "path": "docs/phase1/PHASE_1_DESIGN.md",
+      "size": 3937,
+      "sha256": "b062c6c72b90b7e0d0169263b4ab02f5a0bf42ae163053ffb5d0c46baa4aa04b"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_0_10_10_DEPLOYMENT_20261012.md",
+      "size": 6632,
+      "sha256": "b6ff169fad6ec670ce6b326c6276e08f2c870e76e0bcd8396647ac0aa63b5c9a"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_0_10_12_DEPLOYMENT_20261013.md",
+      "size": 3710,
+      "sha256": "ad31798a716b1a5a807a35f01063964b445ad117f6000376cfdbd7614660053d"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_0_10_6_DEPLOYMENT_20261010.md",
+      "size": 5198,
+      "sha256": "8391b701d4b200eabe247d7b7e5c622039125c6420ff53e2629563490877cd8f"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_0_10_7_DEPLOYMENT_20261010.md",
+      "size": 8470,
+      "sha256": "3c52aab37aaba68cf176dc5e9956864527b2b094643fd91a191be89d32431c9c"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_0_10_8_DEPLOYMENT_20261010.md",
+      "size": 3979,
+      "sha256": "9ccf55e2acac9bc1d44392e16adb5a678f777c00ee4e7d14ae25f13d4018a9c0"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_0_10_9_DEPLOYMENT_20261010.md",
+      "size": 3740,
+      "sha256": "3b224d70b7921c82fcfa029ecec7b2f03dc7dae0fea50ac995faaef6b0c34ccf"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_5NM_ASSIST_20261010.md",
+      "size": 5654,
+      "sha256": "0fbd99f8b927c29a50e1a5b243c5bbe5f69f213f01b0c1c54cfb94f49b3cb816"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_ACCEPTANCE.md",
+      "size": 29823,
+      "sha256": "1912a9534afbe5a808a5a4b8f0e21b0981727c31b58aa1df0f8f4b680a91aca5"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_ACTIVE_BUS_OFF_20261009.md",
+      "size": 5803,
+      "sha256": "5fb5e510f6ee7d920299afeaf64c768d973d7154d1e088226c8a1dd7824d5733"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_ANGLE_THRESHOLD_ASSIST_20261010.md",
+      "size": 6572,
+      "sha256": "bfc4903dec541c9a91c1490a56335764b4a3a309caa337fd9389ca6f25982ead"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_ASSIST_TORQUE_LIMIT_20261009.md",
+      "size": 5815,
+      "sha256": "ffb39376acb6d65269e499fbc47fa1a8cdc64740cea98af7d1c75794fd07d530"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_CAN_DIAGNOSIS_20261009.md",
+      "size": 11331,
+      "sha256": "20b3450847833861cd542fb0b3778d9cb704c2139853c7113120467b90405e01"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_CONSOLE_UI_20261009.md",
+      "size": 4597,
+      "sha256": "93d0284245a56d2572b582b352bd5e729e85541ecae14155cf5f5a40f5f675d3"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_DESIGN.md",
+      "size": 8816,
+      "sha256": "5c970a659ca79f1ff220cc3024d5d22325da31434694c77c59b42f5073b5d69e"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_DIRECTION_TEACHING_20261010.md",
+      "size": 7171,
+      "sha256": "a5c6fb384d941c3bad2b0d937fd0e42788e76da5f464f596f56ae6bb403967e6"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_ENGINEERING_STIMULUS.md",
+      "size": 7145,
+      "sha256": "a48625c479d3b79e6a63aae4cd4778c37f33e34d5dc00e7a66ec7e260702d401"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_EXTENDED_PULSE_20261013.md",
+      "size": 3876,
+      "sha256": "31d05e03214389a593d84047c951074d7d857397eb80556d13f005dd90a159ae"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_FEEDBACK_RECURRENCE_20261010.md",
+      "size": 6525,
+      "sha256": "bd7bdaf892000143bc5b37333c78597839b7dd586dc8cd5d2294eedbaeeee585"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_FEEDBACK_RESTORE_20261010.md",
+      "size": 3456,
+      "sha256": "65658642539c04fb3b279d1eaacd66d565f98a9487f6e34df86ca883d71c2f70"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_HUMAN_PRECHECK_20261009.md",
+      "size": 2501,
+      "sha256": "097e42ce06154863649b2614969cbf8e3090c49cb107541bf6c6d55e47913b4c"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_PAIR_ZERO_CAPTURE_20261012.md",
+      "size": 5985,
+      "sha256": "4429c5cd7e33def7719a8fd5b6f501f5e0de91c9bba85a14b55cd413d0f9f8ae"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_POST_FLASH_HIL_20261010.md",
+      "size": 8825,
+      "sha256": "dd07bf9a95845a6b355ee97187201f22c73eeffb884fb2849d77b8224c2146f5"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_PRODUCT_CALIBRATION_20261009.md",
+      "size": 7833,
+      "sha256": "cb709a7dd01eee4c22a3229271b21a83259e67be6341935d128921cec716b3ce"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_PROFILE_PROVENANCE.md",
+      "size": 3349,
+      "sha256": "9fe6fc91dfb43c817f73dc8463722ad643a4898614bf40f2ac71eec403fc69c0"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_PROTOCOL.md",
+      "size": 7502,
+      "sha256": "9afd46a086f13fba237440b8d41249e81935018b6e3f31880639c604a09c83b1"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_REALTIME_SCOPE_20261012.md",
+      "size": 5485,
+      "sha256": "98ecf203c2f65d2361d95b1ebfa288b0da4dcb776bb4187afd3dffc21e711f57"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_RECONNECT_20261009.md",
+      "size": 16968,
+      "sha256": "473f378998b8d19e5d1b5b59cea97477182e43dfa6d10fcdeed1ca89c0a87cd6"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_RISE_20_20261013.md",
+      "size": 3102,
+      "sha256": "57a6b0dd4ea5e646f3664bd68507300c7e5f88546802eaf306f67d7fddfdd8b9"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_SAVED_WEAR_ZERO_20261010.md",
+      "size": 5342,
+      "sha256": "bfc9477887082d88948b10de1e05c290f91e766dae5b6f6ebc3ba49e9d8d4ca0"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_SWING_EVENT_PULSE_20261012.md",
+      "size": 9187,
+      "sha256": "42c6d258ebed8753c44da282cc0a27a4ddb60cf1c3df1f431ab119d239e04600"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_WEAR_CALIBRATION_UI_20261009.md",
+      "size": 2350,
+      "sha256": "a58ac1fe9b0d7b25462c7e890e216b2813cddbd1d31219368f7b869e555b7277"
+    },
+    {
+      "path": "docs/phase10/PHASE_10_WEB_MOTION_20261009.md",
+      "size": 10445,
+      "sha256": "8d6c992b20793ce5bf2b72a9d412e91270b31d4af5977967c95c600fe5b86828"
+    },
+    {
+      "path": "docs/phase2/PHASE_2_ACCEPTANCE.md",
+      "size": 6174,
+      "sha256": "4c4197ded489a89e0262ff068b95c8ca9b0feec2564663c52bac2cd126bd1ea4"
+    },
+    {
+      "path": "docs/phase2/PHASE_2_DESIGN.md",
+      "size": 8706,
+      "sha256": "ead1331dfcba8daffd3d90523c341622a6a709efacd75131f6ef893784a6dd40"
+    },
+    {
+      "path": "docs/phase3/PHASE_3_ACCEPTANCE.md",
+      "size": 19677,
+      "sha256": "911cbcbe0f7454c123258778c4ccd0bae2eb89637c5ca5ae08e792185b66875c"
+    },
+    {
+      "path": "docs/phase3/PHASE_3_DESIGN.md",
+      "size": 9082,
+      "sha256": "8e0ea2fc7ad333d46c5983e1a21ef511e0f5e33003f037f7afd329f0e03d2365"
+    },
+    {
+      "path": "docs/phase4/PHASE_4_ACCEPTANCE.md",
+      "size": 9613,
+      "sha256": "cc68dee57fad94d83150ffc66174f65119fc6b759278e3d5a251632d1080c1e7"
+    },
+    {
+      "path": "docs/phase4/PHASE_4_DESIGN.md",
+      "size": 8788,
+      "sha256": "d43b39619cd7b1c6987e4bc022b9f81e744323f2659e0a57ab626767c73438e0"
+    },
+    {
+      "path": "docs/phase5/PHASE_5_ACCEPTANCE.md",
+      "size": 19652,
+      "sha256": "8a2898f3c9f41fe6170946a1fcdbf3c0173e72a8e58771c08a607f53d199cb2f"
+    },
+    {
+      "path": "docs/phase5/PHASE_5_DESIGN.md",
+      "size": 16189,
+      "sha256": "bd7f90d580d831e5bebf4580970931128541663c629821a763689e0252086576"
+    },
+    {
+      "path": "docs/phase6/BLE_PROTOCOL_V1.md",
+      "size": 15946,
+      "sha256": "90287beb0f4fe22a2de2833cc35006ca4abc0014f383227195b147a8071dc20b"
+    },
+    {
+      "path": "docs/phase6/PHASE_6_ACCEPTANCE.md",
+      "size": 11238,
+      "sha256": "aa452b1203501ec1b5c7ee3f004f82cad464d6d7adf3a5412170c23908818ac4"
+    },
+    {
+      "path": "docs/phase6/PHASE_6_DESIGN.md",
+      "size": 7712,
+      "sha256": "bcbea6a5f16c71825734fd9b8a4375a7996a9399c45308051c7db43f702d7b4b"
+    },
+    {
+      "path": "docs/phase7/PHASE_7_ACCEPTANCE.md",
+      "size": 16500,
+      "sha256": "d160344bec42d83fa9581c705ceb941aecc6bf932bbeb6ccbaccb7f16581d88f"
+    },
+    {
+      "path": "docs/phase7/PHASE_7_DESIGN.md",
+      "size": 7756,
+      "sha256": "fd65807016ce85b3b0646ba097c3a35b92d36a19198c7dd725214e573191f55e"
+    },
+    {
+      "path": "docs/phase8/PHASE_8_ACCEPTANCE.md",
+      "size": 16335,
+      "sha256": "94afad5c7f6ad127293d250fd5696b7595a00770b7997763cfa1756a2bda8045"
+    },
+    {
+      "path": "docs/phase8/PHASE_8_DESIGN.md",
+      "size": 5298,
+      "sha256": "7970028d7928e868e4191379e5e6b2d0c5f7429cfb65462a4aa5531e653c9721"
+    },
+    {
+      "path": "docs/phase9/PHASE_9_ACCEPTANCE.md",
+      "size": 30059,
+      "sha256": "ff08c3620aab81a2192b945547991d50dca59682bd2c96b06ab2d3df8fd0d05c"
+    },
+    {
+      "path": "docs/phase9/PHASE_9_DESIGN.md",
+      "size": 16298,
+      "sha256": "78c720be1b4b19d70c6a935f3edd943a44cac5ebf86288ea1a5c75f54ad51362"
+    },
+    {
+      "path": "docs/phase9/PHASE_9_LITERATURE_MAP.md",
+      "size": 13961,
+      "sha256": "7c6b6b55cb78270a321118d17388753946e653ab4ffbab822328e0fb1572cc9f"
+    },
+    {
+      "path": "main/CMakeLists.txt",
+      "size": 1579,
+      "sha256": "c9bb9e9dd62427992c986e4319d3049b7402452891d7c91236cec7ab7315b88f"
+    },
+    {
+      "path": "main/Kconfig.projbuild",
+      "size": 1676,
+      "sha256": "3b692a4e8a26f080185ad926263d5c375e4f739768394d005312b86851e7f7ef"
+    },
+    {
+      "path": "main/app_main.c",
+      "size": 10148,
+      "sha256": "14119068fa9523296f64d8dcffcfa4a484c69380e260db6d2af0780c66ee11bb"
+    },
+    {
+      "path": "main/debug_console.c",
+      "size": 81899,
+      "sha256": "5e326bf701e7cf4b7cf22982c35be3aec9caeffa1244533e464c6869163aa2ae"
+    },
+    {
+      "path": "main/exo_assist.c",
+      "size": 37900,
+      "sha256": "c14eb7dd62acea065f2b2163ebee8a15d609d1cf06541a6e785146f3fa536f70"
+    },
+    {
+      "path": "main/exo_ble.c",
+      "size": 92532,
+      "sha256": "daa03fbefe6a5c8b663e509e7d5c33b86bb1c1c019b7e8bbcd5560631018bfa6"
+    },
+    {
+      "path": "main/exo_ble_protocol.c",
+      "size": 50517,
+      "sha256": "f8906bdfbd8312937bf8555deddf367f9be2ebd48716c3c94c56f78762f3e256"
+    },
+    {
+      "path": "main/exo_command_composer.c",
+      "size": 2745,
+      "sha256": "c1d4960ba8444007b1c863d88d19c830cf0d8dcb8ddd5270c3eea6a76761e2fa"
+    },
+    {
+      "path": "main/exo_config.c",
+      "size": 12898,
+      "sha256": "5990ffaf02d9ca346c536f9155855ed47cdcd1714a551f6eda610b15e99c792f"
+    },
+    {
+      "path": "main/exo_control_loop.c",
+      "size": 25872,
+      "sha256": "f9b73c5929db148706cf92ffa80e4e8a40bd1767bb03bb8bc28659b52edd4daf"
+    },
+    {
+      "path": "main/exo_controller.c",
+      "size": 26023,
+      "sha256": "db1b39a2fc6cfb849951cc6972bebfc0ee66d514b4d04c69ab38a5c21ebbb6fb"
+    },
+    {
+      "path": "main/exo_factory_direction.c",
+      "size": 2959,
+      "sha256": "3ad2dfe645fbfd398518e971e6e6fecc6b863820bab82d2993f2ec72270ed7d7"
+    },
+    {
+      "path": "main/exo_feedback_recovery.c",
+      "size": 6755,
+      "sha256": "c140145a5c68013b1ffa85571d394835dad9166d0509e85c3ce3ecb64196e0fc"
+    },
+    {
+      "path": "main/exo_joint_command.c",
+      "size": 6445,
+      "sha256": "7b4dcb5e555a2c8ee7a2f9e45bcfd6a0db13b03c04030d8b3232044b33764b80"
+    },
+    {
+      "path": "main/exo_phase_profile.c",
+      "size": 6056,
+      "sha256": "0cab7d246626c4c5e41b0d3320d377a49f79bf9e70c7c54fb36eb2f94a717d2e"
+    },
+    {
+      "path": "main/exo_sensor_snapshot.c",
+      "size": 7940,
+      "sha256": "5aa936676de04335509e82df653889307dae7cb3e65924e238f97eef12e18668"
+    },
+    {
+      "path": "main/exo_swing_pulse.c",
+      "size": 12510,
+      "sha256": "c211b4480c34c765fbb863e0945a2bb78114bec03f8a687ca8b0aae6b3b8f53f"
+    },
+    {
+      "path": "main/exo_system.c",
+      "size": 50814,
+      "sha256": "c001abe9b393ba97ab53bf0c08f698d7e4fba82e9e24ff238da7f3aabedf52ad"
+    },
+    {
+      "path": "main/exo_telemetry.c",
+      "size": 14234,
+      "sha256": "0621b26eb5a59528c204a8b1d20db7e4ceb58d0fa02b83162f273e5a7a4ae63a"
+    },
+    {
+      "path": "main/exo_wear_zero.c",
+      "size": 12256,
+      "sha256": "69a12c73238445407cf482293150ab6e8f7a19ff29b9a6abe137c1d393301ffd"
+    },
+    {
+      "path": "main/gait_estimator.c",
+      "size": 19969,
+      "sha256": "722f5ffd20282046272381f660abe1696970e139426c6b15318b76ce77fea580"
+    },
+    {
+      "path": "main/hip_joint.c",
+      "size": 31605,
+      "sha256": "26f3b794cffafe70a598e583e5f67d15a5366deab82312a7bb67f43fab1ab64d"
+    },
+    {
+      "path": "main/include/debug_console.h",
+      "size": 720,
+      "sha256": "6f5d92ff9e23a77971c06d28b6f5e426a6b5b14f234b2bf43cfb566f16ab6454"
+    },
+    {
+      "path": "main/include/exo_assist.h",
+      "size": 10237,
+      "sha256": "90fc7cf9d59e7719fd536a4fc6a1006951781995f06dc77bf79727565fc54079"
+    },
+    {
+      "path": "main/include/exo_ble.h",
+      "size": 3483,
+      "sha256": "e17fc365927881007b941030629ee4919124d783b15141886047f53982a44284"
+    },
+    {
+      "path": "main/include/exo_ble_protocol.h",
+      "size": 30723,
+      "sha256": "35e2dbc25e7fc4ab33c0d71962925a040fab62eeddae7b42be4aa638bd03fc23"
+    },
+    {
+      "path": "main/include/exo_command_composer.h",
+      "size": 1652,
+      "sha256": "157f7bbef52d0d45149de2dc48a2a5613032d61271ba7d7d56bb6e2614b069b1"
+    },
+    {
+      "path": "main/include/exo_config.h",
+      "size": 4521,
+      "sha256": "3622273664dd80af6bb85cd1d71fa9fce716a8e7e69315fcfba0153394dcb78f"
+    },
+    {
+      "path": "main/include/exo_control_loop.h",
+      "size": 4349,
+      "sha256": "1161f766b4090dd5ba86ec7ff26daecc0820824b27e04552a219275768ae653f"
+    },
+    {
+      "path": "main/include/exo_controller.h",
+      "size": 8052,
+      "sha256": "037326747c8ec0d4bc96476672661e75e4a0cdf0bfa7df2abd87d6fee1bdd6d1"
+    },
+    {
+      "path": "main/include/exo_factory_direction.h",
+      "size": 805,
+      "sha256": "55e4beae3738c5ef60382fdaa327437665a5e2aeefee1aa13aac1b008d7cdce6"
+    },
+    {
+      "path": "main/include/exo_feedback_recovery.h",
+      "size": 951,
+      "sha256": "697496c2e2968bc81d25f030df19c0e9518e61630a3013d3384041d280f8ad96"
+    },
+    {
+      "path": "main/include/exo_joint_command.h",
+      "size": 3161,
+      "sha256": "2fc9fb154035aebe85bec364067328d9bec7d0011e9063f92d9057f6243b79d2"
+    },
+    {
+      "path": "main/include/exo_phase_profile.h",
+      "size": 3241,
+      "sha256": "18d3168831d98b281c1cf1249152d5dc8d658d0ff63498942fdd4cd93395660d"
+    },
+    {
+      "path": "main/include/exo_sensor_snapshot.h",
+      "size": 5336,
+      "sha256": "b605dfcbfc57d192d3fe1da9d0948d301f0aff67783c711405a3b83038b6e7fb"
+    },
+    {
+      "path": "main/include/exo_swing_pulse.h",
+      "size": 4582,
+      "sha256": "e2281bed4f1e05a97ecde6ffeaf6880f036c144ea0075817a8a1afe47ca4a52d"
+    },
+    {
+      "path": "main/include/exo_system.h",
+      "size": 9906,
+      "sha256": "4f7a7b62786d53232d6b48818e603511a904b2908ac48482140da028d33464b8"
+    },
+    {
+      "path": "main/include/exo_telemetry.h",
+      "size": 5902,
+      "sha256": "1001b36a8a45be7af9a47c52270b0bc4af0fc9083ea67d79078498a673c61f07"
+    },
+    {
+      "path": "main/include/exo_types.h",
+      "size": 6419,
+      "sha256": "2f9f8de264687e34b9e46d411e9cc448975630050145c7e352241dd6947ee680"
+    },
+    {
+      "path": "main/include/exo_wear_zero.h",
+      "size": 2155,
+      "sha256": "fb984b1f741dcfb140cc7ac75c33517670ba98d1f5a165e8f37cce3ab9078147"
+    },
+    {
+      "path": "main/include/gait_estimator.h",
+      "size": 6317,
+      "sha256": "e356149f21ad883f36257cce877bdab0a6fa481b8833edded733c7bd8e983462"
+    },
+    {
+      "path": "main/include/hip_joint.h",
+      "size": 8526,
+      "sha256": "93234b959b19ea7a2a83ca58043fd1b257a30e923fcd0968dbbe852e0aea17df"
+    },
+    {
+      "path": "main/include/rs01_driver.h",
+      "size": 14562,
+      "sha256": "7db2cb503e73de3ab159e1b33835165f5f81feec0e50845862715c0c54e8386f"
+    },
+    {
+      "path": "main/include/sine_reference.h",
+      "size": 1836,
+      "sha256": "73604c2a34bfef2793f1973db08a6ae53268d41ecbf81e76aba7f157cb0b55b7"
+    },
+    {
+      "path": "main/rs01_driver.c",
+      "size": 71785,
+      "sha256": "606279beb3bb56e53e7ad1b43308bb04ff0c4eec15c67153cd2a5d982d4e57fb"
+    },
+    {
+      "path": "main/sine_reference.c",
+      "size": 3475,
+      "sha256": "349776855d6f2b2415d6158a662f934b6b33603cb6d9665b098ab867622ccb0b"
+    },
+    {
+      "path": "sdkconfig",
+      "size": 86509,
+      "sha256": "9c4be8b5cc6c7c22283a02f35b632b3119f4419465bc6d3e270b5848bdf8648c"
+    },
+    {
+      "path": "tools/activate_esp_idf.ps1",
+      "size": 1981,
+      "sha256": "9a98fbe30bdf24c1769e23674ec73ac36c4dab45f3b01894eac8d236f0f4288b"
+    },
+    {
+      "path": "tools/host_fakes/esp_err.h",
+      "size": 290,
+      "sha256": "73a4f36e5e1f7e8f77f41db9b591436d443cec5363856f4eb42cb1ddd0866749"
+    },
+    {
+      "path": "tools/host_fakes/exo_config.h",
+      "size": 346,
+      "sha256": "d7538b4db6751d29b342b6ce7fe13253fe6ddb36a9f7a34f63c1712054bc891b"
+    },
+    {
+      "path": "tools/host_fakes/exo_joint_command.h",
+      "size": 801,
+      "sha256": "6405cff2297f1ab2f71c6ed658855f52262b076b8af33b860a59e8c60fb22c66"
+    },
+    {
+      "path": "tools/host_fakes/factory/nvs.h",
+      "size": 764,
+      "sha256": "40e1d7cb990156703d2db4363b6cb503f26058dc2dc3dde8bf32ade461ea7c63"
+    },
+    {
+      "path": "tools/host_fakes/factory/nvs_flash.h",
+      "size": 134,
+      "sha256": "e4c654835eeff8cdfc743712927ac9f0ffc385d30e08b2776d84a82fc5eea89c"
+    },
+    {
+      "path": "tools/host_fakes/freertos/FreeRTOS.h",
+      "size": 319,
+      "sha256": "745b030b3a9a45ff8cc0f32dc11c6a2e81b9ef11e2adc3dbd684ca9301da4c2c"
+    },
+    {
+      "path": "tools/host_fakes/freertos/task.h",
+      "size": 171,
+      "sha256": "3745703ef19410350ec68dd17ac350d0302e255c76caff988d8f310762590d7a"
+    },
+    {
+      "path": "tools/host_fakes/rs01_driver.h",
+      "size": 220,
+      "sha256": "ab46406c622f235cbf28b4b0f1ca5c931ad7ff4b213411579b7eebcf210d1ea6"
+    },
+    {
+      "path": "tools/host_fakes/sdkconfig.h",
+      "size": 114,
+      "sha256": "ef117cedd1dfbd04892fcb4dd7be5d16e545eb30bab111c0b5efa786e3563faa"
+    },
+    {
+      "path": "tools/host_fakes/system/driver/gpio.h",
+      "size": 122,
+      "sha256": "0d9c934cd9f4550e570b983f4865716bc8f1cc5ae5a785ca8b86c647b07b9e64"
+    },
+    {
+      "path": "tools/host_fakes/system/driver/twai.h",
+      "size": 824,
+      "sha256": "a82c470af05fb3fa15c1451c653f0038316dd5fbf9f589390eb4f40ffb2d64f6"
+    },
+    {
+      "path": "tools/host_fakes/system/esp_log.h",
+      "size": 462,
+      "sha256": "70c16ec74326c53c03f16da5ddf05c719a3dacd7c7565b89eaa50cce681dc915"
+    },
+    {
+      "path": "tools/host_fakes/system/esp_timer.h",
+      "size": 117,
+      "sha256": "379db37bae06a2b230338315d716b136b22c2ba9545a7c311e99213097a79db6"
+    },
+    {
+      "path": "tools/host_fakes/system/freertos/FreeRTOS.h",
+      "size": 545,
+      "sha256": "72ca6df7e913f2f434d61924d316f6107afcba87ec6b89550a716b83b38f44c1"
+    },
+    {
+      "path": "tools/host_fakes/system/freertos/semphr.h",
+      "size": 515,
+      "sha256": "ff0af133c8b5dc538e7f39e7576377066b271c7477533d785a514408eb9be81d"
+    },
+    {
+      "path": "tools/host_fakes/system/freertos/task.h",
+      "size": 513,
+      "sha256": "14d21b70bbde6b8dd8a317e0379bb8b8ff532bd8dff4da24affab68c2e9002b5"
+    },
+    {
+      "path": "tools/phase10_angle_assist_replay.c",
+      "size": 147,
+      "sha256": "3307fa8dbecbbd82bbf3745d2dd4a9927add9185573491251c4f7ca99333b0b2"
+    },
+    {
+      "path": "tools/phase10_angle_assist_replay.ps1",
+      "size": 1012,
+      "sha256": "70ce09f0c8e5004e378397efb9638c28ffdf5d4a0e0a999b607fad4598b5130d"
+    },
+    {
+      "path": "tools/phase10_assist_integration_replay.c",
+      "size": 22678,
+      "sha256": "08f7272e9fe55bfe434a0a3a36ec3c9690f594e6df82d00da44ee20f993c6bc9"
+    },
+    {
+      "path": "tools/phase10_assist_integration_replay.ps1",
+      "size": 1006,
+      "sha256": "89c526eb68c4df8904fb5ca2817bc60d132b4522d9973cb252e81f8b150d42f4"
+    },
+    {
+      "path": "tools/phase10_assist_limit_replay.c",
+      "size": 2863,
+      "sha256": "e5da3d00aa6eaa7fe1762638b35a3ba7ec2a666fe86282c4bdfa6df9b4e5b5ad"
+    },
+    {
+      "path": "tools/phase10_assist_limit_replay.ps1",
+      "size": 729,
+      "sha256": "2f5e2124b27109f3cd924952af22bf355fd2dac74502ea427dc88696b8a56a74"
+    },
+    {
+      "path": "tools/phase10_ble_acceptance.py",
+      "size": 27220,
+      "sha256": "1a52f0dd7e813dfea63353443026ea615c97a2df67a7c0e8ccff89d84d7aa8f1"
+    },
+    {
+      "path": "tools/phase10_calibration_protocol_replay.c",
+      "size": 2653,
+      "sha256": "f88e1d69c000994746eaa8452e471a341ed133166ecc4c01df7aec7ea8de5d40"
+    },
+    {
+      "path": "tools/phase10_direction_teaching_replay.c",
+      "size": 15506,
+      "sha256": "90b1b0cdbed9fe228244e5bc0f6c5755b50d5fec653fd3433baac854aace73da"
+    },
+    {
+      "path": "tools/phase10_direction_teaching_replay.ps1",
+      "size": 853,
+      "sha256": "c0ed9081ae1ace8cd8d37cc5e4b2ccea7db82f4fedaeb8522e104c399832004e"
+    },
+    {
+      "path": "tools/phase10_feedback_frames_replay.c",
+      "size": 4011,
+      "sha256": "56e693d50505c43a91ea658c360a99da44bb385b2f6bc902f9baa2ca7a998946"
+    },
+    {
+      "path": "tools/phase10_feedback_protocol_replay.c",
+      "size": 1880,
+      "sha256": "5de844c9cfa9f40b018f17ce1e46805da1598bdd1aca8a5f76681ef543f5aabf"
+    },
+    {
+      "path": "tools/phase10_feedback_recovery_replay.c",
+      "size": 6095,
+      "sha256": "05987feb1c715ffdb55f62ebd76806c95df188d594246ac96b9f986dc9285dcd"
+    },
+    {
+      "path": "tools/phase10_feedback_recovery_replay.ps1",
+      "size": 936,
+      "sha256": "12840c9a7091afc46ed330190acfb87a3df9af9fbb9f6e1af694ab9397e4d765"
+    },
+    {
+      "path": "tools/phase10_motion_acceptance.py",
+      "size": 29128,
+      "sha256": "96eb60e1d746a8a2da6d1f3feb01670530d5c4c2ac7e9c2a9156048bb60cbf6a"
+    },
+    {
+      "path": "tools/phase10_pair_zero_replay.c",
+      "size": 8260,
+      "sha256": "ad728d7ca09a441c17882076bd1edff402745e7c8331751d1fd397f0e50b142f"
+    },
+    {
+      "path": "tools/phase10_pair_zero_replay.ps1",
+      "size": 789,
+      "sha256": "946e9941a5be8c19eee27fe4be97afd33f46533972087c60c2bde9a4d2857c70"
+    },
+    {
+      "path": "tools/phase10_profile_replay.c",
+      "size": 11703,
+      "sha256": "1d58a2053e9ece05eed3b7710ea4ecca05d5c0850f73fb993c9d9b2db83d7f16"
+    },
+    {
+      "path": "tools/phase10_replay.ps1",
+      "size": 974,
+      "sha256": "fd85853642005590e38537304e0caab119b4dff2fb0e8db9138d1fd3c20c85ad"
+    },
+    {
+      "path": "tools/phase10_runtime_fault_replay.c",
+      "size": 15046,
+      "sha256": "7481f633ce7325e260efa8327789f6d104a1d67d2f7ce115b8a5b287b42e53c1"
+    },
+    {
+      "path": "tools/phase10_runtime_fault_replay.ps1",
+      "size": 883,
+      "sha256": "53e249696ea54d0112e9284bb3580437768d46acb5e419c40bfa68eb8c88b6b2"
+    },
+    {
+      "path": "tools/phase10_saved_zero_replay.c",
+      "size": 11113,
+      "sha256": "8577e3a91033ef617629586095e60b10a43b619119897f68a25cb31661b4a1bb"
+    },
+    {
+      "path": "tools/phase10_saved_zero_replay.ps1",
+      "size": 795,
+      "sha256": "e418d8643a7b72731298dc6fc244f31ca0149b50155b467b2e66cce9a978ebf3"
+    },
+    {
+      "path": "tools/phase10_swing_pulse_replay.c",
+      "size": 31945,
+      "sha256": "031eb43c3a097e9baa58ed7c762849b94e04a785449819cf6d945e5f38825f58"
+    },
+    {
+      "path": "tools/phase10_swing_pulse_replay.ps1",
+      "size": 938,
+      "sha256": "cd655102734bce79829c0eceb82575e98390eeac7b4cab1ed84d6804938a0f44"
+    },
+    {
+      "path": "tools/phase6_ble_acceptance.py",
+      "size": 28126,
+      "sha256": "9b3e3f475c3d19eb99a53277b0884858ba542bef467f17e2495ff391de733657"
+    },
+    {
+      "path": "tools/phase9_ble_acceptance.py",
+      "size": 34584,
+      "sha256": "3ed2432256cd530bc61b3412ec27f6b8af0beb120cf6dfda3cb7eaa368901262"
+    },
+    {
+      "path": "tools/phase9_gait_replay.c",
+      "size": 17204,
+      "sha256": "b07f712b246b5e28111e049ab015f33c1a80edf0c1bf575a2b05782b817491d9"
+    },
+    {
+      "path": "tools/phase9_replay.ps1",
+      "size": 1029,
+      "sha256": "8e9d32ad53d2dd6ee41fa4395091611b02f614bde871937e6fd1857d2769b994"
+    },
+    {
+      "path": "tools/verify_phase0.ps1",
+      "size": 2768,
+      "sha256": "177c3f43a77e4ea13b5988f6f5118d97d1bf6130b2a9cda98a8164ecdaa56cf6"
+    },
+    {
+      "path": "web-bluetooth-console/.gitignore",
+      "size": 584,
+      "sha256": "62b0c33787cdda25fbcd4d4936972b904e1215623ae5a62fe74cf5245a7e17d6"
+    },
+    {
+      "path": "web-bluetooth-console/.openai/hosting.json",
+      "size": 91,
+      "sha256": "dbf50abd9ed25f9fd76b0273b77e66812e24584d0f3ac9e00f14943683efd786"
+    },
+    {
+      "path": "web-bluetooth-console/README.md",
+      "size": 18341,
+      "sha256": "ed9633477a682705d7d93c7648505f1b4ab1259ebcf9ab437703dc8fe6531f57"
+    },
+    {
+      "path": "web-bluetooth-console/app/chatgpt-auth.ts",
+      "size": 2640,
+      "sha256": "e19651c2d1db12696883ae3eb79d4f09dce249f7afa1144a62d544e2e18299ca"
+    },
+    {
+      "path": "web-bluetooth-console/app/exo/gait-history.tsx",
+      "size": 18644,
+      "sha256": "7693ca3eeb2ff5e4c5a30ac2812fca9f9c0124f39a61d320c879704c17332bf6"
+    },
+    {
+      "path": "web-bluetooth-console/app/exo/layout.tsx",
+      "size": 646,
+      "sha256": "2edb3ae1ee58029f0cbd3076a8d17fc18720d1a666f587a9bd7e87f5c4d03d9b"
+    },
+    {
+      "path": "web-bluetooth-console/app/exo/page.tsx",
+      "size": 225495,
+      "sha256": "c57e1a3543255f293ae0855565fd65fe3544e3e857eed25165f4e67c46584117"
+    },
+    {
+      "path": "web-bluetooth-console/app/exo/telemetry-scope.tsx",
+      "size": 5300,
+      "sha256": "1e39da5524ffc090b338f5666b0f0f5f330861d164a342329799e8e9df4a80ea"
+    },
+    {
+      "path": "web-bluetooth-console/app/globals.css",
+      "size": 63124,
+      "sha256": "25a245e02720dabcd8d905f2f5228ab4aae2d884bf099c1fde4ea7c7a53db575"
+    },
+    {
+      "path": "web-bluetooth-console/app/layout.tsx",
+      "size": 1541,
+      "sha256": "79584dc5a989b092c8cdd8e85e9d7a0c92fead9948c4dea45672ef4c529f337a"
+    },
+    {
+      "path": "web-bluetooth-console/app/page.tsx",
+      "size": 25289,
+      "sha256": "260907c49fb1062a97565e0ec95b20aec16a5f25129e84828e023a84075dd415"
+    },
+    {
+      "path": "web-bluetooth-console/build/sites-vite-plugin.ts",
+      "size": 1299,
+      "sha256": "abd6bc3a592961e978ab72fceb8ee7647824d9a2321ee5b5777b2a05d69526cc"
+    },
+    {
+      "path": "web-bluetooth-console/cloudflare-env.d.ts",
+      "size": 534,
+      "sha256": "e756c39c688a3ca2dd5c40812f4af08847052df8128ce8304f325fc1223a5ccb"
+    },
+    {
+      "path": "web-bluetooth-console/db/index.ts",
+      "size": 436,
+      "sha256": "effa59e46bcbb42dfb7b46911e809a1de0f2c37df1fd935e3dca89023eaf97e4"
+    },
+    {
+      "path": "web-bluetooth-console/db/schema.ts",
+      "size": 173,
+      "sha256": "48b4f7fafee1f2720b8977ba31bc0cf03dedb7ea8826c4bcbc8dfd74f2d8744f"
+    },
+    {
+      "path": "web-bluetooth-console/drizzle.config.ts",
+      "size": 155,
+      "sha256": "73d0807c58e541dc3eaf175909fb5acc966faed61f74ff659d9d55027bf3e25b"
+    },
+    {
+      "path": "web-bluetooth-console/drizzle/meta/_journal.json",
+      "size": 66,
+      "sha256": "5a5f57f8f48fcf1d065725c0f3dab19e590e96e7e1e5bf8ddff17339a0de8d9a"
+    },
+    {
+      "path": "web-bluetooth-console/eslint.config.mjs",
+      "size": 483,
+      "sha256": "275a07c13fc7c83a652efcfa9fb6a207c451a2f5088e6793415ce44281285720"
+    },
+    {
+      "path": "web-bluetooth-console/examples/d1/app/api/notes/route.ts",
+      "size": 1758,
+      "sha256": "b0b134b9b0b4a9f5947abbd13fd4425b88b59c64f91db1aacb0cecbc16c38f45"
+    },
+    {
+      "path": "web-bluetooth-console/examples/d1/db/schema.ts",
+      "size": 379,
+      "sha256": "1acd70317bcaf22cb140436fb47754c2144e7c2adfc59a3f427ecb1d816fa0f3"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-ble-connect.ts",
+      "size": 2073,
+      "sha256": "f12ef4a5560e3c5646d0ade313a69083eade23ea8001c671d745379ad4a09ffa"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-ble-protocol.ts",
+      "size": 89255,
+      "sha256": "423cda7fd14ad6e8fa10b8531645be0c685bb4d49fe127e7a3b742b6d0f11d5f"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-device-compatibility.ts",
+      "size": 6508,
+      "sha256": "a6d451cd1648a85639f6c60d7c88d05c1ddfb2c83fa5dd5b7530e2761fc4f7a3"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-gait-history.ts",
+      "size": 11729,
+      "sha256": "4098900994c63a51d452a68bb980c1278f58533b8e4b6e5ad6132995c3fbfa0f"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-log-scroll.ts",
+      "size": 738,
+      "sha256": "217182d22615096fab3b902a23a47822f8f3f60953b3b862ae06f91af8d322d8"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-scope.ts",
+      "size": 7731,
+      "sha256": "9197ace5008f5f382a1781ee0d2c2c673125109351139492688601480cfa08d7"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-telemetry-stream.ts",
+      "size": 8415,
+      "sha256": "02901e712234cc9a362972c46f80c81df9a277d6aa2e915299b1de2acccbcff2"
+    },
+    {
+      "path": "web-bluetooth-console/lib/exo-zero-calibration.ts",
+      "size": 3912,
+      "sha256": "60e62b19057ff2e3cc8f13dd316f5310a8966086d1ce7fa5f3ebede12cfaede3"
+    },
+    {
+      "path": "web-bluetooth-console/next.config.ts",
+      "size": 140,
+      "sha256": "a972c4f0ffa6dd714e7909b02d1ac19d2f2fe3d01f191efd2c5054bd6f142ec1"
+    },
+    {
+      "path": "web-bluetooth-console/package-lock.json",
+      "size": 392382,
+      "sha256": "03583ebb6596d18eec7c39e91f02e1f9925c0f70399e7147751fd5589ea6065a"
+    },
+    {
+      "path": "web-bluetooth-console/package.json",
+      "size": 1805,
+      "sha256": "21dacf185dc5e0d3d9c111e1135730cb40331adb04b0b1585a09f62efdaf1c47"
+    },
+    {
+      "path": "web-bluetooth-console/postcss.config.mjs",
+      "size": 101,
+      "sha256": "7b299d3d3b16699ddda397c0b2373b3af4f25f8fc9ccc9b3d9e64ef083bc1c21"
+    },
+    {
+      "path": "web-bluetooth-console/public/favicon.svg",
+      "size": 718,
+      "sha256": "3e8863288c2d43dd33d2a71de317dcf9198f09932ea8d61e0def1b846a865435"
+    },
+    {
+      "path": "web-bluetooth-console/public/file.svg",
+      "size": 391,
+      "sha256": "2b67812c325c199a02536cdbeea0c593a72f707d323b72ee3e08dbab06753bd4"
+    },
+    {
+      "path": "web-bluetooth-console/public/globe.svg",
+      "size": 1035,
+      "sha256": "b614b9bf183925957661ac851498fe1d8029fd43a62fbfed86f9e2624a57e7cf"
+    },
+    {
+      "path": "web-bluetooth-console/public/og.png",
+      "size": 1136609,
+      "sha256": "2804d85391a748587aed955d3de728a3a5950fb272d796d23df208dfe3be9930"
+    },
+    {
+      "path": "web-bluetooth-console/public/window.svg",
+      "size": 385,
+      "sha256": "644768c4aaeb4767bce293344eeb0c125fb804a94d801440424072202d85e3a1"
+    },
+    {
+      "path": "web-bluetooth-console/start-local.cmd",
+      "size": 1069,
+      "sha256": "2c9e607920f74256b61f4a5820e97b65b73b2f8779e7646f2e8cf16810a8fe10"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-angle-assist.test.mjs",
+      "size": 6215,
+      "sha256": "af18830d6ac503f7a3bf1b7d926c8ea06b55938175454afaf7eab3be98230275"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-ble-connect.test.mjs",
+      "size": 2534,
+      "sha256": "d0af126bc8f6970bec863fdf49c58ca76a75d9ebbf175a94259624c5f7532074"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-ble-protocol.test.mjs",
+      "size": 41218,
+      "sha256": "380c1244946850a6987deb893a7f73f954b26330aae5870258ce24e027a9072f"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-device-compatibility.test.mjs",
+      "size": 5829,
+      "sha256": "bd7c3776811150cda102048719795b453f711a831f810c4a6a6a95f2f7af3efe"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-extended-pulse.test.mjs",
+      "size": 5392,
+      "sha256": "3f05bbc9e29eafdc19e91c23b47ee02e298e1c74e93702b2a6a8a69176e47cc6"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-gait-history.test.mjs",
+      "size": 3931,
+      "sha256": "0fff1b8ba443d3c45668f9febcf65e92207f0b9471e193ff93af3b58864d5f35"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-log-scroll.test.mjs",
+      "size": 852,
+      "sha256": "80aa285746cb68c12c368e46a25f7951e5784f6a897c82659b0b1986075c39f3"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-saved-zero.test.mjs",
+      "size": 4027,
+      "sha256": "1acd7521914871caa95427b1b07532679099a910324b3589460564d36bd4f50a"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-scope.test.mjs",
+      "size": 5098,
+      "sha256": "799bd37763e76f7462bfdd38530a57bbbac8a6a9ab813dcf1a2ccac4657e42f6"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-swing-pulse.test.mjs",
+      "size": 4922,
+      "sha256": "15357fb262a488f0d23936471b8705f5e53543232fdd0546901d8a5761fde896"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-telemetry-stream.test.mjs",
+      "size": 3108,
+      "sha256": "60ad415e099aa4de26f1603e6ba4f4e43d9c5075c43f7aa3129ca829437d5076"
+    },
+    {
+      "path": "web-bluetooth-console/tests/exo-zero-calibration.test.mjs",
+      "size": 6483,
+      "sha256": "e03b061a52c6d07f5b9b09cc57bd26166848f0de8009719ffa483b04ba94d906"
+    },
+    {
+      "path": "web-bluetooth-console/tests/rendered-html.test.mjs",
+      "size": 7918,
+      "sha256": "b23dcbc4bc498edc1685482d61a84b3f58a05716de6674d6ec49958985c99e5e"
+    },
+    {
+      "path": "web-bluetooth-console/tsconfig.json",
+      "size": 739,
+      "sha256": "8ebad4768b8ebfacbaa51ee40c6a2a9df5d793422af5aa000a64235c69525c29"
+    },
+    {
+      "path": "web-bluetooth-console/vite.config.ts",
+      "size": 1756,
+      "sha256": "5d68239b2f24f42354e8a05cf69b83fd8f3ce34727f2edf2b55283e4f732c77a"
+    },
+    {
+      "path": "web-bluetooth-console/worker/index.ts",
+      "size": 1778,
+      "sha256": "6f8983ab616309202039ad672b1a46a835bede1bb77636dc751613c664f969e5"
+    }
+  ],
+  "build_files": [
+    {
+      "path": "bootloader/bootloader.bin",
+      "size": 21088,
+      "sha256": "aaff4219954934f6d7add9f55d017837029529dc9bd6bf28e384be3a3b4f3877"
+    },
+    {
+      "path": "partition_table/partition-table.bin",
+      "size": 3072,
+      "sha256": "7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820"
+    },
+    {
+      "path": "twai_network_master.bin",
+      "size": 683328,
+      "sha256": "e4002a0a2945009cb96402b88f1c17f94c8d326d7aff2b0e177afaec8c97532a"
+    },
+    {
+      "path": "twai_network_master.elf",
+      "size": 7922728,
+      "sha256": "27b5d3f5ec41b550e4cd7858ec5ff9a8a1cf251b1ad3221d091cd02fd14e73e3"
+    },
+    {
+      "path": "config/sdkconfig.h",
+      "size": 58782,
+      "sha256": "4f5156aa0e52983c3167de198f1c30ff24c355c48c332414c6c4cba0a68392d2"
+    },
+    {
+      "path": "flash_args",
+      "size": 161,
+      "sha256": "9d0ec5baa2f4278add5172afdf9c931eabeda8a6d16ea10dfd861640faedb662"
+    },
+    {
+      "path": "flasher_args.json",
+      "size": 955,
+      "sha256": "700b9992e2c819f66a38b189c274fbe8a8da5293f8f17d66e2cc294e88e8b5ab"
+    },
+    {
+      "path": "project_description.json",
+      "size": 206915,
+      "sha256": "64e29c7169d48e52226d0989730ca96e392bf6f6014274c90f893592942c756d"
+    }
+  ],
+  "verification_logs": [
+    {
+      "path": "host-pulse.log",
+      "size": 1418,
+      "sha256": "e0ea21e260f352c774af93adeb6547d039f86f44b1836be7bf95f11d76f58590"
+    },
+    {
+      "path": "host-sanitizers.log",
+      "size": 1418,
+      "sha256": "e0ea21e260f352c774af93adeb6547d039f86f44b1836be7bf95f11d76f58590"
+    },
+    {
+      "path": "host-runtime-fault.log",
+      "size": 658,
+      "sha256": "8a78ff0da3a10351dc9c8d5e2f799787039907af87423231dec7bd6dd8ee0240"
+    },
+    {
+      "path": "web-tests.log",
+      "size": 12358,
+      "sha256": "6ecf4318cc334075cb4515ee17329678c4320c474926eda350bad41cac148980"
+    },
+    {
+      "path": "web-types.log",
+      "size": 10,
+      "sha256": "dc713d8113d6066c377750a0df7261c12678a7628f2909112be5e971d14f6fe5"
+    },
+    {
+      "path": "web-lint.log",
+      "size": 108,
+      "sha256": "26b204d1fdf39a1676afb04be86f04aba4b823efe1646407f82720438df1b08e"
+    },
+    {
+      "path": "idf-build.log",
+      "size": 11133,
+      "sha256": "cb79641d2650888cc8b6fcd46cba7357123e1a042711e79f8387a548517d48e7"
+    },
+    {
+      "path": "git-whitespace.log",
+      "size": 3265,
+      "sha256": "839910ca5c923a47cba9b38f8472688efd24307a7962d881af7964b918e4a979"
+    },
+    {
+      "path": "web-rise20-preview.png",
+      "size": 71544,
+      "sha256": "61db5ee982378410115287e057d1b60956292fd414136427fbb94b9d0d81945e"
+    },
+    {
+      "path": "web-preview-state.txt",
+      "size": 249,
+      "sha256": "0302b0716a56ff844e12d053b77cc5f295cd0cd066c452cafb5d7bc63a085927"
+    },
+    {
+      "path": "freeze_candidate.py",
+      "size": 5380,
+      "sha256": "3724b85392b0e7ad6f42d07154b11f0efb2aa1689ed4f651d4c9ad13ccc331e8"
+    }
+  ]
+}
