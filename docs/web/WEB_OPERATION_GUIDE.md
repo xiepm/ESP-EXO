@@ -4,6 +4,8 @@
 硬件：ESP32-S3-N16R8、两台RobStride RS01；当前工程CAN为TX GPIO4、RX GPIO1、1 Mbit/s，
 执行器A的CAN ID为0x10，B为0x20。LEFT/RIGHT由装配配置决定，不能由CAN ID猜左右腿。
 
+已编译固件及对应源码标签见[0.10.13固件下载与烧录](../firmware/FIRMWARE_0_10_13.md)。
+
 这是开发调试版本的操作说明。阶段10整体仍未完成；2026-10-13已记录运动中CAN错误
 触发停机，电气根因尚未证实。历史烧录或通信通过不能代替本次设备在线、方向及零位确认。
 见[当前验收记录](../phase10/PHASE_10_ACCEPTANCE.md)和[助力中断诊断](../phase10/PHASE_10_ASSIST_INTERRUPTION_20261013.md)。

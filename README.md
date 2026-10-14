@@ -4,6 +4,7 @@
 对应固件使用ESP-IDF 5.5，ESP32-S3-N16R8、CAN TX4/RX1、1 Mbit/s，工程激励默认关闭。
 
 - [网页操作说明（连接、设置、运动、实时数据、数据记录）](docs/web/WEB_OPERATION_GUIDE.md)
+- [0.10.13固件下载与烧录](docs/firmware/FIRMWARE_0_10_13.md) · [GitHub预发布固件包](https://github.com/xiepm/ESP-EXO/releases/tag/v0.10.13)
 - [网页安装与测试](web-bluetooth-console/README.md)
 - [2026-10-14 GitHub上传与验证范围](docs/phase10/GITHUB_BACKUP_20261014.md)
 - [阶段10验收记录](docs/phase10/PHASE_10_ACCEPTANCE.md)
