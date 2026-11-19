@@ -66,4 +66,5 @@ int main(void) {
     assert(rs01_request_feedback_once(EXO_ACTUATOR_A, 11) == ESP_ERR_INVALID_ARG && sent_count == 0);
     puts("PASS invalid slot/interval rejected");
     puts("RESULT 6/6 PASS");
+    return 0;
 }

@@ -3,6 +3,7 @@
  *
  * 【它是什么】通过 ESP32 编程串口接收一行文本，例如 `status`、`joint_zero left`
  * 或 `start`，解析后调用对应模块的公开 API，最后把结果打印回串口。
+ * afo_trace 是例外的版本化只读诊断协议，用于网页USB记录；普通工程文本不是线协议。
  *
  * 【它不是什么】它不是手机 App 协议。手机通过 exo_ble.c 的 GATT 特征发送有界
  * 二进制帧；不要让 App 依赖这里的英文文本、空格或 printf 输出格式。
@@ -22,7 +23,13 @@
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_rom_sys.h"
+#include "exo_feedback_recovery.h"
+#include "exo_board_status.h"
 #include "exo_assist.h"
+#include "exo_adaptive_runtime.h"
+#include "exo_afo_trace_wire.h"
+#include "esp_app_desc.h"
 #include "exo_ble.h"
 #include "exo_config.h"
 #include "exo_control_loop.h"
@@ -33,6 +40,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "hip_joint.h"
+#include "exo_wear_zero.h"
 #include "rs01_driver.h"
 
 #include <errno.h>
@@ -146,8 +154,24 @@ static void cmd_control_status(int argc, char *argv[]);
 static void cmd_sensor_status(int argc, char *argv[]);
 static void cmd_gait_status(int argc, char *argv[]);
 static void cmd_assist_status(int argc, char *argv[]);
+static void cmd_adaptive_status(int argc,char *argv[]);
+static void cmd_afo_trace(int argc,char *argv[]);
+static void cmd_bench_peak(int argc,char *argv[]);
+static void cmd_bench_peak_status(int argc,char *argv[]);
+static void cmd_bench_peak_trace(int argc,char *argv[]);
+static void cmd_adaptive_faults(int argc,char *argv[]);
+static void cmd_adaptive_dump(int argc,char *argv[]);
+static void cmd_adaptive_config(int argc,char *argv[]);
+static void cmd_adaptive_set(int argc,char *argv[]);
+static void cmd_adaptive_store(int argc,char *argv[]);
+static void cmd_adaptive_shadow(int argc,char *argv[]);
 static void cmd_assist_config(int argc, char *argv[]);
 static void cmd_can_status(int argc, char *argv[]);
+static void cmd_board_status(int argc, char *argv[]) {
+    (void)argc; (void)argv; exo_board_print_status();
+}
+static void cmd_can_diagnose(int argc, char *argv[]);
+static void cmd_can_probe(int argc, char *argv[]);
 static void cmd_ble_status(int argc, char *argv[]);
 static void cmd_system_start(int argc, char *argv[]);
 static void cmd_system_stop(int argc, char *argv[]);
@@ -242,12 +266,29 @@ static const console_cmd_t s_cmd_table[] = {
 	 CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_gait_status},
 	{"assist_status", "Show high-level assistance strategy", 0,
 	 CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_assist_status},
+    {"adaptive_status","AFO/gaussian diagnostic snapshot; read only",0,CONSOLE_CMD_ALWAYS_AVAILABLE,cmd_adaptive_status},
+    {"afo_trace","afo_trace <cursor>: schema1 USB diagnostics; read only",1,CONSOLE_CMD_ALWAYS_AVAILABLE,cmd_afo_trace},
+    {"bench_peak","Prepare one secured-fixture pulse: <left|right> <signed Nm>; separate START",2,CONSOLE_CMD_MAINTENANCE,cmd_bench_peak},
+    {"bench_peak_status","Read MCU-timed peak test result",0,CONSOLE_CMD_ALWAYS_AVAILABLE,cmd_bench_peak_status},
+    {"bench_peak_trace","Read stopped 100Hz bounded pulse trace",0,CONSOLE_CMD_MAINTENANCE,cmd_bench_peak_trace},
+    {"adaptive_faults","Drain <=16 exact-cycle AFO lock-loss records",0,CONSOLE_CMD_ALWAYS_AVAILABLE,cmd_adaptive_faults},
+    {"adaptive_dump","Drain <=32 nonblocking-recorded CSV rows",0,CONSOLE_CMD_ALWAYS_AVAILABLE,cmd_adaptive_dump},
+    {"adaptive_config","Read complete adaptive parameters",0,CONSOLE_CMD_ALWAYS_AVAILABLE,cmd_adaptive_config},
+    {"adaptive_set","Set <left|right|afo|global> <field> <value>",3,CONSOLE_CMD_ALWAYS_AVAILABLE,cmd_adaptive_set},
+    {"adaptive_store","IDLE <save|load|defaults>",1,CONSOLE_CMD_MAINTENANCE,cmd_adaptive_store},
+    {"adaptive_shadow","IDLE select adaptive SHADOW; does not START",0,CONSOLE_CMD_MAINTENANCE,cmd_adaptive_shadow},
 	{"assist_config",
 	 "Set assist: <mode> <disabled|shadow|active> <strategy> <profile> <left%> "
 	 "<right%>",
 	 6, CONSOLE_CMD_MAINTENANCE, cmd_assist_config},
 	{"can_status", "Show TWAI controller and error counters", 0,
 	 CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_can_status},
+    {"board_status", "Read cached IMU, magnetometer, attitude and SMBus status", 0,
+     CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_board_status},
+    {"can_diagnose", "Read GPIO routing, sampled RX level and recovery budget", 0,
+     CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_can_diagnose},
+    {"can_probe", "IDLE single-shot read of selected motor run_mode; cancel stalled TX", 0,
+     CONSOLE_CMD_MAINTENANCE, cmd_can_probe},
 	{"ble_status", "Show product BLE transport diagnostics", 0,
 	 CONSOLE_CMD_ALWAYS_AVAILABLE, cmd_ble_status},
 	{"start", "Request asynchronous exoskeleton START", 0,
@@ -497,6 +538,10 @@ static void cmd_set_zero(int argc, char *argv[]) {
 	 * 该命令写 RS01 自身机械零位，和 `joint_zero left/right` 的 RAM
 	 * 软件零位不同。 两种归零名称相近但持久性、作用层级和 CAN 行为完全不同。
 	 */
+    exo_wear_zero_result_t reason;
+    if(exo_wear_zero_execute(EXO_WEAR_ZERO_FORGET,true,&reason)!=ESP_OK) {
+        debug_printf("ERROR: cannot invalidate saved wear zero; mechanical zero blocked\r\n");return;
+    }
 	if (driver_command_succeeded(
 			rs01_set_mechanical_zero(s_selected_actuator))) {
 		debug_printf("OK: motor 0x%02X set zero position sent\r\n",
@@ -661,6 +706,10 @@ static void cmd_mit_speed(int argc, char *argv[]) {
 }
 
 static void cmd_mit_set_zero(int argc, char *argv[]) {
+    exo_wear_zero_result_t reason;
+    if(exo_wear_zero_execute(EXO_WEAR_ZERO_FORGET,true,&reason)!=ESP_OK) {
+        debug_printf("ERROR: cannot invalidate saved wear zero; mechanical zero blocked\r\n");return;
+    }
 	if (driver_command_succeeded(rs01_mit_set_zero(s_selected_actuator))) {
 		debug_printf("OK: motor 0x%02X MIT set zero sent\r\n",
 					 selected_can_id());
@@ -1025,6 +1074,7 @@ static void cmd_joint_zero(int argc, char *argv[]) {
 	}
 
 	esp_err_t err = hip_joint_set_zero_from_current(joint);
+	if(err==ESP_OK)exo_wear_zero_cancel_auto_restore();
 	if (err != ESP_OK) {
 		debug_printf("ERROR: %s hip software zero not captured: %s\r\n",
 					 joint_name(joint), esp_err_to_name(err));
@@ -1044,6 +1094,7 @@ static void cmd_joint_zero_clear(int argc, char *argv[]) {
 	}
 
 	esp_err_t err = hip_joint_clear_zero(joint);
+	if(err==ESP_OK)exo_wear_zero_cancel_auto_restore();
 	if (err != ESP_OK) {
 		debug_printf("ERROR: %s hip software zero not cleared: %s\r\n",
 					 joint_name(joint), esp_err_to_name(err));
@@ -1126,6 +1177,47 @@ static void cmd_motion_mode(int argc, char *argv[]) {
 				 exo_reference_source_name(reference));
 }
 
+static void cmd_bench_peak(int argc,char *argv[]) {
+    exo_hip_joint_id_t side;float peak;
+    if(argc!=3||!command_joint_from_arg(argv,&side)||!parse_float_args(argv,2,1,&peak)) {
+        debug_printf("ERROR: bench_peak <left|right> <signed Nm>\r\n");return;
+    }
+    esp_err_t err=exo_controller_prepare_bench_peak((unsigned)side,peak);
+    debug_printf("%s: bench_peak prepare %s; no START sent\r\n",err==ESP_OK?"OK":"ERROR",esp_err_to_name(err));
+}
+static void cmd_bench_peak_status(int argc,char *argv[]) {
+    (void)argc;(void)argv;exo_bench_peak_t s;
+    if(!exo_controller_get_bench_peak(&s)){debug_printf("ERROR: peak status unavailable\r\n");return;}
+    debug_printf("BENCHPEAK trace_schema=1 profile=%u initialized=%u complete=%u fault=%u side=%u requested=%.5f generated_peak=%.5f sent_peak=%.5f estimate_peak=%.5f plateau_mean=%.5f plateau_samples=%lu samples=%lu max_displacement=%.5f max_speed=%.5f max_temperature=%.2f start_us=%lld last_us=%lld left_max_displacement=%.5f right_max_displacement=%.5f left_max_speed=%.5f right_max_speed=%.5f\r\n",
+        EXO_BENCH_PEAK_PROFILE_VERSION,s.initialized,s.complete,(unsigned)s.fault,s.side,(double)s.requested_nm,
+        (double)s.command_peak_nm,(double)s.sent_peak_nm,(double)s.estimate_peak_nm,
+        (double)(s.plateau_samples?s.plateau_sum_nm/(float)s.plateau_samples:0),
+        (unsigned long)s.plateau_samples,(unsigned long)s.samples,(double)s.maximum_displacement_deg,
+        (double)s.maximum_speed_deg_s,(double)s.maximum_temperature_c,(long long)s.start_us,(long long)s.last_us,
+        (double)s.maximum_displacement_by_side[0],(double)s.maximum_displacement_by_side[1],
+        (double)s.maximum_speed_by_side[0],(double)s.maximum_speed_by_side[1]);
+}
+static void cmd_bench_peak_trace(int argc,char *argv[]) {
+    (void)argc;(void)argv;
+    exo_bench_trace_row_t r;unsigned count=0,dropped=0;
+    if(!exo_controller_get_bench_trace(0,&r,&count,&dropped)) {
+        debug_printf("ERROR: trace unavailable; require stopped captured pulse\r\n");return;
+    }
+    debug_printf("BENCHTRACE schema=1 count=%u dropped=%u\r\n",count,dropped);
+    for(unsigned i=0;i<count;i++) {
+        if(!exo_controller_get_bench_trace(i,&r,&count,&dropped)) {
+            debug_printf("ERROR: trace changed or controller active\r\n");return;
+        }
+        debug_printf("BTRACE,%u,%lld,%lu,%lu,%llu,%llu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%lu,%lu,%u,%u,%u,%u\r\n",
+            i,(long long)r.timestamp_us,(unsigned long)r.sequence,(unsigned long)r.fault,
+            (unsigned long long)r.source_us[0],(unsigned long long)r.source_us[1],
+            (double)r.q[0],(double)r.q[1],(double)r.v[0],(double)r.v[1],
+            (double)r.estimate[0],(double)r.estimate[1],(double)r.command[0],(double)r.command[1],
+            (unsigned long)r.age_us[0],(unsigned long)r.age_us[1],
+            (unsigned)r.valid[0],(unsigned)r.valid[1],(unsigned)r.sent[0],(unsigned)r.sent[1]);
+    }
+    debug_printf("BENCHTRACE_END count=%u dropped=%u\r\n",count,dropped);
+}
 static void cmd_joint_command(int argc, char *argv[]) {
 	if (argc != 7) {
 		debug_printf("Usage: joint_command <left|right> <deg> <deg/s> <Nm> "
@@ -1402,6 +1494,206 @@ static void cmd_gait_status(int argc, char *argv[]) {
 				 esp_err_to_name(control.last_algorithm_error));
 }
 
+/* 新算法工程调试接口。配置/CSV都在低优先级UART任务执行，100Hz只复制/入环。 */
+static void adaptive_print_record(const exo_adaptive_log_t *r) {
+    for(unsigned i=0;i<2;i++) {
+        const exo_adaptive_leg_output_t *o=&r->output.leg[i];
+        debug_printf("ADAPT,%lld,%u,%lu,%.5f,%.5f,%.5f,%u,%.6f,%.6f,%.5f,%.5f,%.4f,%u,%u,%.5f,%.5f,%.5f,%.5f,%.5f,%u,%lu,%u,%lu,%lu,%lu,%lld,%.6f,%.6f,%.6f,%lu,%lu,%.4f,%u,%lu\r\n",
+            (long long)r->input.timestamp_us,i,(unsigned long)r->system_state,
+            (double)r->input.position_deg[i],(double)r->input.velocity_deg_s[i],
+            (double)r->input.feedback_torque_nm[i],r->input.feedback_torque_valid[i],
+            (double)o->raw_phase,(double)o->corrected_phase,(double)o->frequency_hz,(double)o->period_s,
+            (double)o->confidence,o->event,o->locked,(double)o->flex_nm,(double)o->ext_nm,
+            (double)o->desired_nm,(double)o->limited_nm,(double)r->command_torque_nm[i],r->command_valid[i],
+            (unsigned long)o->faults,o->rearm_required,(unsigned long)r->output.config_generation,
+            (unsigned long)r->execution_us,(unsigned long)r->dropped_logs,
+            (long long)o->event_timestamp_us,(double)o->event_phase_before,(double)o->event_phase_after,
+            (double)o->phase_offset_rad,(unsigned long)o->accepted_events,(unsigned long)o->rejected_events,
+            (double)o->lambda,r->assist_enabled[i],(unsigned long)r->previous_control_execution_us);
+    }
+}
+static void adaptive_print_lock(const char *prefix,const exo_adaptive_lock_record_t *r) {
+    const exo_adaptive_leg_output_t *o=&r->output;
+    debug_printf("%s,%lld,%lu,%lu,%lu,%lu,%lu,%lu,%.6f,%.6f,%.6f,%.6f,%lu,%.5f,%.5f,%u,%u,%lu,%.5f,%u,%lu\r\n",
+        prefix,(long long)r->timestamp_us,(unsigned long)r->sequence,(unsigned long)r->side,
+        (unsigned long)r->system_state,(unsigned long)r->permit_epoch,(unsigned long)r->generation,
+        (unsigned long)o->lock_reasons,(double)o->afo_residual,(double)o->lock_phase_error_rad,
+        (double)o->lock_frequency_error,(double)o->lock_event_age_s,(unsigned long)o->lock_intervals,
+        (double)r->position_deg,(double)r->velocity_deg_s,o->locked,o->rearm_required,
+        (unsigned long)o->faults,(double)r->command_torque_nm,r->command_valid,(unsigned long)r->dropped);
+}
+static void cmd_adaptive_faults(int argc,char *argv[]) {
+    (void)argc;(void)argv;exo_adaptive_lock_record_t r;
+    debug_printf("ADHARD header: side,captured_us,sequence,permit_epoch,faults,reasons,source_us,age_us,pair_skew_us,q_deg,v_deg_s\r\n");
+    for(unsigned i=0;i<2;i++) {
+        exo_adaptive_hard_fault_t f;
+        if(exo_adaptive_runtime_first_fault(i,&f))
+            debug_printf("ADHARD,%u,%lld,%lu,%lu,%lu,%lu,%llu,%lu,%lu,%.5f,%.5f\r\n",
+                i,(long long)f.tick.input.timestamp_us,(unsigned long)f.tick.input.sequence,
+                (unsigned long)f.tick.input.permit_epoch,(unsigned long)f.tick.output.leg[i].faults,
+                (unsigned long)f.tick.output.leg[i].lock_reasons,
+                (unsigned long long)f.tick.input.source_timestamp_us[i],(unsigned long)f.age_us,
+                (unsigned long)f.pair_skew_us,(double)f.tick.input.position_deg[i],
+                (double)f.tick.input.velocity_deg_s[i]);
+    }
+    debug_printf("ADLOCK header: timestamp_us,sequence,side,system_state,permit_epoch,generation,reasons,residual,phase_error_rad,frequency_error,event_age_s,intervals,q_deg,v_deg_s,locked,rearm,faults,final_ff_nm,command_valid,dropped\r\n");
+    for(unsigned n=0;n<EXO_ADAPTIVE_LOCK_LOG_CAPACITY&&exo_adaptive_runtime_pop_lock_loss(&r);n++)adaptive_print_lock("ADLOCK",&r);
+}
+static void cmd_adaptive_status(int argc,char *argv[]) {
+    (void)argc;(void)argv;exo_adaptive_log_t r;
+    debug_printf("ADCOUNTS header: side,permit,total,nonzero,hard,range,acquiring,stop,downstream_zero,profile_or_direction_zero,longest_zero_ticks\r\n");
+    for(unsigned side=0;side<2;side++) {
+        exo_adaptive_output_counts_t counts;
+        if(exo_adaptive_runtime_output_counts(side,&counts)) {
+            debug_printf("ADCOUNTS,%u,%lu",side,(unsigned long)counts.permit_epoch);
+            for(unsigned k=0;k<EXO_AFO_COUNT_SIZE;k++)debug_printf(",%lu",(unsigned long)counts.ticks[k]);
+            debug_printf(",%lu\r\n",(unsigned long)counts.longest_zero_run);
+        }
+    }
+    if(exo_adaptive_runtime_snapshot(&r)) {
+        debug_printf("ADAPT header: timestamp_us,side,system_state,q_deg,v_deg_s,motor_estimate_nm,feedback_valid,raw_phase,corrected_phase,hz,period_s,confidence,event,locked,flex_nm,ext_nm,desired_nm,limited_preview_nm,final_ff_command_nm,command_valid,faults,rearm,generation,execution_us,dropped,event_timestamp_us,event_phase_before,event_phase_after,phase_offset_rad,accepted_events,rejected_events,lambda,assist_enabled,previous_control_execution_us\r\n");
+        adaptive_print_record(&r);
+        for(unsigned i=0;i<2;i++) {
+            const exo_adaptive_lock_record_t current={.timestamp_us=r.input.timestamp_us,
+                .sequence=r.input.sequence,.side=i,.system_state=r.system_state,
+                .permit_epoch=r.input.permit_epoch,.generation=r.output.config_generation,
+                .position_deg=r.input.position_deg[i],.velocity_deg_s=r.input.velocity_deg_s[i],
+                .command_torque_nm=r.command_torque_nm[i],.command_valid=r.command_valid[i],.output=r.output.leg[i]};
+            adaptive_print_lock("ADLOCKSTATE",&current);
+        }
+        debug_printf("ADAPT max_execution_us=%lu ACTIVE_DEPLOYMENT=%s active_limit_mnm=%u\r\n",
+            (unsigned long)r.maximum_execution_us,
+            EXO_ADAPTIVE_ASSIST_MODE?"WALKING_ASSIST":EXO_ADAPTIVE_TRIAL_ALLOWED?"BOUNDED_MANUAL_TRIAL":EXO_ADAPTIVE_RELEASE_ALLOWED?"MANUAL_ACTIVE_RELEASE":EXO_ADAPTIVE_ACTIVE_ALLOWED?"OFF_BODY_BENCH_CANDIDATE":"BLOCKED_STAGE5_NOT_RUN",
+            EXO_ADAPTIVE_ACTIVE_ALLOWED?(unsigned)EXO_ADAPTIVE_CONFIG_MAX_MNM:0U);
+    }
+}
+static void cmd_afo_trace(int argc,char *argv[]) {
+    if(argc!=2)return;
+    errno=0;char *end=NULL;unsigned long parsed=strtoul(argv[1],&end,10);
+    if(errno||!argv[1][0]||argv[1][0]=='-'||!end||*end||parsed>UINT32_MAX)return;
+    uint32_t cursor=(uint32_t)parsed,oldest=0,latest=0;
+    exo_adaptive_runtime_trace_bounds(&oldest,&latest);
+    exo_ble_snapshot_t ble={0};(void)exo_ble_get_snapshot(&ble);
+    const esp_app_desc_t *app=esp_app_get_description();char hash[65];
+    for(unsigned i=0;i<32;i++)snprintf(hash+i*2,3,"%02x",app->app_elf_sha256[i]);
+    debug_printf("AFOMETA,1,%lu,%s,%s,%lu,%lu,%u\r\n",(unsigned long)ble.boot_id,
+        app->version,hash,(unsigned long)oldest,(unsigned long)latest,EXO_AFO_TRACE_CAPACITY);
+    /* Read the actual selected/START-locked configuration, including CRC;
+     * consumers correlate its generation, never assume source-code defaults. */
+    static exo_adaptive_config_t configuration;static uint8_t config_bytes[EXO_ADAPTIVE_CONFIG_BYTES];
+    static char config_hex[EXO_ADAPTIVE_CONFIG_BYTES*2+1];uint32_t config_generation=0;
+    if(exo_adaptive_runtime_config(&configuration,&config_generation)&&
+       exo_adaptive_config_encode(&configuration,config_bytes,sizeof(config_bytes))) {
+        for(unsigned i=0;i<sizeof(config_bytes);i++)snprintf(config_hex+i*2,3,"%02x",config_bytes[i]);
+        debug_printf("AFOCFG,1,%lu,%s\r\n",(unsigned long)config_generation,config_hex);
+    }
+    exo_system_snapshot_t sys={0};(void)exo_system_get_snapshot(&sys);
+    debug_printf("AFOSYS,1,%lld,%u,%u,%u,%lu,%u,%llu,%u,%lu,%lu,%lu\r\n",
+        (long long)esp_timer_get_time(),(unsigned)sys.state,sys.run_requested,sys.output_allowed,
+        (unsigned long)sys.runtime_fault_count,(unsigned)sys.last_runtime_fault,
+        (unsigned long long)sys.runtime_fault_us,sys.runtime_can_status_valid,(unsigned long)sys.runtime_can_state,
+        (unsigned long)sys.runtime_can_tx_errors,(unsigned long)sys.runtime_can_rx_errors);
+    for(unsigned side=0;side<2;side++) {
+        exo_adaptive_output_counts_t counts;
+        if(exo_adaptive_runtime_output_counts(side,&counts)) {
+            debug_printf("AFOCOUNTS,1,%u,%lu",side,(unsigned long)counts.permit_epoch);
+            for(unsigned k=0;k<EXO_AFO_COUNT_SIZE;k++)debug_printf(",%lu",(unsigned long)counts.ticks[k]);
+            debug_printf(",%lu\r\n",(unsigned long)counts.longest_zero_run);
+        }
+    }
+    /* Commands are serialized by s_cmd_mutex; keep formatting scratch off the
+     * 4 KiB console stack. No control task ever touches this scratch storage. */
+    static exo_afo_trace_t row;static char line[1024];
+    for(unsigned side=0;side<2;side++)if(exo_adaptive_runtime_trace_first(side,&row)&&
+        exo_afo_trace_format(line,sizeof(line),&row,side,true)>0)debug_printf("%s\r\n",line);
+    /* Fixed burst and fixed upper cursor: slow USB cannot trap the console in
+     * an unbounded drain while the producer continues. Ring reads are copies. */
+    unsigned emitted=0;
+    for(;emitted<24&&exo_adaptive_runtime_trace_after(cursor,latest,&row);emitted++) {
+        for(unsigned side=0;side<2;side++)if(exo_afo_trace_format(line,sizeof(line),&row,side,false)>0)
+            debug_printf("%s\r\n",line);
+        cursor=row.id;
+    }
+    debug_printf("AFOEND,1,%lu,%lu,%u\r\n",(unsigned long)cursor,(unsigned long)latest,emitted);
+}
+static void cmd_adaptive_dump(int argc,char *argv[]) {
+    (void)argc;(void)argv;exo_adaptive_log_t r;
+    /* 最多32条，不让持续生产导致低优先级任务无限循环。 */
+    for(unsigned n=0;n<EXO_ADAPTIVE_LOG_CAPACITY&&exo_adaptive_runtime_pop(&r);n++)adaptive_print_record(&r);
+}
+static void cmd_adaptive_config(int argc,char *argv[]) {
+    (void)argc;(void)argv;exo_adaptive_config_t c;uint32_t g;
+    if(!exo_adaptive_runtime_config(&c,&g))return;
+    debug_printf("ADAPT config schema=%lu generation=%lu overall_strength=%.6f\r\n",
+        (unsigned long)c.schema,(unsigned long)g,(double)c.overall_strength);
+#define PRINT_AFO(f) debug_printf("ADAPT config afo " #f " %.6f\r\n",(double)c.afo.f);
+    PRINT_AFO(minimum_hz) PRINT_AFO(maximum_hz) PRINT_AFO(initial_hz)
+    PRINT_AFO(phase_gain) PRINT_AFO(frequency_gain) PRINT_AFO(amplitude_gain)
+    PRINT_AFO(input_scale_deg) PRINT_AFO(maximum_dt_s) PRINT_AFO(velocity_filter_tau_s)
+    PRINT_AFO(event_velocity_deg_s) PRINT_AFO(event_excursion_deg) PRINT_AFO(correction_rate_rad_s)
+#undef PRINT_AFO
+    for(unsigned i=0;i<2;i++) {
+#define PRINT_LEG(f) debug_printf("ADAPT config %s " #f " %.6f\r\n",i?"right":"left",(double)c.leg[i].f);
+        PRINT_LEG(enabled) PRINT_LEG(strength) PRINT_LEG(flex_amplitude_nm) PRINT_LEG(flex_peak_phase) PRINT_LEG(flex_width)
+        PRINT_LEG(ext_amplitude_nm) PRINT_LEG(ext_peak_phase) PRINT_LEG(ext_width) PRINT_LEG(torque_limit_nm)
+        PRINT_LEG(slew_nm_s) PRINT_LEG(positive_power_w) PRINT_LEG(negative_power_w)
+        PRINT_LEG(minimum_angle_deg) PRINT_LEG(maximum_angle_deg) PRINT_LEG(maximum_velocity_deg_s)
+        PRINT_LEG(fade_s) PRINT_LEG(transition_s)
+#undef PRINT_LEG
+    }
+}
+static void cmd_adaptive_set(int argc,char *argv[]) {
+    if(argc!=4) {debug_printf("Usage: adaptive_set <left|right|afo|global> <field> <value>\r\n");return;}
+    exo_adaptive_config_t c;float value;
+    if(!exo_adaptive_runtime_config(&c,NULL)||!parse_float_arg(argv[3],&value))return;
+    float *field=NULL;
+    if(!strcasecmp(argv[1],"global")&&!strcmp(argv[2],"overall_strength"))field=&c.overall_strength;
+    if(!strcasecmp(argv[1],"afo")) {
+#define AFO_FIELD(f) if(!strcmp(argv[2],#f))field=&c.afo.f;
+        AFO_FIELD(minimum_hz) AFO_FIELD(maximum_hz) AFO_FIELD(initial_hz)
+        AFO_FIELD(phase_gain) AFO_FIELD(frequency_gain) AFO_FIELD(amplitude_gain)
+        AFO_FIELD(input_scale_deg) AFO_FIELD(maximum_dt_s) AFO_FIELD(velocity_filter_tau_s)
+        AFO_FIELD(event_velocity_deg_s) AFO_FIELD(event_excursion_deg) AFO_FIELD(correction_rate_rad_s)
+#undef AFO_FIELD
+    }
+    if(!strcasecmp(argv[1],"left")||!strcasecmp(argv[1],"right")) {
+        unsigned i=!strcasecmp(argv[1],"right")?1:0;
+#define LEG_FIELD(f) if(!strcmp(argv[2],#f))field=&c.leg[i].f;
+        LEG_FIELD(enabled) LEG_FIELD(strength) LEG_FIELD(flex_amplitude_nm) LEG_FIELD(flex_peak_phase) LEG_FIELD(flex_width)
+        LEG_FIELD(ext_amplitude_nm) LEG_FIELD(ext_peak_phase) LEG_FIELD(ext_width) LEG_FIELD(torque_limit_nm)
+        LEG_FIELD(slew_nm_s) LEG_FIELD(positive_power_w) LEG_FIELD(negative_power_w)
+        LEG_FIELD(minimum_angle_deg) LEG_FIELD(maximum_angle_deg) LEG_FIELD(maximum_velocity_deg_s)
+        LEG_FIELD(fade_s) LEG_FIELD(transition_s)
+#undef LEG_FIELD
+    }
+    if(!field) {debug_printf("ERROR: unknown adaptive field\r\n");return;}
+    float old=*field;*field=value;
+    esp_err_t err=exo_adaptive_runtime_set(&c);
+    exo_adaptive_config_change_t change={0};
+    if(err==ESP_OK)(void)exo_adaptive_runtime_last_change(&change);
+    debug_printf("ADAPT set result=%s timestamp_us=%lld generation=%lu %s.%s old=%.6f new=%.6f\r\n",
+        esp_err_to_name(err),(long long)change.timestamp_us,(unsigned long)change.generation,
+        argv[1],argv[2],(double)old,(double)value);
+}
+static void cmd_adaptive_store(int argc,char *argv[]) {
+    if(argc!=2)return;
+    esp_err_t err=ESP_ERR_INVALID_ARG;
+    if(!strcmp(argv[1],"save"))err=exo_adaptive_runtime_save();
+    else if(!strcmp(argv[1],"load"))err=exo_adaptive_runtime_load();
+    else if(!strcmp(argv[1],"defaults")) {
+        exo_adaptive_config_t c=exo_adaptive_default_config();err=exo_adaptive_runtime_set(&c);
+    }
+    debug_printf("ADAPT storage %s: %s; defaults/load never START or enable output\r\n",argv[1],esp_err_to_name(err));
+}
+static void cmd_adaptive_shadow(int argc,char *argv[]) {
+    (void)argc;(void)argv;
+    exo_assist_config_t c={.schema_version=EXO_ASSIST_CONFIG_SCHEMA_VERSION,
+        .mode=EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN,.strategy_id=EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN,
+        .requested_execution_state=EXO_ASSIST_EXEC_SHADOW,.left_level_percent=100,.right_level_percent=100,
+        .maximum_assist_torque_mnm=500};
+    debug_printf("ADAPT select SHADOW: %s; no START sent; preview ceiling=0.5Nm; see adaptive_status for deployment scope\r\n",
+        esp_err_to_name(exo_assist_set_config(&c)));
+}
 static void cmd_assist_status(int argc, char *argv[]) {
 	(void)argc;
 	(void)argv;
@@ -1598,6 +1890,53 @@ static void cmd_assist_config(int argc, char *argv[]) {
 		(unsigned)right_percent);
 }
 
+static void cmd_can_diagnose(int argc, char *argv[]) {
+    const gpio_num_t rx=g_exo_hardware_config.twai.rx_gpio;
+    const gpio_num_t tx=g_exo_hardware_config.twai.tx_gpio;
+    (void)gpio_dump_io_configuration(stdout,(1ULL<<rx)|(1ULL<<tx));
+    unsigned high=0,edges=0;int previous=gpio_get_level(rx);
+    for(unsigned i=0;i<128;i++) {
+        int level=gpio_get_level(rx);high+=level!=0;edges+=level!=previous;
+        previous=level;esp_rom_delay_us(100);
+    }
+    exo_feedback_recovery_snapshot_t recovery;
+    exo_feedback_recovery_get_snapshot(&recovery);
+    debug_printf("CAN DIAG: RX high=%u/128 edges=%u over ~12.8ms; recovery A/B=%u/%u\r\n",
+        high,edges,recovery.attempts[0],recovery.attempts[1]);
+    cmd_can_status(argc,argv);
+}
+static void cmd_can_probe(int argc, char *argv[]) {
+    /* Dispatcher holds IDLE maintenance, excluding every product CAN writer.
+     * Only a type-17 read, never mode/enable/torque/zero or report writes.
+     * Single-shot prevents automatic retransmission. A stuck queued request
+     * is aborted by STOP/START of the CAN controller (not motor START). */
+    twai_status_info_t before,after;
+    exo_can_node_id_t node;
+    if(twai_get_status_info(&before)!=ESP_OK||before.state!=TWAI_STATE_RUNNING||
+       before.msgs_to_tx!=0||!rs01_get_can_id(s_selected_actuator,&node)) {
+        debug_printf("CAN PROBE refused: requires running CAN and empty TX queue\r\n");return;
+    }
+    twai_message_t frame={.flags=TWAI_MSG_FLAG_EXTD|TWAI_MSG_FLAG_SS,
+        .identifier=(17UL<<24)|((uint32_t)g_exo_hardware_config.twai.master_id<<8)|node,
+        .data_length_code=8,.data={0x05,0x70,0,0,0,0,0,0}};
+    esp_err_t sent=twai_transmit(&frame,0);
+    vTaskDelay(pdMS_TO_TICKS(250));
+    if(twai_get_status_info(&after)!=ESP_OK) {
+        debug_printf("CAN PROBE status unavailable; result=%s\r\n",esp_err_to_name(sent));return;
+    }
+    debug_printf("CAN PROBE: id=0x%08lX result=%s queued=%lu TEC=%lu REC=%lu bus_errors_delta=%lu tx_failed_delta=%lu\r\n",
+        (unsigned long)frame.identifier,esp_err_to_name(sent),(unsigned long)after.msgs_to_tx,
+        (unsigned long)after.tx_error_counter,(unsigned long)after.rx_error_counter,
+        (unsigned long)(after.bus_error_count-before.bus_error_count),
+        (unsigned long)(after.tx_failed_count-before.tx_failed_count));
+    if(after.msgs_to_tx&&after.state==TWAI_STATE_RUNNING) {
+        esp_err_t stopped=twai_stop();
+        esp_err_t restarted=stopped==ESP_OK?twai_start():stopped;
+        debug_printf("CAN PROBE cancel pending: stop=%s restart=%s (motor output remains disabled)\r\n",
+            esp_err_to_name(stopped),esp_err_to_name(restarted));
+    }
+    cmd_can_status(argc,argv);
+}
 static void cmd_can_status(int argc, char *argv[]) {
 	/* 读取 ESP-IDF TWAI 控制器统计，可区分停机、正常、BUS_OFF 和恢复中。 */
 	twai_status_info_t status;

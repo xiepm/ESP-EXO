@@ -1,5 +1,20 @@
 # ESP-EXO
 
+## Archived version: 0.11.23 / AFO strategy 12
+
+This branch archives the exact 0.11.23 source and firmware flashed on 2026-11-18.
+
+- [Firmware BIN, ELF, hashes, verification and known limitations](docs/firmware/FIRMWARE_0_11_23.md)
+- [USB + BLE recording instructions](docs/phase10/AFO_USB_RECORDING_0_11_23.md)
+- [Immutable candidate package](firmware/0.11.23/)
+
+**Known issue:** BLE GATT connection failures remain under investigation. Real-gait assistance and sustained USB/BLE operation have not been validated. This is a development/test archive.
+
+The dated material below describes older versions and their validation state; it is retained as historical documentation.
+
+---
+
+
 当前仓库源码版本：**0.10.13**，网页入口：**http://localhost:4173/exo**。
 对应固件使用ESP-IDF 5.5，ESP32-S3-N16R8、CAN TX4/RX1、1 Mbit/s，工程激励默认关闭。
 

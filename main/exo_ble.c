@@ -23,6 +23,7 @@
  */
 
 #include "exo_ble.h"
+#include "exo_board_status.h"
 
 #include <limits.h>
 #include <math.h>
@@ -32,6 +33,7 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "exo_assist.h"
+#include "exo_adaptive_runtime.h"
 #include "exo_ble_protocol.h"
 #include "exo_command_composer.h"
 #include "exo_config.h"
@@ -75,8 +77,8 @@
 #define EXO_BLE_NOTIFY_RETRY_DELAY_MS 10U
 
 #define EXO_FIRMWARE_VERSION_MAJOR 0U
-#define EXO_FIRMWARE_VERSION_MINOR 10U
-#define EXO_FIRMWARE_VERSION_PATCH 13U
+#define EXO_FIRMWARE_VERSION_MINOR 11U
+#define EXO_FIRMWARE_VERSION_PATCH 23U
 
 _Static_assert(EXO_BLE_ASSIST_TORQUE_HARD_MAX_MNM ==
 			   EXO_PHASE_PROFILE_TORQUE_HARD_MAX_MNM,
@@ -445,6 +447,7 @@ wire_reference(exo_reference_source_t reference) {
 		return EXO_BLE_REFERENCE_SINE;
 	case EXO_REFERENCE_ALTERNATING_SINE_TEST:
 		return EXO_BLE_REFERENCE_ALTERNATING_SINE_TEST;
+    case EXO_REFERENCE_BENCH_PEAK: return EXO_BLE_REFERENCE_BENCH_PEAK;
 	case EXO_REFERENCE_CONSTANT:
 	default:
 		return EXO_BLE_REFERENCE_CONSTANT;
@@ -512,6 +515,7 @@ wire_gait_origin(exo_gait_phase_origin_t origin) {
 }
 
 static exo_ble_wire_assist_mode_t wire_assist_mode(exo_assist_mode_t mode) {
+	if(mode==EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN) return EXO_BLE_ASSIST_MODE_ADAPTIVE_GAUSSIAN;
 	switch (mode) {
 	case EXO_ASSIST_MODE_TRANSPARENT:
 		return EXO_BLE_ASSIST_MODE_TRANSPARENT;
@@ -532,6 +536,7 @@ static bool assist_mode_from_wire(exo_ble_wire_assist_mode_t wire,
 	if (mode == NULL) {
 		return false;
 	}
+	if(wire==EXO_BLE_ASSIST_MODE_ADAPTIVE_GAUSSIAN) { *mode=EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN;return true; }
 	switch (wire) {
 	case EXO_BLE_ASSIST_MODE_TRANSPARENT:
 		*mode = EXO_ASSIST_MODE_TRANSPARENT;
@@ -584,6 +589,7 @@ static bool assist_execution_from_wire(exo_ble_wire_assist_execution_t wire,
 
 static exo_ble_wire_assist_strategy_t
 wire_assist_strategy(exo_assist_strategy_id_t strategy) {
+	if(strategy==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN) return EXO_BLE_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN;
 	switch (strategy) {
 	case EXO_ASSIST_STRATEGY_TRANSPARENT:
 		return EXO_BLE_ASSIST_STRATEGY_TRANSPARENT;
@@ -605,6 +611,8 @@ static bool assist_strategy_from_wire(exo_ble_wire_assist_strategy_t wire,
 		return false;
 	}
 	switch (wire) {
+	case EXO_BLE_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN:
+        *strategy=EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN;return true;
 	case EXO_BLE_ASSIST_STRATEGY_TRANSPARENT:
 		*strategy = EXO_ASSIST_STRATEGY_TRANSPARENT;
 		return true;
@@ -642,6 +650,12 @@ wire_assist_unavailable(exo_assist_unavailable_reason_t reason) {
 		return EXO_BLE_ASSIST_UNAVAILABLE_REQUIRED_GAIT_INVALID;
 	case EXO_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS:
 		return EXO_BLE_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS;
+	case EXO_ASSIST_UNAVAILABLE_AFO_ACQUIRING:
+		return EXO_BLE_ASSIST_UNAVAILABLE_AFO_ACQUIRING;
+	case EXO_ASSIST_UNAVAILABLE_AFO_REARM_REQUIRED:
+		return EXO_BLE_ASSIST_UNAVAILABLE_AFO_REARM_REQUIRED;
+	case EXO_ASSIST_UNAVAILABLE_AFO_INPUT_FAULT:
+		return EXO_BLE_ASSIST_UNAVAILABLE_AFO_INPUT_FAULT;
 	case EXO_ASSIST_UNAVAILABLE_NONE:
 	default:
 		return EXO_BLE_ASSIST_UNAVAILABLE_NONE;
@@ -1274,6 +1288,7 @@ execute_zero_command(const exo_ble_request_t *request, bool capture) {
 	const exo_hip_joint_id_t joint = joint_from_wire_side(request->side);
 	const esp_err_t error = capture ? hip_joint_set_zero_from_current(joint)
 									: hip_joint_clear_zero(joint);
+	if(error==ESP_OK)exo_wear_zero_cancel_auto_restore();
 	exo_system_end_maintenance();
 
 	if (error == ESP_OK) {
@@ -1391,6 +1406,43 @@ static bool encode_can_response(uint8_t request_id, uint8_t *response, size_t *l
 static bool dispatch_request(const exo_ble_request_t *request,
 							 uint8_t *response, size_t *response_len) {
 	switch (request->opcode) {
+    case EXO_BLE_OPCODE_GET_AFO_STATUS: {
+        const unsigned side=request->side;
+        exo_adaptive_log_t log;exo_adaptive_hard_fault_t first;
+        if(!exo_adaptive_runtime_snapshot(&log))
+            return encode_ack(request->opcode,request->request_id,EXO_BLE_RESULT_INTERNAL_ERROR,0,response,response_len);
+        const exo_adaptive_leg_output_t *o=&log.output.leg[side];
+        exo_ble_afo_status_t status={.side=side,.faults=o->faults,.lock_reasons=o->lock_reasons,
+            .flags=(o->locked?1U:0U)|(o->rearm_required?2U:0U)};
+        if(exo_adaptive_runtime_first_fault(side,&first)) {
+            status.flags|=4U;status.first_faults=first.tick.output.leg[side].faults;
+            status.first_timestamp_ms=(uint32_t)(first.tick.input.timestamp_us/1000);
+            const float q=first.tick.input.position_deg[side],v=first.tick.input.velocity_deg_s[side];
+            status.first_q_cdeg=isfinite(q)?(int16_t)fmaxf(INT16_MIN+1,fminf(INT16_MAX,roundf(q*100))):INT16_MIN;
+            status.first_v_ddeg_s=isfinite(v)?(int16_t)fmaxf(INT16_MIN+1,fminf(INT16_MAX,roundf(v*10))):INT16_MIN;
+            status.first_source_interval_ms=(uint8_t)fminf(255,(float)first.source_interval_us/1000);
+            status.first_age_ms=(uint8_t)fminf(255,(float)first.age_us/1000);
+        }
+        return exo_ble_protocol_encode_afo_status(request->request_id,&status,response,
+            EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,response_len);
+    }
+    case EXO_BLE_OPCODE_GET_DIRECTION_PREVIEW: {
+        hip_direction_teach_preview_t p;
+        if (!hip_joint_direction_preview(joint_from_wire_side(request->side),&p))
+            return encode_ack(request->opcode,request->request_id,EXO_BLE_RESULT_INTERNAL_ERROR,0,response,response_len);
+        return exo_ble_protocol_encode_direction_preview(request->request_id,request->side,
+            p.token,p.result,p.actuator,
+            isfinite(p.baseline_deg)?scaled_i32(exo_degrees_to_radians(p.baseline_deg),1000.f):INT32_MIN,
+            isfinite(p.current_deg)?scaled_i32(exo_degrees_to_radians(p.current_deg),1000.f):INT32_MIN,
+            p.remaining_ms,p.feedback_age_ms,response,EXO_BLE_PROTOCOL_MAX_FRAME_SIZE,response_len);
+    }
+	case EXO_BLE_OPCODE_GET_BOARD_SENSOR: {
+        uint8_t flags; uint16_t age; float values[3];
+        exo_board_read(request->board_sensor_page, &flags, &age, values);
+        return exo_ble_protocol_encode_board_sensor(request->request_id,
+            request->board_sensor_page, flags, age, values, response,
+            EXO_BLE_PROTOCOL_MAX_FRAME_SIZE, response_len);
+    }
 	case EXO_BLE_OPCODE_GET_CAN_STATUS:
         return encode_can_response(request->request_id, response, response_len);
     case EXO_BLE_OPCODE_RESTORE_FEEDBACK: {
@@ -1484,6 +1536,21 @@ static bool dispatch_request(const exo_ble_request_t *request,
     case EXO_BLE_OPCODE_SET_PULSE_WINDOW:
         return encode_ack(request->opcode,request->request_id,execute_pulse_update(request),0,
             response,response_len);
+    case EXO_BLE_OPCODE_PREPARE_ADAPTIVE_TRIAL: {
+        esp_err_t error=ESP_ERR_INVALID_STATE;
+        if(EXO_ADAPTIVE_TRIAL_ALLOWED&&exo_system_try_begin_maintenance()) {
+            error=exo_adaptive_runtime_prepare_trial();
+            exo_system_end_maintenance();
+        }
+        return encode_ack(request->opcode,request->request_id,assist_error_result(error),
+            error==ESP_OK?1U:0U,response,response_len);
+    }
+    case EXO_BLE_OPCODE_CHECK_ADAPTIVE_TRIAL: {
+        const bool ready=exo_adaptive_runtime_trial_ready();
+        return encode_ack(request->opcode,request->request_id,
+            ready?EXO_BLE_RESULT_OK:EXO_BLE_RESULT_REJECTED_NOT_READY,
+            ready?1U:0U,response,response_len);
+    }
     case EXO_BLE_OPCODE_GET_ASSIST_TORQUE_LIMIT: {
 		exo_assist_snapshot_t assist;
 		if (!exo_assist_get_snapshot(&assist))

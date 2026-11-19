@@ -30,6 +30,7 @@
  */
 
 #include "rs01_driver.h"
+#include "rs01_motor_profile.h"
 
 #include <math.h>
 #include <string.h>
@@ -86,10 +87,10 @@ static const float RS01_POSITION_RESET_CONFIRMATION_RAD = 0.1f;
 static const rs01_limits_t s_limits = {
 	.position_min_rad = -12.57f,
 	.position_max_rad = 12.57f,
-	.velocity_min_rad_s = -44.0f,
-	.velocity_max_rad_s = 44.0f,
-	.torque_min_nm = -17.0f,
-	.torque_max_nm = 17.0f,
+	.velocity_min_rad_s = -EXO_MOTOR_WIRE_SPEED_MAX,
+	.velocity_max_rad_s = EXO_MOTOR_WIRE_SPEED_MAX,
+	.torque_min_nm = -EXO_MOTOR_WIRE_TORQUE_MAX,
+	.torque_max_nm = EXO_MOTOR_WIRE_TORQUE_MAX,
 	.kp_min = 0.0f,
 	.kp_max = 500.0f,
 	.kd_min = 0.0f,

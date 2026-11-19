@@ -1,5 +1,6 @@
 #include "exo_ble_protocol.h"
 #include <string.h>
+#include <math.h>
 
 /*
  * 产品 BLE v1 的纯字节编解码器。
@@ -125,6 +126,8 @@ static bool request_payload_size(uint8_t opcode, uint8_t *payload_size) {
 
 	switch (opcode) {
 	case EXO_BLE_OPCODE_GET_INFO:
+    case EXO_BLE_OPCODE_PREPARE_ADAPTIVE_TRIAL:
+    case EXO_BLE_OPCODE_CHECK_ADAPTIVE_TRIAL:
 	case EXO_BLE_OPCODE_GET_SYSTEM_STATUS:
 	case EXO_BLE_OPCODE_GET_CONTROL_CONFIG:
 	case EXO_BLE_OPCODE_GET_GAIT_STATUS:
@@ -142,6 +145,9 @@ static bool request_payload_size(uint8_t opcode, uint8_t *payload_size) {
 		*payload_size = 0U;
 		return true;
 	case EXO_BLE_OPCODE_GET_JOINT_STATUS:
+    case EXO_BLE_OPCODE_GET_BOARD_SENSOR:
+    case EXO_BLE_OPCODE_GET_DIRECTION_PREVIEW:
+    case EXO_BLE_OPCODE_GET_AFO_STATUS:
 	case EXO_BLE_OPCODE_GET_CALIBRATION_STATUS:
     case EXO_BLE_OPCODE_GET_SAVED_ZERO:
     case EXO_BLE_OPCODE_GET_PULSE_STATUS:
@@ -251,17 +257,17 @@ static bool active_mode_is_valid(exo_ble_wire_control_mode_t mode) {
 static bool reference_is_valid(exo_ble_wire_reference_t reference) {
 	return reference == EXO_BLE_REFERENCE_CONSTANT ||
 		   reference == EXO_BLE_REFERENCE_SINE ||
-		   reference == EXO_BLE_REFERENCE_ALTERNATING_SINE_TEST;
+		   reference == EXO_BLE_REFERENCE_ALTERNATING_SINE_TEST || reference == EXO_BLE_REFERENCE_BENCH_PEAK;
 }
 
 static bool assist_mode_is_selectable(exo_ble_wire_assist_mode_t mode) {
 	return mode >= EXO_BLE_ASSIST_MODE_TRANSPARENT &&
-		   mode <= EXO_BLE_ASSIST_MODE_ANGLE_THRESHOLD;
+		   mode <= EXO_BLE_ASSIST_MODE_ADAPTIVE_GAUSSIAN;
 }
 
 static bool assist_mode_is_snapshot_value(exo_ble_wire_assist_mode_t mode) {
 	return mode >= EXO_BLE_ASSIST_MODE_NONE &&
-		   mode <= EXO_BLE_ASSIST_MODE_ANGLE_THRESHOLD;
+		   mode <= EXO_BLE_ASSIST_MODE_ADAPTIVE_GAUSSIAN;
 }
 
 static bool assist_execution_is_valid(exo_ble_wire_assist_execution_t state) {
@@ -271,7 +277,7 @@ static bool assist_execution_is_valid(exo_ble_wire_assist_execution_t state) {
 
 static bool assist_strategy_is_valid(exo_ble_wire_assist_strategy_t strategy) {
 	return strategy >= EXO_BLE_ASSIST_STRATEGY_NONE &&
-		   strategy <= EXO_BLE_ASSIST_STRATEGY_ANGLE_THRESHOLD;
+		   strategy <= EXO_BLE_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN;
 }
 
 static bool
@@ -284,7 +290,8 @@ assist_mode_matches_strategy(exo_ble_wire_assist_mode_t mode,
 		   (mode == EXO_BLE_ASSIST_MODE_ASSIST_AS_NEEDED &&
 			strategy == EXO_BLE_ASSIST_STRATEGY_AAN_RESIDUAL) ||
 		   (mode == EXO_BLE_ASSIST_MODE_ANGLE_THRESHOLD &&
-		    strategy == EXO_BLE_ASSIST_STRATEGY_ANGLE_THRESHOLD);
+		    strategy == EXO_BLE_ASSIST_STRATEGY_ANGLE_THRESHOLD) ||
+        (mode==EXO_BLE_ASSIST_MODE_ADAPTIVE_GAUSSIAN && strategy==EXO_BLE_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN);
 }
 
 /*
@@ -419,7 +426,14 @@ exo_ble_protocol_decode_request(const uint8_t *frame, size_t frame_len,
 		return EXO_BLE_RESULT_INVALID_PAYLOAD;
 	}
 
+    if (request->opcode == EXO_BLE_OPCODE_GET_BOARD_SENSOR) {
+        if (frame[4] > 3U) return EXO_BLE_RESULT_INVALID_PAYLOAD;
+        request->board_sensor_page = frame[4];
+        return EXO_BLE_RESULT_OK;
+    }
 	if (request->opcode == EXO_BLE_OPCODE_GET_JOINT_STATUS ||
+        request->opcode == EXO_BLE_OPCODE_GET_DIRECTION_PREVIEW ||
+        request->opcode == EXO_BLE_OPCODE_GET_AFO_STATUS ||
 		request->opcode == EXO_BLE_OPCODE_GET_CALIBRATION_STATUS ||
         request->opcode == EXO_BLE_OPCODE_GET_SAVED_ZERO ||
         request->opcode == EXO_BLE_OPCODE_GET_PULSE_STATUS ||
@@ -459,7 +473,7 @@ exo_ble_protocol_decode_request(const uint8_t *frame, size_t frame_len,
         return EXO_BLE_RESULT_OK;
     }
     if (request->opcode == EXO_BLE_OPCODE_SAVED_ZERO_ACTION) {
-        if (frame[4] > 3U || frame[5] != 1U) return EXO_BLE_RESULT_INVALID_PAYLOAD;
+        if (frame[4] > 4U || frame[5] != 1U) return EXO_BLE_RESULT_INVALID_PAYLOAD;
         request->saved_zero_action = frame[4];
         return EXO_BLE_RESULT_OK;
     }
@@ -550,7 +564,8 @@ exo_ble_protocol_decode_request(const uint8_t *frame, size_t frame_len,
 			request->maximum_assist_torque_mnm =
 				read_u16_le(&frame[FRAME_PAYLOAD_OFFSET + 8U]);
 			if (request->maximum_assist_torque_mnm >
-                (request->opcode == EXO_BLE_OPCODE_SET_ANGLE_ASSIST_CONFIG
+                (request->opcode == EXO_BLE_OPCODE_SET_ANGLE_ASSIST_CONFIG ||
+                 config.strategy_id == EXO_BLE_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN
                  ? EXO_BLE_ANGLE_TORQUE_HARD_MAX_MNM
                  : EXO_BLE_ASSIST_TORQUE_HARD_MAX_MNM)) {
 				return EXO_BLE_RESULT_INVALID_PAYLOAD;
@@ -912,7 +927,7 @@ bool exo_ble_protocol_encode_assist_config(
 		config->right_level_percent > 100U ||
 		(config->assist_flags & ~EXO_BLE_ASSIST_FLAGS_MASK) != 0U ||
 		config->unavailable_reason >
-			EXO_BLE_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS) {
+			EXO_BLE_ASSIST_UNAVAILABLE_AFO_INPUT_FAULT) {
 		return false;
 	}
 	const bool selected_valid =
@@ -1076,6 +1091,51 @@ bool exo_ble_protocol_encode_telemetry_sample(
 }
 
 /* 逐字节编码，MTU=23也只占一个20字节响应。计数饱和由业务层完成。 */
+bool exo_ble_protocol_encode_afo_status(uint8_t id,const exo_ble_afo_status_t *s,
+    uint8_t *frame,size_t capacity,size_t *length) {
+    if(length)*length=0;
+    if(!s||s->side>1||(s->faults&~127U)||(s->first_faults&~127U)||
+       (s->flags&~7U)||(s->lock_reasons&~511U)||
+       !begin_response(EXO_BLE_OPCODE_GET_AFO_STATUS|0x80,id,16,true,frame,capacity,length))return false;
+    frame[4]=s->side;frame[5]=s->faults;frame[6]=s->first_faults;frame[7]=s->flags;
+    write_u16_le(frame+8,s->lock_reasons);write_u32_le(frame+10,s->first_timestamp_ms);
+    write_i16_le(frame+14,s->first_q_cdeg);write_i16_le(frame+16,s->first_v_ddeg_s);
+    frame[18]=s->first_source_interval_ms;frame[19]=s->first_age_ms;return true;
+}
+bool exo_ble_protocol_encode_direction_preview(uint8_t request_id, uint8_t side,
+    uint8_t token, uint8_t result, uint8_t actuator, int32_t baseline_mrad,
+    int32_t current_mrad, uint16_t remaining_ms, uint16_t age_ms,
+    uint8_t *frame, size_t capacity, size_t *length) {
+    if (length) *length=0;
+    if (side>1 || result>13 || (actuator>1 && actuator!=255) || remaining_ms>60000 ||
+        (result==0 && (!token || actuator>1 || !remaining_ms || age_ms>50 ||
+         baseline_mrad==INT32_MIN || current_mrad==INT32_MIN))) return false;
+    if (!begin_response(EXO_BLE_OPCODE_GET_DIRECTION_PREVIEW|EXO_BLE_PROTOCOL_RESPONSE_BIT,
+        request_id,16,true,frame,capacity,length)) return false;
+    frame[4]=side;frame[5]=token;frame[6]=result;frame[7]=actuator;
+    write_u32_le(frame+8,(uint32_t)baseline_mrad);
+    write_u32_le(frame+12,(uint32_t)current_mrad);
+    write_u16_le(frame+16,remaining_ms);write_u16_le(frame+18,age_ms);
+    return true;
+}
+
+bool exo_ble_protocol_encode_board_sensor(uint8_t request_id, uint8_t page,
+    uint8_t flags, uint16_t age_ms, const float values[3],
+    uint8_t *frame, size_t capacity, size_t *length) {
+    if (length) *length = 0;
+    if (!values || page > 3 || (flags & ~15U) ||
+        ((flags & 1U) && (age_ms >= 250 || !(flags & 8U)))) return false;
+    for (unsigned i=0; i<3; ++i) if (!isfinite(values[i])) return false;
+    if (!begin_response(EXO_BLE_OPCODE_GET_BOARD_SENSOR | EXO_BLE_PROTOCOL_RESPONSE_BIT,
+        request_id, 16U, true, frame, capacity, length)) return false;
+    frame[4] = page; frame[5] = flags; write_u16_le(frame+6, age_ms);
+    for (unsigned i=0; i<3; ++i) {
+        uint32_t bits; memcpy(&bits, values+i, sizeof(bits));
+        write_u32_le(frame+8+4*i, bits);
+    }
+    return true;
+}
+
 bool exo_ble_protocol_encode_can_status(uint8_t request_id,
     const exo_ble_can_status_t *status, uint8_t *frame, size_t capacity, size_t *length) {
     if (length != NULL) *length = 0U;

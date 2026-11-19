@@ -19,6 +19,18 @@
  */
 static exo_controller_snapshot_t s_snapshot;
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
+static exo_bench_peak_t s_bench_peak;
+static exo_bench_trace_row_t s_bench_trace[EXO_BENCH_TRACE_CAPACITY];
+static unsigned s_bench_trace_count, s_bench_trace_dropped;
+static bool s_bench_trace_frozen;
+
+static bool bench_peak_enabled(void) {
+#if defined(CONFIG_EXO_BENCH_PEAK_TEST) && CONFIG_EXO_BENCH_PEAK_TEST
+    return true;
+#else
+    return false;
+#endif
+}
 
 /*
  * STOP 正常只需等待唯一控制任务中已经进入的一个 100 Hz 周期退出。这里仍设置
@@ -43,6 +55,7 @@ static bool engineering_gait_stimulus_enabled(void) {
 
 static bool reference_is_valid(exo_reference_source_t reference) {
 	return reference == EXO_REFERENCE_CONSTANT ||
+           (reference == EXO_REFERENCE_BENCH_PEAK && bench_peak_enabled()) ||
 		   reference == EXO_REFERENCE_SINE ||
 		   (reference == EXO_REFERENCE_ALTERNATING_SINE_TEST &&
 			engineering_gait_stimulus_enabled());
@@ -61,6 +74,14 @@ static bool selection_is_valid(const exo_controller_selection_t *selection) {
 		return false;
 	}
 
+    if(selection->reference==EXO_REFERENCE_BENCH_PEAK) {
+        const exo_joint_command_t *l=&selection->command.left,*r=&selection->command.right;
+        return selection->mode==EXO_CONTROL_MODE_TORQUE && l->kp==0&&l->kd==0&&r->kp==0&&r->kd==0&&
+            l->position_deg==0&&r->position_deg==0&&l->velocity_deg_s==0&&r->velocity_deg_s==0&&
+            ((l->torque_ff_nm==0)!=(r->torque_ff_nm==0))&&
+            fabsf(l->torque_ff_nm)<=15.0f&&fabsf(r->torque_ff_nm)<=15.0f&&
+            fmaxf(fabsf(l->torque_ff_nm),fabsf(r->torque_ff_nm))>=.1f;
+    }
 	/* 阶段 8 只把旧正弦轨迹定义为 IMPEDANCE 的参考，避免模式语义交叉膨胀。 */
 	return !reference_is_position_trajectory(selection->reference) ||
 		   selection->mode == EXO_CONTROL_MODE_IMPEDANCE;
@@ -334,6 +355,9 @@ validate_selection_run_contract(const exo_controller_selection_t *selection,
 	if (!selection_is_valid(selection)) {
 		return ESP_ERR_INVALID_STATE;
 	}
+    if(selection->reference==EXO_REFERENCE_BENCH_PEAK&&execution_state!=EXO_ASSIST_EXEC_DISABLED) {
+        return ESP_ERR_INVALID_STATE;
+    }
 	if (execution_state != EXO_ASSIST_EXEC_ACTIVE) {
 		return ESP_OK;
 	}
@@ -345,6 +369,15 @@ validate_selection_run_contract(const exo_controller_selection_t *selection,
 				   selection->reference == EXO_REFERENCE_CONSTANT
 			   ? ESP_OK
 			   : ESP_ERR_INVALID_STATE;
+}
+
+static bool adaptive_base_is_zero(const exo_controller_selection_t *selection) {
+    /* Regular mode shares product damping; old bench variants retain zero Kd. */
+    const float maximum_kd=EXO_ADAPTIVE_ASSIST_MODE?0.1f:0.0f;
+    return selection->command.left.torque_ff_nm==0.0f && selection->command.right.torque_ff_nm==0.0f &&
+        selection->command.left.kp==0.0f && selection->command.right.kp==0.0f &&
+        selection->command.left.kd>=0.0f && selection->command.left.kd<=maximum_kd &&
+        selection->command.right.kd>=0.0f && selection->command.right.kd<=maximum_kd;
 }
 
 esp_err_t exo_controller_validate_run_contract(
@@ -363,6 +396,9 @@ esp_err_t exo_controller_validate_run_contract(
 	}
 	selected = s_snapshot.selected;
 	portEXIT_CRITICAL(&s_lock);
+    if(assist_contract->strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN &&
+       assist_contract->execution_state==EXO_ASSIST_EXEC_ACTIVE &&
+       (!EXO_ADAPTIVE_ACTIVE_ALLOWED||!adaptive_base_is_zero(&selected))) return ESP_ERR_INVALID_STATE;
 	return validate_selection_run_contract(&selected,
 										   assist_contract->execution_state);
 }
@@ -424,13 +460,16 @@ exo_controller_arm(const exo_controller_centers_t *centers, int64_t start_us,
 		assist_contract->execution_state < EXO_ASSIST_EXEC_DISABLED ||
 		assist_contract->execution_state > EXO_ASSIST_EXEC_ACTIVE ||
         assist_contract->strategy_id < EXO_ASSIST_STRATEGY_NONE ||
-        assist_contract->strategy_id > EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD ||
+        assist_contract->strategy_id > EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN ||
         (assist_contract->execution_state == EXO_ASSIST_EXEC_ACTIVE &&
          assist_contract->strategy_id != EXO_ASSIST_STRATEGY_PHASE_PROFILE &&
-         assist_contract->strategy_id != EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD) ||
+         assist_contract->strategy_id != EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD &&
+         !(EXO_ADAPTIVE_ACTIVE_ALLOWED && assist_contract->strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN)) ||
         assist_contract->maximum_assist_torque_mnm >
             (assist_contract->strategy_id == EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD
-             ? EXO_ASSIST_ANGLE_TORQUE_HARD_MAX_MNM : EXO_PHASE_PROFILE_TORQUE_HARD_MAX_MNM) ||
+             ? EXO_ASSIST_ANGLE_TORQUE_HARD_MAX_MNM
+             : assist_contract->strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN
+                 ? EXO_ADAPTIVE_CONFIG_MAX_MNM : EXO_PHASE_PROFILE_TORQUE_HARD_MAX_MNM) ||
 		(assist_contract->execution_state != EXO_ASSIST_EXEC_DISABLED &&
 		 assist_contract->activation_epoch == 0U)) {
 		return ESP_ERR_INVALID_ARG;
@@ -450,6 +489,10 @@ exo_controller_arm(const exo_controller_centers_t *centers, int64_t start_us,
 
 	const esp_err_t contract_error = validate_selection_run_contract(
 		&selected, assist_contract->execution_state);
+    if(assist_contract->strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN &&
+       assist_contract->execution_state==EXO_ASSIST_EXEC_ACTIVE && !adaptive_base_is_zero(&selected)) {
+        return ESP_ERR_INVALID_STATE;
+    }
 	if (contract_error != ESP_OK) {
 		return contract_error;
 	}
@@ -481,6 +524,19 @@ exo_controller_arm(const exo_controller_centers_t *centers, int64_t start_us,
 	s_snapshot.active_generation = generation;
 	s_snapshot.start_us = start_us;
 	s_snapshot.assist_contract = *assist_contract;
+    if(selected.reference==EXO_REFERENCE_BENCH_PEAK) {
+        unsigned side=selected.command.left.torque_ff_nm!=0?0U:1U;
+        float peak=side==0?selected.command.left.torque_ff_nm:selected.command.right.torque_ff_nm;
+        if(assist_contract->execution_state!=EXO_ASSIST_EXEC_DISABLED ||
+           !exo_bench_peak_init(&s_bench_peak,side,peak,centers->left_deg,centers->right_deg,start_us)) {
+            portEXIT_CRITICAL(&s_lock);return ESP_ERR_INVALID_STATE;
+        }
+        /* Consume the selection: STOP/START cannot replay a previous high peak. */
+        s_bench_trace_count=0;s_bench_trace_dropped=0;s_bench_trace_frozen=false;
+        s_snapshot.selected=(exo_controller_selection_t){.mode=EXO_CONTROL_MODE_DAMPING,
+            .reference=EXO_REFERENCE_CONSTANT};
+        s_snapshot.selected_generation++;
+    }
 	memset(&s_snapshot.last_tick_result, 0,
 		   sizeof(s_snapshot.last_tick_result));
 	s_snapshot.last_error = ESP_OK;
@@ -527,10 +583,10 @@ validate_assist_result(const exo_controller_assist_contract_t *contract,
 			   : EXO_CONTROLLER_ASSIST_REJECT_NONE;
 }
 
-esp_err_t exo_controller_process_tick(
+static esp_err_t process_tick(
 	int64_t now_us, const exo_assist_result_t *assist_result,
 	uint32_t expected_sensor_sequence, uint32_t expected_gait_sequence,
-	exo_controller_tick_result_t *tick_result) {
+	exo_controller_tick_result_t *tick_result,const exo_sensor_snapshot_t *sensors) {
 	if (tick_result == NULL) {
 		return ESP_ERR_INVALID_ARG;
 	}
@@ -570,6 +626,17 @@ esp_err_t exo_controller_process_tick(
 	esp_err_t result = ESP_ERR_INVALID_STATE;
 	const bool generated = exo_controller_evaluate(
 		&active, &centers, now_us - start_us, &base_output);
+    bool bench_failed=false;
+    if(generated&&active.reference==EXO_REFERENCE_BENCH_PEAK) {
+        float torque=0;
+        portENTER_CRITICAL(&s_lock);
+        bench_failed=!exo_bench_peak_step(&s_bench_peak,sensors,now_us,expected_sensor_sequence,&torque);
+        unsigned side=s_bench_peak.side;
+        portEXIT_CRITICAL(&s_lock);
+        memset(&base_output,0,sizeof(base_output));
+        base_output.left.position_deg=centers.left_deg;base_output.right.position_deg=centers.right_deg;
+        if(side==0)base_output.left.torque_ff_nm=torque;else base_output.right.torque_ff_nm=torque;
+    }
 	if (generated) {
 		tick_result->base_generated = true;
 		tick_result->base_command = base_output;
@@ -624,6 +691,13 @@ esp_err_t exo_controller_process_tick(
 		tick_result->send_partially_succeeded =
 			tick_result->actuator_a_send_succeeded !=
 			tick_result->actuator_b_send_succeeded;
+        if(active.reference==EXO_REFERENCE_BENCH_PEAK && tick_result->send_succeeded) {
+            portENTER_CRITICAL(&s_lock);
+            float sent=s_bench_peak.side==0?tick_result->final_command.left.torque_ff_nm:
+                tick_result->final_command.right.torque_ff_nm;
+            s_bench_peak.sent_peak_nm=fmaxf(s_bench_peak.sent_peak_nm,fabsf(sent));
+            portEXIT_CRITICAL(&s_lock);
+        }
 		tick_result->assist_applied = tick_result->assist_accepted &&
 									  (tick_result->actuator_a_send_succeeded ||
 									   tick_result->actuator_b_send_succeeded);
@@ -631,6 +705,8 @@ esp_err_t exo_controller_process_tick(
 		tick_result->send_result = ESP_ERR_INVALID_STATE;
 	}
 
+    /* The guard's zero pair has already been sent; propagate failure to lifecycle STOP. */
+    if(bench_failed&&result==ESP_OK){result=ESP_ERR_INVALID_STATE;tick_result->send_result=result;}
 	/* 所有成功/失败路径都在同一个出口撤销 tick_active，STOP 不会永久等待。 */
 	portENTER_CRITICAL(&s_lock);
 	if (generated) {
@@ -656,9 +732,64 @@ esp_err_t exo_controller_process_tick(
 	}
 	s_snapshot.last_error = result;
 	s_snapshot.last_tick_result = *tick_result;
+    if(active.reference==EXO_REFERENCE_BENCH_PEAK&&!s_bench_trace_frozen) {
+        if(s_bench_trace_count<EXO_BENCH_TRACE_CAPACITY) {
+            exo_bench_trace_row_t *r=&s_bench_trace[s_bench_trace_count++];
+            memset(r,0,sizeof(*r));r->timestamp_us=now_us;r->sequence=expected_sensor_sequence;
+            r->fault=(uint32_t)s_bench_peak.fault;
+            r->command[0]=tick_result->final_command.left.torque_ff_nm;
+            r->command[1]=tick_result->final_command.right.torque_ff_nm;
+            /* LEFT=B, RIGHT=A is the current fixed mapping; use paired success
+             * to avoid presenting an uncertain partial send as delivered. */
+            r->sent[0]=r->sent[1]=tick_result->send_succeeded;
+            if(sensors) {
+                const exo_sensor_joint_snapshot_t *j[2]={&sensors->left,&sensors->right};
+                for(unsigned i=0;i<2;i++) {
+                    r->source_us[i]=j[i]->source_timestamp_us;r->age_us[i]=j[i]->age_us;
+                    r->q[i]=j[i]->joint_sample.position_deg;r->v[i]=j[i]->joint_sample.velocity_deg_s;
+                    r->estimate[i]=j[i]->joint_sample.torque_nm;
+                    r->valid[i]=j[i]->joint_valid&&j[i]->online&&!j[i]->motor_fault;
+                }
+            }
+        } else s_bench_trace_dropped++;
+        if(s_bench_peak.complete||s_bench_peak.fault||result!=ESP_OK)s_bench_trace_frozen=true;
+    }
 	s_snapshot.tick_active = false;
 	portEXIT_CRITICAL(&s_lock);
 	return result;
+}
+
+esp_err_t exo_controller_process_tick(int64_t now,const exo_assist_result_t *assist,
+    uint32_t sensor_sequence,uint32_t gait_sequence,exo_controller_tick_result_t *out) {
+    return process_tick(now,assist,sensor_sequence,gait_sequence,out,NULL);
+}
+esp_err_t exo_controller_process_sensor_tick(int64_t now,const exo_sensor_snapshot_t *sensors,
+    const exo_assist_result_t *assist,uint32_t sensor_sequence,uint32_t gait_sequence,
+    exo_controller_tick_result_t *out) {
+    return process_tick(now,assist,sensor_sequence,gait_sequence,out,sensors);
+}
+esp_err_t exo_controller_prepare_bench_peak(unsigned side,float peak) {
+    if(!bench_peak_enabled()||side>1||!isfinite(peak)||fabsf(peak)<.1f||fabsf(peak)>15)return ESP_ERR_INVALID_ARG;
+    exo_controller_selection_t selected={.mode=EXO_CONTROL_MODE_TORQUE,.reference=EXO_REFERENCE_BENCH_PEAK};
+    if(side==0)selected.command.left.torque_ff_nm=peak;else selected.command.right.torque_ff_nm=peak;
+    portENTER_CRITICAL(&s_lock);
+    if(!s_snapshot.initialized||s_snapshot.armed||s_snapshot.tick_active){portEXIT_CRITICAL(&s_lock);return ESP_ERR_INVALID_STATE;}
+    s_snapshot.selected=selected;s_snapshot.selected_generation++;
+    portEXIT_CRITICAL(&s_lock);return ESP_OK;
+}
+bool exo_controller_get_bench_peak(exo_bench_peak_t *out) {
+    if(!out)return false;
+    portENTER_CRITICAL(&s_lock);*out=s_bench_peak;portEXIT_CRITICAL(&s_lock);return true;
+}
+bool exo_controller_get_bench_trace(unsigned index,exo_bench_trace_row_t *row,
+    unsigned *count,unsigned *dropped) {
+    if(!row||!count||!dropped)return false;
+    portENTER_CRITICAL(&s_lock);
+    if(s_snapshot.armed||s_snapshot.tick_active) {portEXIT_CRITICAL(&s_lock);return false;}
+    *count=s_bench_trace_count;*dropped=s_bench_trace_dropped;
+    bool available=index<s_bench_trace_count;
+    if(available)*row=s_bench_trace[index];
+    portEXIT_CRITICAL(&s_lock);return available;
 }
 
 esp_err_t exo_controller_disarm(void) {
@@ -739,6 +870,7 @@ const char *exo_reference_source_name(exo_reference_source_t reference) {
 		return "SINE";
 	case EXO_REFERENCE_ALTERNATING_SINE_TEST:
 		return "ALTERNATING_SINE_TEST";
+    case EXO_REFERENCE_BENCH_PEAK: return "BENCH_PEAK";
 	default:
 		return "UNKNOWN";
 	}

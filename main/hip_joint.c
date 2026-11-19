@@ -7,6 +7,7 @@
 #include "exo_factory_direction.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "rs01_driver.h"
 
 /*
@@ -183,7 +184,7 @@ esp_err_t hip_joint_init(void) {
 			config->software_zero_deg;
 		joints[i].mapping_valid = config->mapping_valid;
 		joints[i].direction_valid = direction_is_valid(saved_direction);
-		/* 每次上电必须重新取得本次穿戴零位，绝不能把出厂时站姿当作当前姿态。 */
+		/* NVS零位稍后由IDLE维护在新反馈上恢复；此时不能猜测连续坐标epoch。 */
 		joints[i].zero_valid = false;
 	}
 
@@ -377,7 +378,7 @@ esp_err_t hip_joint_clear_zero(exo_hip_joint_id_t joint) {
  * 再在锁外读取双驱动快照；两侧保持REST并停稳，只允许操作者自己抬腿。
  */
 static bool read_direction_teach_feedback(rs01_feedback_snapshot_t feedback[2],
-	uint64_t *now_us, hip_direction_teach_result_t *result) {
+	uint64_t *now_us, hip_direction_teach_result_t *result, bool require_still) {
 	exo_actuator_id_t actuators[2];
 	portENTER_CRITICAL(&s_joint_lock);
 	const bool mapped = s_initialized && s_joints[0].mapping_valid &&
@@ -408,12 +409,63 @@ static bool read_direction_teach_feedback(rs01_feedback_snapshot_t feedback[2],
 			*result = HIP_DIRECTION_TEACH_MOTOR_NOT_REST;
 			return false;
 		}
-		if (fabsf(exo_radians_to_degrees(sample->sample.velocity_rad_s)) > 5.0f) {
+		if (require_still && fabsf(exo_radians_to_degrees(sample->sample.velocity_rad_s)) > 5.0f) {
 			*result = HIP_DIRECTION_TEACH_NOT_STILL;
 			return false;
 		}
 	}
 	return true;
+}
+
+/* 仅在方向示教的低优先级维护调用中等待，不在100 Hz控制任务中运行。
+ * 观察约300 ms的真实新反馈，所选腿允许2度峰峰值的小幅抖动；不用瞬时速度
+ * 判断悬空腿是否稳定。以均值记录基准/前抬位置，避免抖动相位影响符号。
+ * 固定31次读取，重复帧不累计；每次仍检查REST、故障、新鲜度和坐标epoch。
+ */
+static bool read_direction_pose_window(rs01_feedback_snapshot_t feedback[2],
+    uint64_t *now_us, hip_direction_teach_result_t *result, float mean_deg[2],
+    exo_hip_joint_id_t target) {
+    float low[2] = {0}, high[2] = {0}, sum[2] = {0};
+    uint32_t epoch[2] = {0}, counts[2] = {0};
+    uint64_t first_us[2] = {0}, last_us[2] = {0};
+    unsigned samples[2] = {0};
+    for (unsigned step = 0; step < 31U; ++step) {
+        if (step) vTaskDelay(pdMS_TO_TICKS(10) ? pdMS_TO_TICKS(10) : 1);
+        if (!read_direction_teach_feedback(feedback, now_us, result, false)) return false;
+        for (unsigned i = 0; i < 2U; ++i) {
+            const rs01_feedback_snapshot_t *f = &feedback[i];
+            if (samples[i] && f->position_epoch != epoch[i]) {
+                *result = HIP_DIRECTION_TEACH_EPOCH_CHANGED;
+                return false;
+            }
+            if (samples[i] && f->feedback_count == counts[i]) continue;
+            if (samples[i] && f->timestamp_us <= last_us[i]) {
+                *result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
+                return false;
+            }
+            const float deg = exo_radians_to_degrees(f->continuous_position_rad);
+            if (!samples[i]) {
+                low[i] = high[i] = deg;
+                epoch[i] = f->position_epoch;
+                first_us[i] = f->timestamp_us;
+            }
+            low[i] = fminf(low[i], deg); high[i] = fmaxf(high[i], deg);
+            if (i == (unsigned)target && high[i] - low[i] > 2.0f) {
+                *result = HIP_DIRECTION_TEACH_NOT_STILL;
+                return false;
+            }
+            sum[i] += deg; ++samples[i];
+            counts[i] = f->feedback_count; last_us[i] = f->timestamp_us;
+        }
+    }
+    for (unsigned i = 0; i < 2U; ++i) {
+        if (samples[i] < 20U || last_us[i] - first_us[i] < 250000ULL) {
+            *result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
+            return false;
+        }
+        mean_deg[i] = sum[i] / (float)samples[i];
+    }
+    return true;
 }
 
 esp_err_t hip_joint_capture_zero_pair(const hip_joint_snapshot_t expected_joints[2],
@@ -422,7 +474,7 @@ esp_err_t hip_joint_capture_zero_pair(const hip_joint_snapshot_t expected_joints
     rs01_feedback_snapshot_t feedback[2];
     hip_direction_teach_result_t reason;
     uint64_t now_us;
-    if (!read_direction_teach_feedback(feedback, &now_us, &reason))
+    if (!read_direction_teach_feedback(feedback, &now_us, &reason, true))
         return ESP_ERR_INVALID_STATE;
     /* 两个CAN反馈无法在物理上同时到达；100 Hz下允许最多两帧间隔。
      * 不能把一侧的新帧与另一侧虽未超时但明显较早的帧当成同一次中立姿态。 */
@@ -472,13 +524,13 @@ esp_err_t hip_joint_capture_zero_pair(const hip_joint_snapshot_t expected_joints
     return ESP_OK;
 }
 
-esp_err_t hip_joint_restore_zero_pair(const float periodic_zero_deg[2],
-    const rs01_feedback_snapshot_t expected_feedback[2]) {
+static esp_err_t restore_zero_pair(const float periodic_zero_deg[2],
+    const rs01_feedback_snapshot_t expected_feedback[2], bool require_neutral) {
     if (!periodic_zero_deg || !expected_feedback) return ESP_ERR_INVALID_ARG;
     rs01_feedback_snapshot_t feedback[2];
     hip_direction_teach_result_t reason;
     uint64_t now_us;
-    if (!read_direction_teach_feedback(feedback, &now_us, &reason))
+    if (!read_direction_teach_feedback(feedback, &now_us, &reason, true))
         return ESP_ERR_INVALID_STATE;
     float continuous_zero_deg[2];
     for (unsigned i = 0; i < 2U; ++i) {
@@ -493,7 +545,7 @@ esp_err_t hip_joint_restore_zero_pair(const float periodic_zero_deg[2],
         const float delta_deg = remainderf(exo_radians_to_degrees(feedback[i].sample.position_rad) -
             periodic_zero_deg[i], 1440.0f);
         /* 不能靠“恢复”把明显不同的姿态强制认成中立位。 */
-        if (!isfinite(delta_deg) || fabsf(delta_deg) > 5.0f) return ESP_ERR_INVALID_STATE;
+        if (!isfinite(delta_deg) || (require_neutral && fabsf(delta_deg) > 5.0f)) return ESP_ERR_INVALID_STATE;
         continuous_zero_deg[i] = exo_radians_to_degrees(feedback[i].continuous_position_rad) - delta_deg;
         if (!isfinite(continuous_zero_deg[i])) return ESP_ERR_INVALID_STATE;
     }
@@ -513,6 +565,52 @@ esp_err_t hip_joint_restore_zero_pair(const float periodic_zero_deg[2],
     }
     portEXIT_CRITICAL(&s_joint_lock);
     return ESP_OK;
+}
+
+esp_err_t hip_joint_restore_zero_pair(const float zeros[2],
+    const rs01_feedback_snapshot_t feedback[2]) {
+    return restore_zero_pair(zeros,feedback,true);
+}
+esp_err_t hip_joint_restore_persistent_zero_pair(const float zeros[2],
+    const rs01_feedback_snapshot_t feedback[2]) {
+    return restore_zero_pair(zeros,feedback,false);
+}
+
+bool hip_joint_direction_preview(exo_hip_joint_id_t joint,
+    hip_direction_teach_preview_t *out) {
+    if (!out || !joint_id_is_valid(joint)) return false;
+    *out=(hip_direction_teach_preview_t){.actuator=255,
+        .result=HIP_DIRECTION_TEACH_NO_SESSION,.baseline_deg=NAN,
+        .current_deg=NAN,.feedback_age_ms=UINT16_MAX};
+    const uint64_t now=(uint64_t)esp_timer_get_time();
+    portENTER_CRITICAL(&s_joint_lock);
+    const direction_teach_session_t session=s_direction_teach;
+    const hip_joint_t state=s_joints[joint];
+    portEXIT_CRITICAL(&s_joint_lock);
+    if (!session.active || session.joint!=joint) return true;
+    out->token=session.token;
+    if (now<session.started_us || now-session.started_us>=DIRECTION_TEACH_TIMEOUT_US) {
+        out->result=HIP_DIRECTION_TEACH_EXPIRED;return true;
+    }
+    out->remaining_ms=(uint16_t)((DIRECTION_TEACH_TIMEOUT_US-(now-session.started_us)+999U)/1000U);
+    if (!state.mapping_valid || state.actuator>=EXO_ACTUATOR_COUNT) return true;
+    out->actuator=(uint8_t)state.actuator;
+    out->baseline_deg=session.baseline_deg[joint];
+    rs01_feedback_snapshot_t f;
+    out->result=HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
+    if (!rs01_get_feedback(state.actuator,&f) || !f.timestamp_us || now<f.timestamp_us) return true;
+    const uint64_t age=(now-f.timestamp_us)/1000U;
+    out->feedback_age_ms=(uint16_t)(age>UINT16_MAX?UINT16_MAX:age);
+    if (!f.valid || !f.online || !f.continuous_position_valid ||
+        now-f.timestamp_us>DIRECTION_TEACH_FRESH_US || !isfinite(f.continuous_position_rad)) return true;
+    if (f.position_epoch!=session.position_epoch[joint]) {
+        out->result=HIP_DIRECTION_TEACH_EPOCH_CHANGED;return true;
+    }
+    if (f.faults.present) {out->result=HIP_DIRECTION_TEACH_MOTOR_FAULT;return true;}
+    if (f.mode!=RS01_MODE_STATUS_RESET) {out->result=HIP_DIRECTION_TEACH_MOTOR_NOT_REST;return true;}
+    out->current_deg=exo_radians_to_degrees(f.continuous_position_rad);
+    out->result=HIP_DIRECTION_TEACH_OK;
+    return true;
 }
 
 esp_err_t hip_joint_teach_direction(exo_hip_joint_id_t joint,
@@ -552,13 +650,28 @@ esp_err_t hip_joint_teach_direction(exo_hip_joint_id_t joint,
 	}
 	rs01_feedback_snapshot_t feedback[2];
 	uint64_t now_us = 0U;
-	if (!read_direction_teach_feedback(feedback, &now_us, result))
+	float pose_deg[2];
+	if (!read_direction_pose_window(feedback, &now_us, result, pose_deg, joint)) {
+		if (*result == HIP_DIRECTION_TEACH_EPOCH_CHANGED) {
+			portENTER_CRITICAL(&s_joint_lock);
+			s_direction_teach.active = false;
+			portEXIT_CRITICAL(&s_joint_lock);
+		}
 		return ESP_ERR_INVALID_STATE;
+	}
+	if (action == HIP_DIRECTION_TEACH_FINISH &&
+	    (now_us < session.started_us || now_us - session.started_us > DIRECTION_TEACH_TIMEOUT_US)) {
+		portENTER_CRITICAL(&s_joint_lock);
+		s_direction_teach.active = false;
+		portEXIT_CRITICAL(&s_joint_lock);
+		*result = HIP_DIRECTION_TEACH_EXPIRED;
+		return ESP_ERR_INVALID_STATE;
+	}
 	if (action == HIP_DIRECTION_TEACH_BEGIN) {
 		direction_teach_session_t next = {.active = true, .joint = joint,
 			.token = token, .started_us = now_us};
 		for (unsigned i = 0; i < 2U; ++i) {
-			next.baseline_deg[i] = exo_radians_to_degrees(feedback[i].continuous_position_rad);
+			next.baseline_deg[i] = pose_deg[i];
 			next.position_epoch[i] = feedback[i].position_epoch;
 			next.feedback_count[i] = feedback[i].feedback_count;
 			next.timestamp_us[i] = feedback[i].timestamp_us;
@@ -590,20 +703,18 @@ esp_err_t hip_joint_teach_direction(exo_hip_joint_id_t joint,
 			*result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
 			return ESP_ERR_INVALID_STATE;
 		}
-		delta_deg[i] = exo_radians_to_degrees(feedback[i].continuous_position_rad) - session.baseline_deg[i];
+		delta_deg[i] = pose_deg[i] - session.baseline_deg[i];
 		if (!isfinite(delta_deg[i])) {
 			*result = HIP_DIRECTION_TEACH_FEEDBACK_INVALID;
 			return ESP_ERR_INVALID_STATE;
 		}
 	}
 	const float movement_deg = fabsf(delta_deg[joint]);
-	if (movement_deg < 3.0f || movement_deg > 30.0f) {
-		*result = movement_deg < 3.0f ? HIP_DIRECTION_TEACH_TOO_SMALL : HIP_DIRECTION_TEACH_TOO_LARGE;
-		return ESP_ERR_INVALID_STATE;
-	}
-	/* 对侧允许少量身体摆动，但不能把双腿一起动误认成指定腿示教。 */
-	if (fabsf(delta_deg[1U - (unsigned)joint]) > fmaxf(2.0f, movement_deg * 0.25f)) {
-		*result = HIP_DIRECTION_TEACH_OTHER_LEG_MOVED;
+	/* 人工确认的是所选腿“向前”的方向。两侧机械耦合时对侧随动是正常现象，
+	 * 不用对侧位移否决符号示教。该操作不驱动电机，也无需限制手动抬腿幅度。
+	 * 仍需超过1度有效位移，避免把传感器量化或原位微抖误认为正方向。 */
+	if (movement_deg < 1.0f) {
+		*result = HIP_DIRECTION_TEACH_TOO_SMALL;
 		return ESP_ERR_INVALID_STATE;
 	}
 	const exo_direction_t learned = delta_deg[joint] > 0.0f ?

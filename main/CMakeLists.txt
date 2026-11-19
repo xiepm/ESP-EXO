@@ -7,6 +7,12 @@ idf_component_register(
         "exo_config.c"
         "exo_factory_direction.c"
         "exo_wear_zero.c"
+        # exo_v2.1 board peripherals; independent of motor feedback/control.
+        "exo_sensors.c"
+        "exo_attitude.c"
+        "exo_smbus.c"
+        "exo_board_status.c"
+        "exo_board_power.c"
         # CAN 电机驱动、人体髋关节抽象和唯一 100 Hz 调度器。
         "rs01_driver.c"
         "hip_joint.c"
@@ -15,6 +21,14 @@ idf_component_register(
         "gait_estimator.c"
         "exo_phase_profile.c"
         "exo_assist.c"
+        "exo_adaptive.c"
+        "exo_afo.c"
+        "exo_adaptive_event.c"
+        "exo_adaptive_profile.c"
+        "exo_adaptive_config.c"
+        "exo_adaptive_safety.c"
+        "exo_adaptive_runtime.c"
+        "exo_afo_trace_wire.c"
         "exo_swing_pulse.c"
         "exo_command_composer.c"
         "exo_telemetry.c"
@@ -30,9 +44,13 @@ idf_component_register(
         # 阶段 8 通用控制器通过唯一五元关节命令出口驱动两侧 RS01。
         "exo_joint_command.c"
         "exo_controller.c"
+        "exo_bench_peak.c"
     # “.”供 main/ 内部头文件使用；include/ 存放跨模块公开接口。
     INCLUDE_DIRS "." "include"
     # driver是公开依赖；bt供BLE使用，nvs_flash供BLE与出厂方向配置使用。
     REQUIRES driver
-    PRIV_REQUIRES bt nvs_flash
+    PRIV_REQUIRES bt nvs_flash esp_driver_i2c esp_timer esp_app_format
 )
+
+# 编译期输出每个函数的栈帧预算；不能替代目标板高水位与WCET实测。
+target_compile_options(${COMPONENT_LIB} PRIVATE -fstack-usage)

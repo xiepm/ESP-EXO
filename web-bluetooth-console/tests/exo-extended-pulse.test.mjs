@@ -53,10 +53,11 @@ test('build version and actual BLE INFO version agree, guarding the previous uns
   const ble=await readFile(new URL('../../main/exo_ble.c',import.meta.url),'utf8');
   const info=['MAJOR','MINOR','PATCH'].map(p=>Number(ble.match(new RegExp(`#define EXO_FIRMWARE_VERSION_${p} (\\d+)U`))?.[1]));
   assert.equal(cmake.match(/set\(PROJECT_VER "([^"]+)"\)/)?.[1],info.join('.'));
-  assert.equal(info.join('.'),'0.10.13');
+  assert.equal(info.join('.'),'0.11.23');
 });
 test('20 Nm/s is displayed only for known0.10.13; previous pulse firmwares retain10',()=>{
   assert.equal(pulseRiseLimitNmPerSecond(capabilities,[0,10,13]),20);
+  assert.equal(pulseRiseLimitNmPerSecond(capabilities,[0,11,0]),20);
   for(const v of [10,11,12]) assert.equal(pulseRiseLimitNmPerSecond(capabilities,[0,10,v]),10);
   for(const v of [[],[0,10,9],[0,10,14]]) assert.equal(pulseRiseLimitNmPerSecond(capabilities,v),null);
   assert.equal(pulseRiseLimitNmPerSecond(capabilities&~Capability.SWING_EVENT_PULSE,[0,10,13]),null);

@@ -168,7 +168,7 @@ int PHASE10_SAVED_ZERO_MAIN(void) {
     action[5]=0; assert(exo_ble_protocol_decode_request(action,6,&request)==EXO_BLE_RESULT_INVALID_PAYLOAD);
     action[5]=1; action[4]=3;
     assert(exo_ble_protocol_decode_request(action,6,&request)==EXO_BLE_RESULT_OK && request.saved_zero_action==3);
-    action[4]=4; assert(exo_ble_protocol_decode_request(action,6,&request)==EXO_BLE_RESULT_INVALID_PAYLOAD);
+    action[4]=5; assert(exo_ble_protocol_decode_request(action,6,&request)==EXO_BLE_RESULT_INVALID_PAYLOAD);
     uint8_t query[]={1,0x1e,0x44,1,1};
     assert(exo_ble_protocol_decode_request(query,5,&request)==EXO_BLE_RESULT_OK && request.side==EXO_BLE_SIDE_RIGHT);
     query[4]=2; assert(exo_ble_protocol_decode_request(query,5,&request)==EXO_BLE_RESULT_INVALID_PAYLOAD);

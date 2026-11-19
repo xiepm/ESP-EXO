@@ -9,6 +9,7 @@
 #include "exo_sensor_snapshot.h"
 #include "gait_estimator.h"
 #include "exo_swing_pulse.h"
+#include "exo_adaptive_deployment.h"
 
 /*
  * 阶段 9/10 高层助力策略框架
@@ -48,6 +49,7 @@ typedef enum {
 	EXO_ASSIST_MODE_ACTIVE_PHASE = 2,
 	EXO_ASSIST_MODE_ASSIST_AS_NEEDED = 3,
 	EXO_ASSIST_MODE_ANGLE_THRESHOLD = 4,
+	EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN = 5,
 } exo_assist_mode_t;
 
 typedef enum {
@@ -62,6 +64,7 @@ typedef enum {
 	EXO_ASSIST_STRATEGY_PHASE_PROFILE = 2,
 	EXO_ASSIST_STRATEGY_AAN_RESIDUAL = 3,
 	EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD = 4,
+	EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN = 5,
 } exo_assist_strategy_id_t;
 
 /*
@@ -86,6 +89,9 @@ typedef enum {
 	EXO_ASSIST_UNAVAILABLE_REQUIRED_GAIT_INVALID = 7,
 	/* 步态虽可用，但本轮 activation 后左右尚未各出现一次新的髋屈曲峰。 */
 	EXO_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS = 8,
+	EXO_ASSIST_UNAVAILABLE_AFO_ACQUIRING = 9,
+	EXO_ASSIST_UNAVAILABLE_AFO_REARM_REQUIRED = 10,
+	EXO_ASSIST_UNAVAILABLE_AFO_INPUT_FAULT = 11,
 } exo_assist_unavailable_reason_t;
 
 typedef struct {
@@ -117,6 +123,7 @@ typedef struct {
 	exo_assist_execution_state_t requested_execution_state;
 	exo_assist_execution_state_t execution_state;
 	uint32_t selected_generation;
+	exo_assist_strategy_id_t strategy_id;
 } exo_assist_run_contract_t;
 
 /* 静态策略元数据让后续算法明确声明依赖，而不是在运行中静默读取不存在的传感器。

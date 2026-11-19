@@ -107,6 +107,10 @@ esp_err_t hip_joint_clear_zero(exo_hip_joint_id_t joint);
  * 周期零位（deg）投影到本次连续坐标，重新绑定最新反馈epoch；两侧一次发布。
  * 不沿用旧启动的圈数/时间戳，不发送CAN。反馈变化、示教中、非REST均拒绝。
  */
+/* Load an already calibrated reference at boot, without a neutral-pose test.
+ * Caller holds IDLE maintenance and verifies the saved mapping/directions. */
+esp_err_t hip_joint_restore_persistent_zero_pair(const float periodic_zero_deg[2],
+    const rs01_feedback_snapshot_t expected_feedback[2]);
 esp_err_t hip_joint_restore_zero_pair(const float periodic_zero_deg[2],
     const rs01_feedback_snapshot_t expected_feedback[2]);
 
@@ -141,11 +145,21 @@ typedef enum {
 	HIP_DIRECTION_TEACH_STORAGE_FAILED = 13,
 } hip_direction_teach_result_t;
 
+typedef struct {
+    uint8_t token, actuator;
+    hip_direction_teach_result_t result;
+    float baseline_deg, current_deg;
+    uint16_t remaining_ms, feedback_age_ms;
+} hip_direction_teach_preview_t;
+/* Read the actual BEGIN mean, never recapture a reference during preview. */
+bool hip_joint_direction_preview(exo_hip_joint_id_t joint,
+    hip_direction_teach_preview_t *out);
+
 /*
  * 调用者必须持有整机IDLE维护权。BEGIN采集双方基准并撤销目标侧旧零位，防止
  * 示教中途START；FINISH用新的连续电机角判断“向前抬腿”为正；CANCEL不恢复旧零位。
  * token为1..255的会话标记，禁止上一轮FINISH套用下一轮基准。会话60秒有效，
- * 新反馈必须同一position epoch，目标位移3..30度且对侧没有明显移动，两侧均REST。
+ * 新反馈必须同一position epoch，所选腿位移至少1度，对侧允许随动，两侧均REST。
  * FINISH先提交/读回NVS，成功后才发布方向。方向统一作用于角度、速度和力矩，
  * 完成后仍须返回中立位重新采集RAM软件零点。本层不写NVS零位；产品入口须经过
  * exo_wear_zero_teach_direction，先撤销旧候选，防止安装调整后误沿用。

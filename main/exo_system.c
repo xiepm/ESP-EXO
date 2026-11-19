@@ -23,6 +23,7 @@
 #include "exo_control_loop.h"
 #include "exo_controller.h"
 #include "exo_feedback_recovery.h"
+#include "exo_wear_zero.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -757,6 +758,10 @@ static void executor_task(void *arg) {
 			break;
 		}
 		exo_feedback_recovery_poll();
+        if(exo_wear_zero_auto_restore_pending()&&exo_system_try_begin_maintenance()) {
+            exo_wear_zero_restore_saved_if_needed();
+            exo_system_end_maintenance();
+        }
 	}
 }
 
@@ -1106,8 +1111,8 @@ esp_err_t exo_system_process_control_tick(
 		return error;
 	}
 
-	const esp_err_t result = exo_controller_process_tick(
-		now, assist_result, expected_sensor_sequence, expected_gait_sequence,
+	const esp_err_t result = exo_controller_process_sensor_tick(
+		now, sensor_snapshot, assist_result, expected_sensor_sequence, expected_gait_sequence,
 		tick_result);
 	/*
 	 * composer 接纳且至少一侧 CAN 帧成功时，assist_applied 才会为 true。逐侧

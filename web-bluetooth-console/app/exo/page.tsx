@@ -22,6 +22,12 @@ import {
   savedZeroReasonDescriptions,
   canReuseSavedWearZero,
   type CanStatusResponse,
+  type BoardSensorResponse,
+  type DirectionPreviewResponse,
+  type AfoStatusResponse,
+  afoFaultDescription,
+  supportsDirectionPreview,
+  supportsBoardSensors,
   Capability,
   ControlMode,
   DirectionTeachAction,
@@ -45,6 +51,9 @@ import {
   hasExtendedPulseLimits,
   pulseRiseLimitNmPerSecond,
   assistTorqueMaximumNm,
+  supportsAdaptiveBenchActive,
+  adaptiveNominalMaximumNm,
+  supportsAdaptiveAssistMode,
   assistExecutionStateNames,
   assistModeNames,
   assistUnavailableReasonDescriptions,
@@ -72,7 +81,12 @@ import {
   assessDeviceCompatibility,
 } from "@/lib/exo-device-compatibility";
 import { isLogNearBottom } from "@/lib/exo-log-scroll";
-import { captureAndVerifyBothZeros, supportsAtomicZeroCapture } from "@/lib/exo-zero-calibration";
+import { captureAndVerifyBothZeros, supportsAtomicZeroCapture, supportsPersistentCalibration,
+  persistentZeroReadiness, assertPersistedZeroPair } from "@/lib/exo-zero-calibration";
+import { mappingConfirmationAfterReadback, mustReconfirmNeutral, recalibrationFeedbackIssue } from "@/lib/exo-calibration-state";
+import { directionPreviewDegrees } from "@/lib/exo-direction-preview";
+import { assistMaximumDraftMatches, verifyAssistMaximumBeforeStart,
+  assistMaximumForStrategy, assistMaximumDraftForStrategy, afoMotionStatus } from "@/lib/exo-assist-settings";
 import {
   TelemetryStreamAccumulator,
   type TelemetryAccumulatorStats,
@@ -83,6 +97,12 @@ import {
 import Link from "next/link";
 import GaitHistory from "./gait-history";
 import TelemetryScope from "./telemetry-scope";
+import { WalkRecordingPanel, useWalkRecording } from "./walk-recording";
+import type { WalkRecorder } from "@/lib/exo-walk-recording";
+import AdaptiveWorkbench from "./adaptive-workbench";
+import AdaptiveDirectionChart from "./adaptive-direction-chart";
+import type { AdaptiveChartView } from "@/lib/exo-adaptive-chart";
+import { supportsAdaptive } from "@/lib/exo-adaptive";
 import { SCOPE_BUFFER_SAMPLES, WALKING_SCOPE_MASK, scopeReceptionState, shouldStartScope } from "@/lib/exo-scope";
 import {
   type ReactNode,
@@ -399,6 +419,9 @@ function responseSummary(response: ExoBleResponse): string {
     return `TELEMETRY ${response.streaming ? "STREAMING" : "STOPPED"}，${response.rateHz} Hz，mask=${formatHexMask(response.channelMask)}，stream=${response.streamSequence}`;
   }
   if (response.kind === "canStatus") return `CAN ${response.stateName}, TEC=${response.txErrorCounter}, REC=${response.rxErrorCounter}, bus_errors=${response.busErrorCount}`;
+  if (response.kind === "afoStatus") return `AFO ${response.side===Side.LEFT?"LEFT":"RIGHT"} ${afoFaultDescription(response.faults)}；首次故障=${response.firstPresent?response.firstFaults:"无"}`;
+  if (response.kind === "boardSensor") return `IMU page=${response.page} valid=${response.valid} age=${response.ageMs}ms`;
+  if (response.kind === "directionPreview") return `DIRECTION side=${response.side} token=${response.token} result=${response.result} baseline=${response.baselineDegrees} raw=${response.rawPositionDegrees} age=${response.feedbackAgeMs}ms`;
   if (response.kind === "calibrationStatus") {
     return `CALIBRATION ${response.side === Side.LEFT ? "LEFT" : "RIGHT"} CAN=0x${response.canId.toString(16)}，raw=${response.rawPositionDegrees?.toFixed(3) ?? "无效"}°，zero=${response.softwareZeroDegrees?.toFixed(3) ?? "未标定"}°`;
   }
@@ -495,6 +518,8 @@ function defaultStrategyIdForMode(mode: number): string {
       return "2";
     case AssistMode.ANGLE_THRESHOLD:
       return "4";
+    case AssistMode.ADAPTIVE_GAUSSIAN:
+      return "5";
     case AssistMode.ASSIST_AS_NEEDED:
       return "3";
     default:
@@ -675,6 +700,11 @@ const productSystemStateNames: Record<number, string> = {0: "初始化", 1: "待
 export default function ExoConsolePage() {
   // 栏目切换只隐藏内容，不卸载BLE会话和记录器。
   const [activePanel, setActivePanel] = useState<ConsolePanel>("connection");
+  const [adaptiveChartView, setAdaptiveChartView] = useState<AdaptiveChartView | null>(null);
+  const receiveAdaptiveChart = useCallback((view: AdaptiveChartView) => {
+    setAdaptiveChartView(view);
+    if (!view.live) setActivePanel("live");
+  }, []);
   const currentPanel = CONSOLE_PANELS.find((panel) => panel.id === activePanel)!;
   const [bleSupported, setBleSupported] = useState<boolean | null>(null);
   const [secureContext, setSecureContext] = useState<boolean | null>(null);
@@ -689,6 +719,8 @@ export default function ExoConsolePage() {
   const [leftJoint, setLeftJoint] = useState<JointStatusResponse | null>(null);
   const [rightJoint, setRightJoint] = useState<JointStatusResponse | null>(null);
   const [canStatus, setCanStatus] = useState<CanStatusResponse | null>(null);
+  const [boardSensors, setBoardSensors] = useState<Record<number, BoardSensorResponse>>({});
+  const [boardReadAt, setBoardReadAt] = useState<string | null>(null);
   const [canErrorDelta, setCanErrorDelta] = useState<number | null>(null);
   const [feedbackRestoreNotice, setFeedbackRestoreNotice] = useState("");
   const previousCanRef = useRef<CanStatusResponse | null>(null);
@@ -701,11 +733,16 @@ export default function ExoConsolePage() {
   const [saveWearZeroForReuse, setSaveWearZeroForReuse] = useState(true);
   const [wearZeroNotice, setWearZeroNotice] = useState("");
   const wearZeroChoiceChosenRef = useRef(false);
-  // 这是现场人工核对记录，不是固件自动识别左右腿。断连/重启/反馈丢失后必须重做。
+  // 新固件记录本次连接的出厂方向读回，旧固件记录人工对应/方向确认。
+  // 断连和Boot变化都清空；反馈离线只撤销旧固件人工确认及独立的中立姿态确认。
   const [leftMappingConfirmed, setLeftMappingConfirmed] = useState(false);
   const [rightMappingConfirmed, setRightMappingConfirmed] = useState(false);
   const [directionTeaching, setDirectionTeaching] = useState<{side: number; token: number} | null>(null);
+  const [directionLive, setDirectionLive] = useState<{sample: DirectionPreviewResponse; at: number} | null>(null);
+  const [directionLiveNow, setDirectionLiveNow] = useState(0);
+  const [directionLiveError, setDirectionLiveError] = useState("");
   const [directionTeachNotice, setDirectionTeachNotice] = useState("");
+  const [directionTeachError, setDirectionTeachError] = useState("");
   const nextDirectionTokenRef = useRef(1);
   const [humanWornMode, setHumanWornMode] = useState(true);
   const [controlConfig, setControlConfig] =
@@ -730,6 +767,7 @@ export default function ExoConsolePage() {
     resetDegrees:"8.00",maximumDegrees:"30.00"});
   const selectedAngleRef = useRef<number | null>(null);
   const [assistTorqueLimit, setAssistTorqueLimit] = useState<AssistTorqueLimitResponse | null>(null);
+  const [afoStatuses,setAfoStatuses]=useState<(AfoStatusResponse|null)[]>([null,null]);
   const [maximumAssistDraft, setMaximumAssistDraft] = useState("0.500");
   const [telemetryStatus, setTelemetryStatus] =
     useState<TelemetryStatusResponse | null>(null);
@@ -808,6 +846,7 @@ export default function ExoConsolePage() {
   const followLatestLogRef = useRef(true);
   const telemetryAccumulatorRef = useRef(new TelemetryStreamAccumulator());
   const telemetryCaptureRef = useRef<TelemetrySamplePoint[]>([]);
+  const walkRecorderRef = useRef<WalkRecorder | null>(null);
   const telemetryDisplayPausedRef = useRef(false);
   const telemetryDirtyRef = useRef(false);
   const telemetryLastReceivedRef = useRef<number | null>(null);
@@ -880,12 +919,14 @@ export default function ExoConsolePage() {
     setConnection("idle");
     setDirectionTeaching(null);
     setDirectionTeachNotice("");
+    setDirectionTeachError("");
     setConnectStage("idle");
     setLastFailedConnectStage(null);
     // 断开后不能把最后一次快照继续显示成“当前状态”。日志和采样仍保留，
     // 重连后再重新读取设备身份、系统状态和双侧关节。
     setInfo(null);
     setCanStatus(null);
+    setBoardSensors({}); setBoardReadAt(null);
     setCanErrorDelta(null);
     previousCanRef.current = null;
     setFeedbackRestoreNotice("");
@@ -907,6 +948,7 @@ export default function ExoConsolePage() {
     setGaitStatus(null);
     setAssistConfig(null);
     setAssistTorqueLimit(null);
+    setAfoStatuses([null,null]);
     setAngleAssistConfig(null);
     setPulseTiming(null);setPulseWindow(null);setPulseLeft(null);setPulseRight(null);
     pulseTimingKeyRef.current="";pulseWindowKeyRef.current="";
@@ -951,6 +993,7 @@ export default function ExoConsolePage() {
         setFeedbackRestoreNotice("");
         setDirectionTeaching(null);
         setDirectionTeachNotice("");
+        setDirectionTeachError("");
         setNeutralConfirmed(false);
         setLastWearCalibrationAt(null);
         setLeftMappingConfirmed(false);
@@ -1006,6 +1049,11 @@ export default function ExoConsolePage() {
       setCanStatus(response);
       return;
     }
+    if (response.kind === "boardSensor") {
+      setBoardSensors(current => ({...current, [response.page]: response}));
+      setBoardReadAt(new Date().toLocaleTimeString());
+      return;
+    }
     if (response.kind === "savedZeroStatus") {
       if (response.side === Side.LEFT) setLeftSavedZero(response);
       else setRightSavedZero(response);
@@ -1014,15 +1062,12 @@ export default function ExoConsolePage() {
     if (response.kind === "calibrationStatus") {
       // 0.10.4的方向有效位仅在NVS加载/保存成功后成立；重连不要求重复出厂标定。
       const persistentDirection = ((infoRef.current?.capabilities ?? 0) & Capability.DIRECTION_TEACHING) !== 0;
-      const configured = response.decodedJointFlags.mappingValid && response.decodedJointFlags.directionValid;
       if (response.side === Side.LEFT) {
         setLeftCalibration(response);
-        if (persistentDirection) setLeftMappingConfirmed(configured);
-        else if (response.rawPositionDegrees === null) setLeftMappingConfirmed(false);
+        setLeftMappingConfirmed(previous => mappingConfirmationAfterReadback(previous, persistentDirection, response));
       } else {
         setRightCalibration(response);
-        if (persistentDirection) setRightMappingConfirmed(configured);
-        else if (response.rawPositionDegrees === null) setRightMappingConfirmed(false);
+        setRightMappingConfirmed(previous => mappingConfirmationAfterReadback(previous, persistentDirection, response));
       }
       return;
     }
@@ -1060,6 +1105,10 @@ export default function ExoConsolePage() {
         assistGenerationRef.current = response.configGeneration;
         setAssistConfigDraft(assistDraftFromResponse(response));
       }
+      return;
+    }
+    if(response.kind === "afoStatus") {
+      setAfoStatuses(previous=>previous.map((item,side)=>side===response.side?response:item));
       return;
     }
     if(response.kind === "pulseTiming") {
@@ -1120,11 +1169,14 @@ export default function ExoConsolePage() {
 
     const flags = response.decodedJointFlags;
     if (!flags.zeroValid) setLastWearCalibrationAt(null);
-    if (!flags.feedbackValid || !flags.online) {
-      setNeutralConfirmed(false);
-      if (response.side === Side.LEFT) setLeftMappingConfirmed(false);
-      else setRightMappingConfirmed(false);
-    }
+    if (mustReconfirmNeutral(response)) setNeutralConfirmed(false);
+    // Offline feedback cannot erase a persistent factory-direction readback and
+    // then have the next calibration poll restore it. Live feedback/zero gates
+    // below remain independent; an explicit invalid direction still revokes it.
+    const persistentDirection = ((infoRef.current?.capabilities ?? 0) & Capability.DIRECTION_TEACHING) !== 0;
+    if (response.side === Side.LEFT)
+      setLeftMappingConfirmed(previous => mappingConfirmationAfterReadback(previous, persistentDirection, response));
+    else setRightMappingConfirmed(previous => mappingConfirmationAfterReadback(previous, persistentDirection, response));
     const activeSystem = systemRef.current;
     const activeInfo = infoRef.current;
     if (!flags.jointValid || response.feedbackAgeMs === 0xffff ||
@@ -1234,6 +1286,7 @@ export default function ExoConsolePage() {
 
       const accepted = telemetryAccumulatorRef.current.accept(packet);
       accepted.sample.webSession=connectionGenerationRef.current;
+      walkRecorderRef.current?.accept(accepted.sample);
       const capture = telemetryCaptureRef.current;
       if (accepted.isNewSample) {
         capture.push(accepted.sample);
@@ -1534,6 +1587,13 @@ export default function ExoConsolePage() {
     return snapshot;
   }, [transact]);
 
+  const queryDirectionPreview = useCallback(async (side: number): Promise<DirectionPreviewResponse> => {
+    const p=responseOfKind(await transact(Opcode.GET_DIRECTION_PREVIEW,Uint8Array.of(side),
+      "GET_DIRECTION_PREVIEW"),"directionPreview");
+    if(p.side!==side) throw new Error("方向预览侧别不匹配");
+    return p;
+  }, [transact]);
+
   const querySavedZero = useCallback(async (side: number): Promise<SavedZeroStatusResponse> => {
     const status = responseOfKind(await transact(Opcode.GET_SAVED_ZERO,
       Uint8Array.of(side), `GET_SAVED_ZERO ${side === Side.LEFT ? "LEFT" : "RIGHT"}`), "savedZeroStatus");
@@ -1618,6 +1678,12 @@ export default function ExoConsolePage() {
     if(((infoRef.current?.capabilities ?? 0)&Capability.SWING_EVENT_PULSE)!==0) {
       await queryPulseConfiguration();await queryPulseStatus();
     }
+    if(["0.11.20","0.11.21", "0.11.22"].includes(infoRef.current?.firmware.join(".")??"")&&config.strategyId===AssistStrategy.ADAPTIVE_GAUSSIAN) {
+      for(const side of [Side.LEFT,Side.RIGHT]) {
+        const status=responseOfKind(await transact(Opcode.GET_AFO_STATUS,Uint8Array.of(side),"GET_AFO_STATUS"),"afoStatus");
+        if(status.side!==side) throw new Error("AFO诊断响应侧别不匹配，请重新读取");
+      }
+    }
     return config;
   }, [transact, queryAssistTorqueLimit, queryAngleAssistConfig, queryPulseConfiguration, queryPulseStatus]);
 
@@ -1636,13 +1702,22 @@ export default function ExoConsolePage() {
     return responseOfKind(await transact(Opcode.GET_CAN_STATUS, undefined, "GET_CAN_STATUS"), "canStatus");
   }, [transact]);
 
+  const queryBoardSensors = useCallback(async (): Promise<void> => {
+    if (!supportsBoardSensors(infoRef.current)) return;
+    for (const page of [0, 1, 2, 3]) {
+      const response = responseOfKind(await transact(Opcode.GET_BOARD_SENSOR,
+        new Uint8Array([page]), "GET_BOARD_SENSOR"), "boardSensor");
+      if (response.page !== page) throw new Error("传感器响应页不匹配，请重新读取");
+    }
+  }, [transact]);
+
   const restoreFeedback = useCallback(async (): Promise<void> => {
     const state = await querySystem();
     const health = await queryCanStatus();
     if (state.state !== 1 || !health.restoreAllowed) throw new Error("仅待机且CAN未进入错误被动/BUS_OFF时可恢复反馈。");
     const ack = responseOfKind(await transact(Opcode.RESTORE_FEEDBACK, undefined, "RESTORE_FEEDBACK"), "ack");
     if (ack.result !== 1) throw new Error("恢复请求被拒绝；两次手动请求需间隔10秒，请读取最新CAN状态。");
-    setFeedbackRestoreNotice("已提交有限恢复请求，等待电机新反馈；请求接收不代表已恢复。反馈回来后仍需重新校准穿戴零位。");
+    setFeedbackRestoreNotice("已提交有限恢复请求，等待电机新反馈；请求接收不代表已恢复。已保存的方向和零位不会因此丢失。");
     await queryCanStatus();
   }, [queryCanStatus, querySystem, transact]);
 
@@ -1650,6 +1725,7 @@ export default function ExoConsolePage() {
     const identity = await queryInfo();
     await querySystem();
     if ((identity.capabilities & Capability.FEEDBACK_RECOVERY) !== 0) await queryCanStatus();
+    if (supportsBoardSensors(identity)) await queryBoardSensors();
     await queryJoint(Side.LEFT);
     await queryJoint(Side.RIGHT);
     if ((identity.capabilities & Capability.CALIBRATION_STATUS) !== 0) {
@@ -1676,6 +1752,7 @@ export default function ExoConsolePage() {
     }
   }, [
     queryCanStatus,
+    queryBoardSensors,
     queryCalibration,
     querySavedZero,
     queryAssistConfig,
@@ -1972,6 +2049,21 @@ export default function ExoConsolePage() {
     appendLog("system", "BLE 已主动断开。");
   }
 
+  // 标定结果必须留在操作旁边；顶部全局错误在长页面中可能不在视野内。
+  async function runDirectionTeaching(label: string, action: () => Promise<void>): Promise<void> {
+    await runOperation(label, async () => {
+      setDirectionTeachError("");
+      setDirectionTeachNotice("");
+      try {
+        await action();
+      } catch (caught) {
+        setDirectionTeachNotice("");
+        setDirectionTeachError(caught instanceof Error ? caught.message : `${label}失败`);
+        throw caught; // 仍保留全局错误和事务日志。
+      }
+    });
+  }
+
   async function sendDirectionTeaching(side: number, action: number, token: number): Promise<AckResponse> {
     if (((infoRef.current?.capabilities ?? 0) & Capability.DIRECTION_TEACHING) === 0)
       throw new Error("当前固件不支持方向标定，请升级至0.10.4");
@@ -2001,10 +2093,16 @@ export default function ExoConsolePage() {
     await sendDirectionTeaching(side, DirectionTeachAction.CANCEL, token);
     setDirectionTeaching(null);
     await sendDirectionTeaching(side, DirectionTeachAction.BEGIN, token);
+    // Keep cancel/retry available even if the subsequent preview read fails.
     setDirectionTeaching({side, token});
-    await queryCalibration(Side.LEFT); await queryCalibration(Side.RIGHT);
+    setDirectionLive(null);
+    if(supportsDirectionPreview(infoRef.current)) {
+      const preview=await queryDirectionPreview(side);
+      setDirectionLive({sample:preview,at:performance.now()});
+    }
+    setDirectionLiveError("");
     await queryJoint(Side.LEFT); await queryJoint(Side.RIGHT);
-    setDirectionTeachNotice(`已记录${side === Side.LEFT ? "左" : "右"}腿基准。请在60秒内手动向前抬这一条腿约5～15°，另一腿保持原位；停稳后点击“确认前抬方向”。`);
+    setDirectionTeachNotice(`已记录${side === Side.LEFT ? "左" : "右"}腿基准。请在60秒内手动向前抬这一条腿约5～15°；另一侧允许随动。保持所选腿前抬位置后点击“确认前抬方向”。`);
   }
 
   async function finishDirectionTeaching(): Promise<void> {
@@ -2020,7 +2118,7 @@ export default function ExoConsolePage() {
     if (side === Side.LEFT) setLeftMappingConfirmed(true);
     else setRightMappingConfirmed(true);
     setNeutralConfirmed(false);
-    setDirectionTeachNotice(`${side === Side.LEFT ? "左" : "右"}腿前抬正方向已保存为出厂配置并读回确认，断电后保留。请把腿放回中立位；双侧方向完成后再校准穿戴零位。`);
+    setDirectionTeachNotice(`${side === Side.LEFT ? "左" : "右"}腿方向已保存并读回：原始角${ack.detail === 1 ? "增加" : "减少"}对应人体前抬为正，后摆为负。断电后保留。请回到中立位校准穿戴零位，再手动前抬核对人体角度为正。`);
   }
 
   async function cancelDirectionTeaching(): Promise<void> {
@@ -2083,6 +2181,31 @@ export default function ExoConsolePage() {
     await querySystem();
   }
 
+  async function checkWearCalibrationConditions(): Promise<void> {
+    setWearZeroNotice("正在读取双髋反馈与校准条件；本次检查不写入零位。");
+    try {
+      const state = await querySystem();
+      await queryJoint(Side.LEFT); await queryJoint(Side.RIGHT);
+      if (((infoRef.current?.capabilities ?? 0) & Capability.CALIBRATION_STATUS) === 0) {
+        setWearZeroNotice("当前固件不支持读取校准条件；没有执行校准，原零位未改动。");
+        return;
+      }
+      const left = await queryCalibration(Side.LEFT), right = await queryCalibration(Side.RIGHT);
+      if (((infoRef.current?.capabilities ?? 0) & Capability.SAVED_WEAR_ZERO) !== 0) {
+        await querySavedZero(Side.LEFT); await querySavedZero(Side.RIGHT);
+      }
+      const issue = state.state !== 1 ? "主控未处于待机。" : directionTeaching
+        ? "请先完成或取消方向标定。" : !supportsAtomicZeroCapture(infoRef.current)
+          ? "当前固件不支持一次采集双髋零位。" : recalibrationFeedbackIssue(left, right);
+      setWearZeroNotice(issue
+        ? `检查完成，暂不能校准：${issue} 没有执行校准，已保存零位未改动。`
+        : "检查完成，双髋反馈已就绪。请保持中立静止，勾选穿戴确认，再点击校准按钮；本次检查未写入零位。");
+    } catch (caught) {
+      setWearZeroNotice("条件检查未完成，请核对连接后重试。没有发送校准指令，已保存零位未改动。");
+      throw caught;
+    }
+  }
+
   async function captureBothZeros(): Promise<void> {
     if (!supportsAtomicZeroCapture(infoRef.current))
       throw new Error("当前固件不支持一次采集双髋零位，请升级0.10.11；不会逐侧写入。");
@@ -2092,7 +2215,8 @@ export default function ExoConsolePage() {
     setWearZeroNotice("正在采集当前双髋位置并核对两侧0°读回，请保持静止。");
     try {
       await captureAndVerifyBothZeros({
-        capturePair: () => savedZeroAction(SavedZeroAction.CAPTURE_PAIR),
+        capturePair: () => savedZeroAction(supportsPersistentCalibration(infoRef.current)
+          ? SavedZeroAction.CAPTURE_SAVE_PAIR : SavedZeroAction.CAPTURE_PAIR),
         queryJoint, queryCalibration, querySystem,
       });
     } catch (caught) {
@@ -2101,13 +2225,15 @@ export default function ExoConsolePage() {
       throw caught;
     }
     setWearZeroNotice("已将当前左右髋位置同时设为中立位，双侧人体角均通过0°附近读回核对。");
-    if (((infoRef.current?.capabilities ?? 0) & Capability.SAVED_WEAR_ZERO) !== 0 && saveWearZeroForReuse) {
+    if (((infoRef.current?.capabilities ?? 0) & Capability.SAVED_WEAR_ZERO) !== 0 &&
+        (supportsPersistentCalibration(infoRef.current) || saveWearZeroForReuse)) {
       try {
-        await savedZeroAction(SavedZeroAction.SAVE_CURRENT);
+        if(!supportsPersistentCalibration(infoRef.current))await savedZeroAction(SavedZeroAction.SAVE_CURRENT);
         const left = await querySavedZero(Side.LEFT), right = await querySavedZero(Side.RIGHT);
-        if (!left.stored || !right.stored || !left.bindingMatches || !right.bindingMatches)
-          throw new Error("候选记录未读回");
-        setWearZeroNotice("本次零位已重新校准，并保存到主控，断电后可选择沿用。");
+        assertPersistedZeroPair(left,right,await queryCalibration(Side.LEFT),await queryCalibration(Side.RIGHT));
+        setWearZeroNotice(supportsPersistentCalibration(infoRef.current)
+          ? "双髋零位已校准并保存；以后上电自动沿用，无需重复确认。"
+          : "本次零位已重新校准并保存；旧固件重启后需手动沿用。");
       } catch (caught) {
         setNeutralConfirmed(false);
         setWearZeroNotice("本次RAM零位已校准，但保存结果未确认；不能认定新零位已断电保留。");
@@ -2159,6 +2285,8 @@ export default function ExoConsolePage() {
       throw new Error("当前固件不支持保存/沿用零位，需要0.10.9及保存零位能力。");
     if (action === SavedZeroAction.CAPTURE_PAIR && !supportsAtomicZeroCapture(infoRef.current))
       throw new Error("一次采集双髋零位需要0.10.11固件。");
+    if(action===SavedZeroAction.CAPTURE_SAVE_PAIR&&!supportsPersistentCalibration(infoRef.current))
+      throw new Error("校准并持久保存需要0.11.9固件。");
     const state = await querySystem();
     if (state.state !== 1) throw new Error("零位候选操作只允许待机执行。");
     const ack = responseOfKind(await transact(Opcode.SAVED_ZERO_ACTION,
@@ -2292,11 +2420,48 @@ export default function ExoConsolePage() {
     await queryPulseStatus();
   }
 
+  function adaptiveBenchIdentity(saved: AssistConfigResponse | null = assistConfig) {
+    return {firmware: infoRef.current?.firmware ?? [], capabilities: infoRef.current?.capabilities ?? 0,
+      strategyId: saved?.strategyId ?? 0, strategyVersion: saved?.strategyVersion ?? 0, offBodyBench: !humanWornMode};
+  }
+  async function verifyAdaptiveBenchBase() {
+    const base=await queryControlConfig();
+    const left=await queryJointCommand(Side.LEFT), right=await queryJointCommand(Side.RIGHT);
+    if(base.selectedMode!==ControlMode.DAMPING || base.selectedReference!==ReferenceSource.CONSTANT ||
+      ![left,right].every(c=>c.torqueNm===0&&c.kp===0&&c.kd>=0&&c.kd<=(supportsAdaptiveAssistMode(infoRef.current ?? undefined) ? 0.1 : 0)))
+      throw new Error("AFO助力需要产品基础配置：DAMPING + CONSTANT、零前馈/零Kp，阻尼不超过当前固件允许值");
+  }
+  async function verifyAdaptiveTrialProfile() {
+    const ack=responseOfKind(await transact(Opcode.CHECK_ADAPTIVE_TRIAL,undefined,"核对完整受限试验配置"),"ack");
+    requireSuccessfulConfigAck(ack,"受限试验配置核对");
+    if(ack.detail!==1)throw new Error("设备未确认完整试验配置1，不能START");
+  }
+  async function prepareAdaptiveTrialProfile() {
+    const identity=adaptiveBenchIdentity(await queryAssistConfig());
+    if(identity.firmware.join(".")!=="0.11.6"||identity.strategyVersion!==5)
+      throw new Error("需要本次读回0.11.6受限试验固件与策略v5");
+    if((await querySystem()).state!==1)throw new Error("请先STOP并等待IDLE后准备参数");
+    await verifyAdaptiveBenchBase();
+    const ack=responseOfKind(await transact(Opcode.PREPARE_ADAPTIVE_TRIAL,undefined,"准备5 N·m受限参数"),"ack");
+    requireSuccessfulConfigAck(ack,"准备受限参数");
+    await verifyAdaptiveTrialProfile();
+    appendLog("system","完整试验配置1已读回匹配：幅值/上限5 N·m，角度±20°，速度60°/s，输出2 W/吸收1 W，变化率1 N·m/s，淡入3 s；尚未START。");
+  }
   async function writeAssistConfig(
     draft: AssistConfigDraft = assistConfigDraft,
   ): Promise<AssistConfigResponse> {
+    let adaptiveReadback=assistConfig;
     if (systemRef.current?.state !== 0x01) {
       throw new Error("助力配置只能在 IDLE 写入；请先 STOP 并等待 IDLE");
+    }
+    if (Number(draft.strategyId) === AssistStrategy.ADAPTIVE_GAUSSIAN) {
+      if (!supportsAdaptive(infoRef.current?.firmware, infoRef.current?.capabilities))
+        throw new Error("AFO双高斯需要实际读回受支持的0.11.0/0.11.1/0.11.2/0.11.3/0.11.4及助力配置能力");
+      if (draft.executionState === AssistExecutionState.ACTIVE) {
+        adaptiveReadback=await queryAssistConfig();
+        if(!supportsAdaptiveBenchActive(adaptiveBenchIdentity(adaptiveReadback)))
+          throw new Error("先保存AFO SHADOW并读回策略及部署能力；台架候选需选择非穿戴模式");
+      }
     }
     if (draft.executionState === AssistExecutionState.ACTIVE) {
       const identity = infoRef.current;
@@ -2307,7 +2472,10 @@ export default function ExoConsolePage() {
       const phase = draft.selectedMode === AssistMode.ACTIVE_PHASE && Number(draft.strategyId) === 2;
       const threshold = draft.selectedMode === AssistMode.ANGLE_THRESHOLD && Number(draft.strategyId) === 4 &&
         (identity.capabilities & Capability.ANGLE_THRESHOLD_ASSIST) !== 0;
-      if (!phase && !threshold) throw new Error("ACTIVE 只允许相位曲线或设备支持的角度阈值策略");
+      const adaptive=draft.selectedMode===AssistMode.ADAPTIVE_GAUSSIAN && Number(draft.strategyId)===5 &&
+        supportsAdaptiveBenchActive(adaptiveBenchIdentity(adaptiveReadback));
+      if (!phase && !threshold && !adaptive) throw new Error("当前策略或设备身份不允许ACTIVE");
+      if(adaptive) await verifyAdaptiveBenchBase();
       if (!controlConfig?.selectedValid ||
           controlConfig.selectedMode !== ControlMode.DAMPING ||
           controlConfig.selectedReference !== ReferenceSource.CONSTANT) {
@@ -2317,6 +2485,7 @@ export default function ExoConsolePage() {
       }
     }
     const requested = {
+      adaptiveBenchIdentity: adaptiveBenchIdentity(adaptiveReadback),
       selectedMode: draft.selectedMode,
       requestedExecutionState: draft.executionState,
       strategyId: integerDraftNumber(
@@ -2350,8 +2519,9 @@ export default function ExoConsolePage() {
     if (supportsLimit) {
       // 保存前读取当前设备上限，避免重连/更换设备后沿用网页旧快照。
       const currentLimit = await queryAssistTorqueLimit();
-      const allowedNm = assistTorqueMaximumNm(requested.strategyId,
-        infoRef.current?.capabilities ?? 0, currentLimit.hardMaximumNm, infoRef.current?.firmware);
+      const allowedNm = requested.strategyId===AssistStrategy.ADAPTIVE_GAUSSIAN
+        ? Math.min(adaptiveNominalMaximumNm(adaptiveBenchIdentity(adaptiveReadback)),currentLimit.hardMaximumNm)
+        : assistTorqueMaximumNm(requested.strategyId, infoRef.current?.capabilities ?? 0, currentLimit.hardMaximumNm, infoRef.current?.firmware);
       if (!Number.isFinite(maximumNm) || maximumNm < 0 || maximumNm > allowedNm)
         throw new Error(threshold && maximumNm > 0.5 && allowedNm <= 0.5
           ? "5 N·m角度助力需要0.10.8固件，当前草稿尚未写入设备"
@@ -2542,6 +2712,19 @@ export default function ExoConsolePage() {
       throw new Error("STOP_TELEMETRY ACK 成功，但设备仍报告正在推流");
     }
     appendLog("system", "遥测流已停止；这不会向外骨骼发送 STOP。");
+    if(walkRecorderRef.current&&!walkRecorderRef.current.meta.endedAt)
+      await recording.stop("遥测停止，已结束本段记录");
+  }
+
+  const recordingContext=useMemo(()=>({info,system,assistConfig,assistTorqueLimit,afoStatuses,
+    leftCalibration,rightCalibration,rateHz:telemetryStatus?.rateHz??telemetryRateHz,
+    channelMask:telemetryStatus?.channelMask??telemetryChannelMask}),
+    [info,system,assistConfig,assistTorqueLimit,afoStatuses,leftCalibration,rightCalibration,telemetryStatus?.rateHz,
+      telemetryStatus?.channelMask,telemetryRateHz,telemetryChannelMask]);
+  const recording=useWalkRecording(walkRecorderRef,connection==="connected",recordingContext);
+  async function startWalkRecording(): Promise<void> {
+    if(!telemetryStatus?.streaming)await startTelemetry();
+    await recording.start();
   }
 
   function toggleTelemetryChannel(channel: number): void {
@@ -2635,8 +2818,30 @@ export default function ExoConsolePage() {
   }
 
   async function startExoskeleton(): Promise<void> {
+    // Capture intent before GET responses can replace the form's draft values.
+    const intendedAssist = { ...assistConfigDraft };
+    const intendedMaximum = maximumAssistDraft;
     if(((infoRef.current?.capabilities ?? 0)&Capability.ASSIST_CONFIGURATION)!==0) {
       const saved=await queryAssistConfig();
+      if (saved.strategyId === AssistStrategy.ADAPTIVE_GAUSSIAN &&
+          (!supportsAdaptive(infoRef.current?.firmware, infoRef.current?.capabilities) ||
+           (saved.requestedExecutionState === AssistExecutionState.ACTIVE &&
+            !supportsAdaptiveBenchActive(adaptiveBenchIdentity(saved)))))
+        throw new Error("本次读回的AFO策略和部署范围不允许当前ACTIVE入口，不能START");
+      if(saved.strategyId===AssistStrategy.ADAPTIVE_GAUSSIAN && saved.requestedExecutionState===AssistExecutionState.ACTIVE) {
+        await verifyAdaptiveBenchBase();
+        if(saved.strategyVersion===5)await verifyAdaptiveTrialProfile();
+        const limit=await queryAssistTorqueLimit();
+        if(limit.selectedMaximumNm===null||limit.selectedMaximumNm>adaptiveNominalMaximumNm(adaptiveBenchIdentity(saved)))
+          throw new Error("AFO名义峰值超过本次设备策略读回允许的上限");
+      }
+      if (saved.strategyId !== Number(intendedAssist.strategyId) ||
+          saved.selectedMode !== intendedAssist.selectedMode ||
+          saved.requestedExecutionState !== intendedAssist.executionState ||
+          saved.profileId !== Number(intendedAssist.profileId) ||
+          saved.leftLevelPercent !== Number(intendedAssist.leftLevelPercent) ||
+          saved.rightLevelPercent !== Number(intendedAssist.rightLevelPercent))
+        throw new Error("助力草稿与设备已保存配置不同；请先保存并读回，不能按旧策略START");
       if(saved.strategyId===AssistStrategy.ANGLE_THRESHOLD &&
           ((infoRef.current?.capabilities ?? 0)&Capability.SWING_EVENT_PULSE)===0)
         throw new Error("设备仍是旧持续阈值策略；升级0.10.10并读回事件脉冲参数后才能START");
@@ -2657,6 +2862,9 @@ export default function ExoConsolePage() {
             command.kp === 0 && command.kd <= 0.1)) {
         throw new Error("人体穿戴只允许DAMPING + CONSTANT、零位置增益/前馈、Kd≤0.1；请恢复产品配置");
       }
+    }
+    if (((infoRef.current?.capabilities ?? 0) & Capability.ASSIST_TORQUE_LIMIT) !== 0) {
+      await verifyAssistMaximumBeforeStart(intendedMaximum, queryAssistTorqueLimit);
     }
     // 发出 START 后人体姿态会改变，旧的“中立位确认”立即失效。
     setNeutralConfirmed(false);
@@ -2765,7 +2973,7 @@ export default function ExoConsolePage() {
   }
 
   const pollOnce = useCallback(async (): Promise<void> => {
-    if (!connectedRef.current || pollBusyRef.current || operationRef.current) return;
+    if (!connectedRef.current || pollBusyRef.current || operationRef.current || directionTeaching) return;
     pollBusyRef.current = true;
     try {
       await querySystem();
@@ -2805,7 +3013,43 @@ export default function ExoConsolePage() {
     } finally {
       pollBusyRef.current = false;
     }
-  }, [appendLog, queryCanStatus, queryAssistConfig, queryCalibration, querySavedZero, queryGaitStatus, queryJoint, querySystem]);
+  }, [appendLog, queryCanStatus, queryAssistConfig, queryCalibration, querySavedZero, queryGaitStatus, queryJoint, querySystem, directionTeaching]);
+
+  // During teaching, prioritize the selected raw encoder. Normal telemetry
+  // cannot represent an uncalibrated joint; the old 1-2s background refresh
+  // made manual movement appear stuck. No calibration writes occur here.
+  useEffect(() => {
+    if (connection !== "connected" || !directionTeaching) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastSystem = 0;
+    const freshnessTimer = setInterval(() => setDirectionLiveNow(performance.now()), 200);
+    const tick = async () => {
+      if (cancelled) return;
+      const start = performance.now();
+      setDirectionLiveNow(start);
+      if (!operationRef.current && !pollBusyRef.current && !telemetryStatusBusyRef.current) {
+        pollBusyRef.current = true;
+        try {
+          if (start - lastSystem > 1000) { await querySystem(); lastSystem = start; }
+          if (systemRef.current?.state !== 1) throw new Error("主控不在待机，请先停止运行");
+          if(supportsDirectionPreview(infoRef.current)) {
+            const sample = await queryDirectionPreview(directionTeaching.side);
+            if (!cancelled) {
+              const at = performance.now();
+              setDirectionLive({sample, at}); setDirectionLiveNow(at);
+              setDirectionLiveError(sample.result===0?"":directionTeachFailureDescriptions[sample.result]??"当前示教会话无效，请重新记录基准");
+            }
+          } else await queryCalibration(directionTeaching.side);
+        } catch (caught) {
+          if (!cancelled) setDirectionLiveError(`实时角度读取失败：${errorMessageOf(caught)}`);
+        } finally { pollBusyRef.current = false; }
+      }
+      if (!cancelled) timer = setTimeout(tick, Math.max(0, 200 - (performance.now() - start)));
+    };
+    void tick();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); clearInterval(freshnessTimer); };
+  }, [connection, directionTeaching, queryCalibration, queryDirectionPreview, querySystem]);
 
   useEffect(() => {
     if (connection !== "connected" || !autoPolling) return;
@@ -2831,7 +3075,7 @@ export default function ExoConsolePage() {
   // 设备丢样本计数和队列深度只存在于 GET_TELEMETRY_STATUS。推流期间每2秒
   // 低频读取一次，不把每个高速 Notify 写进事务队列，也不与4 Hz备用轮询并发。
   useEffect(() => {
-    if (connection !== "connected" || !telemetryStatus?.streaming) return;
+    if (connection !== "connected" || !telemetryStatus?.streaming || directionTeaching) return;
     let cancelled = false;
     const timer = window.setInterval(() => {
       if (cancelled || telemetryStatusBusyRef.current || operationRef.current) return;
@@ -2839,6 +3083,18 @@ export default function ExoConsolePage() {
       void (async () => {
         await queryTelemetryStatus();
         await querySystem();
+        // Streaming pauses the normal poll. Settings must still receive live
+        // joint/calibration readback so restored zeros do not remain stale.
+        if(systemRef.current?.state===1) {
+          await queryJoint(Side.LEFT);await queryJoint(Side.RIGHT);
+          if(((infoRef.current?.capabilities ?? 0)&Capability.CALIBRATION_STATUS)!==0) {
+            await queryCalibration(Side.LEFT);await queryCalibration(Side.RIGHT);
+          }
+          if(((infoRef.current?.capabilities ?? 0)&Capability.SAVED_WEAR_ZERO)!==0) {
+            await querySavedZero(Side.LEFT);await querySavedZero(Side.RIGHT);
+          }
+          if(((infoRef.current?.capabilities ?? 0)&Capability.FEEDBACK_RECOVERY)!==0)await queryCanStatus();
+        }
         if (((infoRef.current?.capabilities ?? 0) & Capability.ASSIST_CONFIGURATION) !== 0)
           await queryAssistConfig();
       })()
@@ -2853,7 +3109,8 @@ export default function ExoConsolePage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [appendLog, connection, queryAssistConfig, querySystem, queryTelemetryStatus, telemetryStatus?.streaming]);
+  }, [appendLog, connection, queryAssistConfig, querySystem, queryTelemetryStatus, queryJoint,
+    queryCalibration, querySavedZero, queryCanStatus, telemetryStatus?.streaming, directionTeaching]);
 
   const connected = connection === "connected";
   const systemFlags = system?.decodedSystemFlags;
@@ -2878,13 +3135,25 @@ export default function ExoConsolePage() {
   const pulsePeakMaximumNm = !info ? 15 : assistTorqueMaximumNm(AssistStrategy.ANGLE_THRESHOLD,
     info.capabilities, assistTorqueLimit?.hardMaximumNm ?? null, info.firmware);
   const angleStrategyDraft = Number(assistConfigDraft.strategyId) === AssistStrategy.ANGLE_THRESHOLD;
+  const adaptiveStrategyDraft = Number(assistConfigDraft.strategyId) === AssistStrategy.ADAPTIVE_GAUSSIAN;
+  const hasAdaptive = supportsAdaptive(info?.firmware, info?.capabilities);
+  const adaptiveSelected = assistConfig?.strategyId === AssistStrategy.ADAPTIVE_GAUSSIAN;
+  const adaptiveBenchAvailable = supportsAdaptiveBenchActive(adaptiveBenchIdentity());
+  const adaptiveBenchBaseCompatible = [leftCommand,rightCommand].every(c=>c!==null&&c.torqueNm===0&&c.kp===0&&c.kd>=0&&c.kd<=(supportsAdaptiveAssistMode(info ?? undefined) ? 0.1 : 0));
   const hasAssistTorqueLimit = Boolean(info && (info.capabilities & Capability.ASSIST_TORQUE_LIMIT) !== 0);
+  const assistDraftSaved = !hasAssistConfiguration || Boolean(assistConfig &&
+    assistConfig.strategyId === Number(assistConfigDraft.strategyId) &&
+    assistConfig.selectedMode === assistConfigDraft.selectedMode &&
+    assistConfig.requestedExecutionState === assistConfigDraft.executionState &&
+    assistConfig.profileId === Number(assistConfigDraft.profileId) &&
+    assistConfig.leftLevelPercent === Number(assistConfigDraft.leftLevelPercent) &&
+    assistConfig.rightLevelPercent === Number(assistConfigDraft.rightLevelPercent) &&
+    (!hasAssistTorqueLimit || assistMaximumDraftMatches(maximumAssistDraft, assistTorqueLimit)));
   // 旧0.10.x的工程profile=1峰值固定0.5；升级前显示固定值，不发送新命令。
   const savedMaximumNm = hasAssistTorqueLimit ? assistTorqueLimit?.selectedMaximumNm ?? null
     : assistConfig?.profileId === 1 ? 0.5 : null;
-  const maximumHardNm = !info && angleStrategyDraft ? 15 : assistTorqueMaximumNm(
-    Number(assistConfigDraft.strategyId), info?.capabilities ?? 0,
-    assistTorqueLimit?.hardMaximumNm ?? null, info?.firmware);
+  const maximumHardNm = assistMaximumForStrategy(Number(assistConfigDraft.strategyId),
+    info ? adaptiveBenchIdentity() : undefined, assistTorqueLimit?.hardMaximumNm ?? null);
   const draftMaximumNm = hasAssistTorqueLimit || angleStrategyDraft ? Number(maximumAssistDraft) : savedMaximumNm;
   const maximumDraftAllowed = (!hasAssistTorqueLimit && !angleStrategyDraft) ||
     (draftMaximumNm !== null && maximumAssistDraft.trim() !== "" &&
@@ -2925,7 +3194,8 @@ export default function ExoConsolePage() {
     AssistExecutionState.ACTIVE || (
       hasTelemetryStream &&
       ((assistConfigDraft.selectedMode === AssistMode.ACTIVE_PHASE && Number(assistConfigDraft.strategyId) === 2) ||
-       (hasPulseAssist && assistConfigDraft.selectedMode === AssistMode.ANGLE_THRESHOLD && angleStrategyDraft)) &&
+       (hasPulseAssist && assistConfigDraft.selectedMode === AssistMode.ANGLE_THRESHOLD && angleStrategyDraft) ||
+       (adaptiveStrategyDraft && adaptiveBenchAvailable && adaptiveBenchBaseCompatible)) &&
       activePhaseBaseCompatible
     );
   const selectedTelemetryChannelCount = countMaskBits(telemetryChannelMask);
@@ -2935,6 +3205,7 @@ export default function ExoConsolePage() {
   const gaitFlags = gaitStatus?.decodedGaitFlags;
   const gaitQuality = gaitStatus?.decodedQualityFlags;
   const assistFlags = assistConfig?.decodedAssistFlags;
+  const afoStatus = afoMotionStatus(assistConfig, assistTorqueLimit, system?.state);
   const leftFeedbackReady = Boolean(
     leftJoint?.decodedJointFlags.feedbackValid &&
     leftJoint.decodedJointFlags.online,
@@ -2952,6 +3223,7 @@ export default function ExoConsolePage() {
   const hasDirectionTeaching = Boolean(info && (info.capabilities & Capability.DIRECTION_TEACHING));
   const hasSavedWearZero = Boolean(info && (info.capabilities & Capability.SAVED_WEAR_ZERO));
   const hasAtomicZeroCapture = supportsAtomicZeroCapture(info);
+  const hasPersistentCalibration = supportsPersistentCalibration(info);
   const savedPairExists = Boolean(leftSavedZero?.stored && rightSavedZero?.stored);
   const savedPairReuseReady = canReuseSavedWearZero(leftSavedZero, rightSavedZero);
   const canTeachDirection = connected && stage7InfoAccepted && hasDirectionTeaching &&
@@ -2964,8 +3236,9 @@ export default function ExoConsolePage() {
     .every((command) => command !== null && command.positionDegrees === 0 &&
       command.velocityDegreesPerSecond === 0 && command.torqueNm === 0 &&
       command.kp === 0 && command.kd <= 0.1);
+  const recalibrationIssue = hasCalibrationStatus ? recalibrationFeedbackIssue(leftCalibration, rightCalibration) : null;
   const canConfirmNeutral = connected && stage7InfoAccepted && !operation &&
-    !directionTeaching && system?.state === 0x01 && bothFeedbackReady && factoryMappingConfirmed;
+    !directionTeaching && system?.state === 0x01 && bothFeedbackReady && factoryMappingConfirmed && !recalibrationIssue;
   const canCaptureLeftZero = canConfirmNeutral && neutralConfirmed &&
     leftFeedbackReady;
   const canCaptureRightZero = canConfirmNeutral && neutralConfirmed &&
@@ -2979,18 +3252,22 @@ export default function ExoConsolePage() {
     Boolean(rightCalibration?.decodedJointFlags.mappingValid && rightCalibration.decodedJointFlags.directionValid &&
       rightCalibration.rawPositionDegrees !== null && rightCalibration.feedbackAgeMs <= 50);
   const bothZerosReadBack = bothJointsValid && Boolean(leftJoint?.decodedJointFlags.zeroValid && rightJoint?.decodedJointFlags.zeroValid);
+  const savedZeroReadiness=persistentZeroReadiness(leftSavedZero,rightSavedZero,bothFeedbackReady,bothZerosReadBack);
   const wearCalibrationBlockText = !connected ? "先在连接栏目连接外骨骼。" : !stage7InfoAccepted
     ? "设备身份未通过，当前不能校准。" : system?.state === 0x05
       ? `主控故障，校准已锁定。失败步骤：${system.lastFailedStepName}。${!bothFeedbackReady ? "左右电机反馈未就绪，不能写入零位。" : "需要先排除故障并恢复待机。"} STOP未能确认失能时，先切断电机动力电源。` : system?.state !== 0x01
       ? "请先停止外骨骼并等待主控进入待机，再进行零位校准。" : operation
         ? "正在执行操作，请等待完成。" : directionTeaching
           ? "先完成前抬正方向标定，再把双腿放回中立位。" : !bothFeedbackReady
-          ? "等待左右髋有效反馈，不能用缺失读数校准。" : !factoryMappingConfirmed
+          ? recalibrationIssue ?? "等待左右髋有效反馈，不能用缺失读数校准。" : recalibrationIssue
+            ? recalibrationIssue : !factoryMappingConfirmed
             ? hasDirectionTeaching ? "先在出厂配置中保存左右前抬正方向，再确认穿戴中立位。" : "先分别核对左腿、右腿对应与屈曲方向，再勾选穿戴中立位确认。" : !hasAtomicZeroCapture
               ? "重新校准需要升级0.10.11，才能一次采集并更新左右当前零位；已有沿用功能仍可使用。" : !neutralConfirmed
               ? "站稳保持双髋中立位，勾选穿戴确认后即可写入零位。" : "可以校准：将当前双髋位置写为人体角度0°。";
   const legacyThresholdSelected=assistConfig?.strategyId===AssistStrategy.ANGLE_THRESHOLD && !hasPulseAssist;
-  const canStart = connected && !operation && system?.state === 0x01 && !legacyThresholdSelected &&
+  const canStart = connected && !operation && system?.state === 0x01 && !legacyThresholdSelected && assistDraftSaved &&
+    (!adaptiveSelected || (hasAdaptive && (assistConfig?.requestedExecutionState !== AssistExecutionState.ACTIVE ||
+      (adaptiveBenchAvailable && adaptiveBenchBaseCompatible)))) &&
     stage7InfoAccepted && Boolean(systemFlags?.readyToStart) && bothJointsValid && factoryMappingConfirmed &&
     (!humanWornMode || humanBaseCompatible);
   // STOP 在任何已连接状态都可用。这样即使 START 的 ACK 和状态 Notify
@@ -3006,14 +3283,20 @@ export default function ExoConsolePage() {
         ? `系统当前为 ${system?.stateName ?? "未知"}，归零和 START 需要 IDLE。`
         : legacyThresholdSelected
           ? "设备仍使用旧持续阈值策略；升级0.10.10并读回事件脉冲参数后才能START。"
+        : !assistDraftSaved
+          ? "助力草稿尚未保存并读回，START锁定，避免启动设备上原有策略。"
+        : adaptiveSelected && (!hasAdaptive || (assistConfig?.requestedExecutionState === AssistExecutionState.ACTIVE &&
+            (!adaptiveBenchAvailable || !adaptiveBenchBaseCompatible)))
+          ? "AFO助力尚未就绪，请确认固件支持并恢复产品基础配置。"
         : !bothFeedbackReady
           ? "等待左右电机主动反馈在线；当前不能用无效反馈归零。"
           : !factoryMappingConfirmed
-            ? "先完成本次左右腿电机与屈曲方向核对。"
+            ? "等待设备读回已保存的出厂方向；首次使用才需要标定。"
           : humanWornMode && !humanBaseCompatible
             ? "人体穿戴模式需要恢复并读回低阻尼产品配置。"
           : !bothJointsValid
-              ? neutralConfirmed ? "可以执行归零；双侧零位都生效后 START 才会解锁。" : "请在设置中核对当前中立位并保存双髋软件零位。"
+              ? hasPersistentCalibration && savedPairExists ? savedZeroReadiness
+                : neutralConfirmed ? "可以执行归零；双侧零位都生效后 START 才会解锁。" : "请在设置中核对当前中立位并保存双髋软件零位。"
               : systemFlags?.readyToStart
                 ? "归零和关节状态有效，START 已就绪。"
                 : `等待系统可启动；当前阻止原因 ${startBlockReasonDisplay(
@@ -3160,9 +3443,24 @@ export default function ExoConsolePage() {
             <button className="exo-button secondary" disabled={!connected || !stage7InfoAccepted || !(info && (info.capabilities & Capability.FEEDBACK_RECOVERY)) || Boolean(operation)} onClick={() => void runOperation("读取CAN诊断", async () => { await queryCanStatus(); })}>读取CAN诊断</button>
             <button className="exo-button primary" disabled={!connected || !stage7InfoAccepted || !canStatus?.restoreAllowed || system?.state !== 1 || Boolean(operation) || canStatus.motorFlags.every((flags) => (flags & 2) !== 0)} onClick={() => void runOperation("恢复电机反馈", restoreFeedback)}>恢复电机反馈</button>
           </div>
-          {feedbackRestoreNotice && <p role="status">{canStatus?.motorFlags.every((flags) => (flags & 2) !== 0) ? "左右电机已收到新反馈；请确认出厂方向，再执行本次穿戴零位校准。" : feedbackRestoreNotice}</p>}
+          {feedbackRestoreNotice && <p role="status">{canStatus?.motorFlags.every((flags) => (flags & 2) !== 0) ? "左右电机已收到新反馈；已保存的方向和零位继续有效，请查看设置中的恢复状态。" : feedbackRestoreNotice}</p>}
           <p>仅请求状态上报，真实在线后才开放校准；恢复不会使能或启动电机。</p>
         </section>}
+        {supportsBoardSensors(info) && (activePanel === "connection" || activePanel === "settings" || activePanel === "live") &&
+          <section className="exo-card" aria-label="板载IMU与姿态">
+            <p className="exo-kicker">板载传感器 · 只读快照</p>
+            <h2>IMU与姿态</h2>
+            <p>姿态为主控板方向，不能代替左右髋电机角度。上电静置约2秒完成陀螺仪偏置估计；这不会改变已保存的穿戴零位。</p>
+            <div className="exo-data-grid compact">
+              {["横滚 / 俯仰 / 航向（°）", "加速度 X / Y / Z（g）", "角速度 X / Y / Z（°/s）", "磁场 X / Y / Z（μT）"].map((label, page) => {
+                const s = boardSensors[page];
+                return <div key={page}><span>{label}</span><b>{s?.valid ? s.values.map(n => n.toFixed(2)).join(" / ") : "—"}</b>
+                  <small>{!s ? "尚未读取" : !s.configured ? "未初始化" : !s.valid ? "等待有效数据" : `读取时数据年龄 ${s.ageMs} ms`}</small></div>;
+              })}
+            </div>
+            <p>{boardReadAt ? `最近读取：${boardReadAt}` : "尚未读取"}；{boardSensors[0]?.gyroCalibrated ? "陀螺仪偏置已估计" : "等待静置估计"}；{boardSensors[0]?.magFused ? "磁场参与航向融合" : "当前未使用磁场修正航向"}。</p>
+            <button className="exo-button secondary" disabled={!connected || !stage7InfoAccepted || Boolean(operation)} onClick={() => void runOperation("读取板载传感器", queryBoardSensors)}>读取IMU与姿态</button>
+          </section>}
         <section className="exo-panel" hidden={activePanel !== "connection"} aria-labelledby="exo-nav-connection">
           <section className="exo-hero exo-card">
         <div>
@@ -3218,7 +3516,7 @@ export default function ExoConsolePage() {
           </p>
         </div>
       </section>
-          <div className="exo-setup-flow"><div><b>01</b><strong>蓝牙连接</strong><span>读取设备当前状态</span></div><div><b>02</b><strong>穿戴校准</strong><span>核对双腿与中立位</span></div><div><b>03</b><strong>配置助力</strong><span>从观察模式开始</span></div></div>
+          <div className="exo-setup-flow"><div><b>01</b><strong>蓝牙连接</strong><span>读取设备当前状态</span></div><div><b>02</b><strong>穿戴校准</strong><span>核对双腿与中立位</span></div><div><b>03</b><strong>配置助力</strong><span>选择模式并调节等级</span></div></div>
           <details className="exo-advanced"><summary>设备信息与连接诊断</summary><p className="exo-operation-note">支持固件 {COMPATIBLE_FIRMWARE_VERSIONS.join(" / ")} · 推荐 {PREFERRED_FIRMWARE_VERSION}</p>
             <div className="exo-overview-grid"><article className="exo-card exo-device-card">
           <div className="exo-card-heading">
@@ -3264,7 +3562,10 @@ export default function ExoConsolePage() {
               <h2>出厂配置</h2><p>标定前抬腿为正</p></div>
               <span className={`exo-state-chip ${leftMappingConfirmed && rightMappingConfirmed ? "good" : "muted"}`}>
                 {hasDirectionTeaching && leftMappingConfirmed && rightMappingConfirmed ? "出厂方向已读回" : directionTeaching ? "等待手动前抬" : "先方向，后零位"}</span></div>
-            <p>双腿保持中立位，先记录一侧静止基准。手动向前抬这一条腿约5～15°并停稳，再确认方向；另一腿保持原位。左右分别完成后，回到中立位校准零位。</p>
+            <p>已保存的出厂方向开机自动沿用，不需要每次标定。以下操作仅用于首次标定或调整安装后重新标定。</p>
+            <p role="status">左侧：{leftMappingConfirmed ? "出厂方向已保存，默认沿用" : "等待方向读回"}；右侧：{rightMappingConfirmed ? "出厂方向已保存，默认沿用" : "等待方向读回"}。</p>
+            <details className="exo-advanced"><summary>需要时重新标定前抬方向</summary>
+            <p>双腿保持中立位，先记录一侧静止基准。手动向前抬这一条腿约5～15°并保持位置，再确认方向；另一侧允许随动，只判断所选腿的前抬方向。允许轻微抖动，点击后短暂保持姿态以供采样。左右分别完成后，回到中立位校准零位。</p>
             {!hasDirectionTeaching && <p className="exo-inline-warning">{connected ? "当前固件仅支持读回安装方向。升级至0.10.4后可写入方向标定，角度、步态与助力会统一采用前抬为正。" : "连接外骨骼后按设备能力启用方向标定。"}</p>}
             <div className="exo-wear-joints">
               {([
@@ -3273,39 +3574,63 @@ export default function ExoConsolePage() {
               ] as const).map(([side, label, calibration, confirmed]) => <article key={side}
                 className={`exo-wear-joint ${side === Side.LEFT ? "left" : "right"}`}>
                 <span>{label} · 前抬正方向</span>
-                <strong className="exo-direction-result">{hasDirectionTeaching && confirmed ? "出厂方向已保存" : directionTeaching?.side === side ? "请前抬并停稳" : "等待标定"}</strong>
-                <small>电机连续原始角：{calibration?.rawPositionDegrees != null ? `${calibration.rawPositionDegrees.toFixed(2)}°` : "—"}</small>
+                <strong className="exo-direction-result">{hasDirectionTeaching && confirmed ? "出厂方向已保存" : directionTeaching?.side === side ? "请保持前抬位置" : "等待标定"}</strong>
+                {(directionTeaching?.side !== side || !supportsDirectionPreview(info)) && <small>电机连续原始角：{calibration?.rawPositionDegrees != null ? `${calibration.rawPositionDegrees.toFixed(2)}°` : "—"}</small>}
                 <small>当前前抬映射：{calibration?.direction === 1 ? "原始角增加 → 人体为正" : calibration?.direction === 2 ? "原始角减少 → 人体为正" : "方向未知"}</small>
+                {directionTeaching?.side === side && (() => {
+                  const delta = directionLive?.sample.side === side ? directionPreviewDegrees(
+                    directionLive.sample, side, directionTeaching.token, directionLive.at, directionLiveNow) : null;
+                  return <div role="status" aria-label="前抬实时位移">
+                    <strong>相对本次基准位移：{delta === null ? "等待新鲜反馈" : `约 ${Math.abs(delta).toFixed(1)}°`}</strong>
+                    <small>实时原始角：{delta === null ? "—" : `${directionLive!.sample.rawPositionDegrees!.toFixed(2)}°`} · 目标刷新5次/秒</small>
+                    <small>{delta === null ? "反馈过期时不沿用旧角度。" : Math.abs(delta) < 1 ? "位移尚小，请继续向前抬所选腿。" : "已检测到位移；请确认是向前抬，保持当前位置后点击确认。"}</small>
+                    <small>{supportsDirectionPreview(info) ? `主控记录的基准：${directionLive?.sample.baselineDegrees?.toFixed(2) ?? "—"}°；与确认方向使用同一基准。另一侧允许随动。` : "旧固件不提供实际标定基准，请升级后查看位移；上方原始角仍实时更新。"}</small>
+                    {directionLiveError && <small role="alert">{directionLiveError}</small>}
+                  </div>;
+                })()}
                 <button className="exo-button secondary" disabled={!canTeachDirection || directionTeaching !== null}
-                  onClick={() => void runOperation(`${label}记录方向基准`, () => beginDirectionTeaching(side))}>记录{label}静止基准</button>
+                  onClick={() => void runDirectionTeaching(`${label}记录方向基准`, () => beginDirectionTeaching(side))}>记录{label}静止基准</button>
                 {directionTeaching?.side === side && <button className="exo-button primary" disabled={!canTeachDirection}
-                  onClick={() => void runOperation(`${label}确认前抬方向`, finishDirectionTeaching)}>确认前抬方向</button>}
+                  onClick={() => void runDirectionTeaching(`${label}确认前抬方向`, finishDirectionTeaching)}>
+                    {operation === `${label}确认前抬方向` ? "正在确认并读回…" : "确认前抬方向"}</button>}
               </article>)}
             </div>
-            {directionTeachNotice && <p className="exo-wear-readiness" role="status">{directionTeachNotice}</p>}
+            {(operation.includes("方向基准") || operation.includes("前抬方向") || operation === "取消方向标定") &&
+              <p className="exo-wear-readiness" role="status">正在{operation}，等待主控返回结果…</p>}
+            {directionTeachError && <div className="exo-alert error" role="alert" aria-label="方向标定未完成">
+              <strong>方向标定未完成</strong><span>{directionTeachError}</span>
+            </div>}
+            {!directionTeachError && directionTeachNotice && <p className="exo-wear-readiness" role="status">{directionTeachNotice}</p>}
             {directionTeaching && <button className="exo-button ghost" disabled={!connected || Boolean(operation) || system?.state !== 0x01}
-              onClick={() => void runOperation("取消方向标定", cancelDirectionTeaching)}>取消方向标定</button>}
+              onClick={() => void runDirectionTeaching("取消方向标定", cancelDirectionTeaching)}>取消方向标定</button>}
             <p className="exo-wear-footnote">方向仅在待机且双电机REST时标定，保存到主控NVS，断电后保留。开始标定会撤销该侧当前方向有效位和旧零位；角度、速度、力矩统一使用前抬为正。更换电机或调整安装后请重新标定。</p>
+            </details>
           </section>
           <section className="exo-card exo-wear-calibration" aria-label="穿戴后零位校准">
             <div className="exo-card-heading">
-              <div><p className="exo-kicker">穿戴后确认 · 沿用上次或重新校准</p><h2>穿戴后零位校准</h2></div>
-              <span className={`exo-state-chip ${system?.state === 0x05 ? "warn" : lastWearCalibrationAt && bothZerosReadBack ? "good" : "muted"}`}>
-                {!connected ? "尚未连接" : system?.state === 0x05 ? "故障锁定" : !bothFeedbackReady ? "等待有效反馈" : lastWearCalibrationAt && bothZerosReadBack ? "本次零位已确认" : bothZerosReadBack ? "设备已有零位" : "等待确认零位"}
+              <div><p className="exo-kicker">标定默认保留 · 需要时重新校准</p><h2>穿戴后零位校准</h2></div>
+              <span className={`exo-state-chip ${system?.state === 0x05 ? "warn" : bothZerosReadBack ? "good" : "muted"}`}>
+                {!connected ? "尚未连接" : system?.state === 0x05 ? "故障锁定" : hasPersistentCalibration ? savedZeroReadiness : !bothFeedbackReady ? "等待有效反馈" : lastWearCalibrationAt && bothZerosReadBack ? "本次零位已确认" : bothZerosReadBack ? "设备已有零位" : "等待确认零位"}
               </span>
             </div>
-            <p className="exo-wear-description">穿戴完成后站稳，双髋回到中立位并保持静止。可以沿用已保存的上次零位，也可以重新把当前位置校准为人体角度 0°。</p>
-            <p className="exo-note">选择重新校准后，一次采集左右当前位置，同时写为本次中立位；读回两侧人体角均接近0°后才确认成功。校准不转动电机，请在读回完成前保持静止。</p>
+            <p className="exo-wear-description">出厂方向和已保存零位默认沿用，不需要每次掉电重新标定。只有首次使用、调整安装或确需改变零位时，才选择重新校准。</p>
+            <p className="exo-note">重新校准时，站稳并保持双髋中立静止，一次采集左右位置；新固件会同时保存，读回后确认成功。校准不转动电机。</p>
             <fieldset className="exo-zero-choice" disabled={Boolean(operation)}>
               <legend>本次零位选择</legend>
               <label><input type="radio" name="wear-zero-choice" checked={wearZeroChoice === "reuse"}
                 disabled={!hasSavedWearZero || !savedPairExists} onChange={() => {
-                  wearZeroChoiceChosenRef.current = true; setWearZeroChoice("reuse"); setNeutralConfirmed(false);
-                }}/><span>沿用上次零位</span></label>
+                  wearZeroChoiceChosenRef.current = true; setWearZeroChoice("reuse"); setNeutralConfirmed(false); setWearZeroNotice("");
+                }}/><span>{hasPersistentCalibration ? "默认沿用已保存零位" : "沿用上次零位"}</span></label>
               <label><input type="radio" name="wear-zero-choice" checked={wearZeroChoice === "new"}
-                onChange={() => {wearZeroChoiceChosenRef.current = true; setWearZeroChoice("new"); setNeutralConfirmed(false);}}/>
+                onChange={() => {wearZeroChoiceChosenRef.current = true; setWearZeroChoice("new"); setNeutralConfirmed(false); setWearZeroNotice("");}}/>
                 <span>重新校准</span></label>
             </fieldset>
+            {wearZeroChoice === "new" && <div className="exo-recalibration-status" role="status" aria-live="polite">
+              <strong>{canCaptureBothZeros ? "已选择重新校准，可以采集双髋零位" : "已选择重新校准，请先检查下列条件"}</strong>
+              <p>{wearCalibrationBlockText}</p>
+              {wearZeroNotice && <p>最近操作：{wearZeroNotice}</p>}
+              {!canCaptureBothZeros && <small>选择此项不会采集零位。下方“检查校准条件”只刷新状态；条件满足并勾选中立静止确认后，才可校准并保存。</small>}
+            </div>}
             {!hasSavedWearZero && <p className="exo-operation-note">{connected
               ? "当前固件只保留本次RAM零位。升级到0.10.9后，可以保存并选择沿用上次零位；之前未保存的偏置无法从主控恢复。"
               : "连接后读取主控保存的上次零位；保存与沿用功能需要固件0.10.9。"}</p>}
@@ -3313,8 +3638,13 @@ export default function ExoConsolePage() {
               {([['左髋',leftSavedZero],['右髋',rightSavedZero]] as const).map(([label,saved]) =>
                 <p key={label}>{label} · 上次电机零位：{saved?.savedZeroDegrees != null ? `${saved.savedZeroDegrees.toFixed(2)}°` : "尚未保存"}
                   {' '}· 沿用后人体角：{saved?.previewJointDegrees != null ? `${saved.previewJointDegrees.toFixed(2)}°` : "等待有效预览"}</p>)}
-              <p>{!leftSavedZero || !rightSavedZero ? "等待候选读回" : savedZeroReasonDescriptions[leftSavedZero.reason || rightSavedZero.reason]}。
-                沿用保留原偏置，不把当前位置强制改成0°；任一侧相差超过5°时请重新校准。</p>
+              <p>{hasPersistentCalibration ? savedZeroReadiness : !leftSavedZero || !rightSavedZero ? "等待保存记录读回" : savedZeroReasonDescriptions[leftSavedZero.reason || rightSavedZero.reason]}。
+                {hasPersistentCalibration ? "沿用保留原偏置，不把当前位置强制改成0°；腿不在中立位也不代表标定丢失。" : "旧固件手动沿用要求双髋回到原中立位附近（±5°）。"}</p>
+            </div>}
+            {!bothFeedbackReady && connected && <div className="exo-operation-note" role="status">
+              <p>电机反馈尚未就绪；已保存的方向和零位仍保留。当前角度显示“—”不代表需要重新标定。</p>
+              <button className="exo-button secondary" disabled={!stage7InfoAccepted || !canStatus?.restoreAllowed || system?.state!==1 || Boolean(operation)}
+                onClick={()=>void runOperation("恢复电机反馈",restoreFeedback)}>恢复电机反馈（不启动）</button>
             </div>}
             <div className="exo-wear-joints">
               {([
@@ -3324,7 +3654,7 @@ export default function ExoConsolePage() {
                 <article key={side} className={`exo-wear-joint ${side === Side.LEFT ? "left" : "right"}`}>
                   <span>{label} · 当前人体角度</span>
                   <div className="exo-wear-angle"><strong>{joint?.decodedJointFlags.jointValid ? joint.positionDegrees.toFixed(2) : "—"}</strong><b>°</b></div>
-                  <small>零位偏置：{calibration?.softwareZeroDegrees !== null && calibration?.softwareZeroDegrees !== undefined ? `${calibration.softwareZeroDegrees.toFixed(2)}°` : "尚未读取"}</small>
+                  <small>零位偏置：{calibration?.softwareZeroDegrees != null ? `${calibration.softwareZeroDegrees.toFixed(2)}°（已生效）` : (side===Side.LEFT?leftSavedZero:rightSavedZero)?.savedZeroDegrees != null ? `${(side===Side.LEFT?leftSavedZero:rightSavedZero)!.savedZeroDegrees!.toFixed(2)}°（已保存，等待反馈恢复）` : "尚未保存"}</small>
                   <small className={joint?.decodedJointFlags.online && joint.decodedJointFlags.feedbackValid ? "" : "exo-feedback-invalid"}>
                     {!joint ? "尚未读取电机反馈" : joint.decodedJointFlags.online && joint.decodedJointFlags.feedbackValid ? "电机反馈在线" : "电机反馈无效或已离线"}
                     {joint ? ` · 反馈年龄 ${joint.feedbackAgeMs === 65535 ? "≥65.5秒/未知" : `${(joint.feedbackAgeMs / 1000).toFixed(3)} 秒`}` : ""}
@@ -3333,24 +3663,26 @@ export default function ExoConsolePage() {
                   {hasCalibrationStatus && !hasDirectionTeaching && <label className="exo-confirm-row"><input type="checkbox" checked={confirmed}
                     disabled={!canCheck} onChange={(event) => {setConfirmed(event.target.checked); setNeutralConfirmed(false);}}/>
                     <span>已核对{side === Side.LEFT ? "左" : "右"}腿对应与屈曲方向</span></label>}
-                  {hasDirectionTeaching && <small className="exo-confirm-row">{confirmed ? "✓ 已读回有效出厂方向" : "请先在上方完成这条腿的出厂方向标定"}</small>}
+                  {hasDirectionTeaching && <small className="exo-confirm-row exo-direction-confirmation">{confirmed ? "✓ 已读回有效出厂方向" : "请先在上方完成这条腿的出厂方向标定"}</small>}
                 </article>
               ))}
             </div>
-            <label className="exo-confirm-row exo-wear-confirm"><input type="checkbox" checked={neutralConfirmed}
+            {(!hasPersistentCalibration || wearZeroChoice==="new") && <label className="exo-confirm-row exo-wear-confirm"><input type="checkbox" checked={neutralConfirmed}
               disabled={!canConfirmNeutral} onChange={(event) => setNeutralConfirmed(event.target.checked)}/>
-              <span>我已确认穿戴完成，双髋处于中立位并保持静止</span></label>
-            {hasSavedWearZero && wearZeroChoice === "new" && <label className="exo-confirm-row">
+              <span>我已确认穿戴完成，双髋处于中立位并保持静止</span></label>}
+            {hasSavedWearZero && !hasPersistentCalibration && wearZeroChoice === "new" && <label className="exo-confirm-row">
               <input type="checkbox" checked={saveWearZeroForReuse} disabled={Boolean(operation)}
                 onChange={(event) => setSaveWearZeroForReuse(event.target.checked)}/>
               <span>保存本次零位供下次沿用（断电保留）；不勾选只用于本次，旧候选保留</span>
             </label>}
             <div className="exo-wear-actions">
-              <button className="exo-button primary" disabled={wearZeroChoice === "reuse" ? !canReuseBothZeros : !canCaptureBothZeros}
-                onClick={() => void runOperation(wearZeroChoice === "reuse" ? "沿用上次零位" : "穿戴零位校准",
-                  wearZeroChoice === "reuse" ? reuseSavedZeros : captureBothZeros)}>
+              <button className="exo-button primary" disabled={wearZeroChoice === "reuse" ? hasPersistentCalibration || !canReuseBothZeros : !connected || !stage7InfoAccepted || Boolean(operation)}
+                onClick={() => void runOperation(wearZeroChoice === "reuse" ? "沿用上次零位" : canCaptureBothZeros ? "穿戴零位校准" : "检查校准条件",
+                  wearZeroChoice === "reuse" ? reuseSavedZeros : canCaptureBothZeros ? captureBothZeros : checkWearCalibrationConditions)}>
                 {operation === "穿戴零位校准" || operation === "沿用上次零位" ? "正在写入并读回零位…"
-                  : wearZeroChoice === "reuse" ? "确认并沿用上次零位" : "校准并写入双髋零位"}
+                  : operation === "检查校准条件" ? "正在检查校准条件…"
+                  : wearZeroChoice === "reuse" ? hasPersistentCalibration ? "自动沿用，无需重复确认" : "确认并沿用上次零位"
+                    : !canCaptureBothZeros ? "检查校准条件（不写入零位）" : hasPersistentCalibration ? "校准并保存双髋零位" : "校准并写入双髋零位"}
               </button>
               <button className="exo-button ghost" disabled={!connected || Boolean(operation)}
                 onClick={() => void runOperation("读回双髋零位", async () => {
@@ -3361,15 +3693,15 @@ export default function ExoConsolePage() {
             </div>
             {hasSavedWearZero && savedPairExists && <button className="exo-button ghost" disabled={!canConfirmNeutral}
               onClick={() => void runOperation("忘记上次零位", forgetSavedZeros)}>忘记已保存零位</button>}
-            <p className="exo-wear-readiness">{wearZeroChoice === "reuse" && canConfirmNeutral
+            <p className="exo-wear-readiness">{hasPersistentCalibration && wearZeroChoice==="reuse" ? savedZeroReadiness : wearZeroChoice === "reuse" && canConfirmNeutral
               ? !savedPairReuseReady ? savedZeroReasonDescriptions[leftSavedZero?.reason || rightSavedZero?.reason || 1]
                 : neutralConfirmed ? "可以沿用：恢复上次偏置并核对本次双髋读回，不启动电机。" : "站稳保持中立静止，勾选本次穿戴确认后即可沿用。"
               : wearCalibrationBlockText}</p>
-            {wearZeroNotice && <p className="exo-wear-readiness" role="status">{wearZeroNotice}</p>}
+            {wearZeroNotice && wearZeroChoice !== "new" && <p className="exo-wear-readiness" role="status">{wearZeroNotice}</p>}
             {lastWearCalibrationAt && bothZerosReadBack && <p className="exo-wear-success" role="status">
               {lastWearCalibrationAt} 双髋软件零位已确认并读回。请检查上方左右人体髋角是否符合中立位。
             </p>}
-            <p className="exo-wear-footnote">本次生效零位在RAM；已保存的上次零位在主控NVS，重启后需选择沿用并确认当前穿戴姿态，或重新校准。调整安装、更换电机或机械置零后请重新校准。上述操作不启动电机、不修改电机机械零位。</p>
+            <p className="exo-wear-footnote">已保存的零位在主控NVS，断电保留。0.11.9起，上电收到有效电机反馈后自动恢复，无需每次确认或校准；旧固件仍需手动沿用。调整安装、更换电机或机械置零后才需重新校准。这些操作不启动电机。</p>
           </section>
           <details className="exo-advanced"><summary>左右电机详情与穿戴调试选项</summary>
           <section className="exo-card exo-calibration-panel" aria-label="出厂配置与穿戴零位">
@@ -3426,7 +3758,7 @@ export default function ExoConsolePage() {
         <p className="exo-operation-note">
           {hasCalibrationStatus && !factoryMappingConfirmed ? "先核对左右腿，再确认中立位并保存零位。" : "零位状态由设备读回确认。"}
           {humanWornMode && !humanBaseCompatible && " 当前基础配置尚未读回为低阻尼产品配置，START保持锁定。"}
-          真人先做SHADOW观察，实际附加助力为0；通过后再分级验证ACTIVE。
+          SHADOW的新策略附加助力为0，基础控制仍可能产生阻尼。AFO ACTIVE入口以本次固件和策略身份读回为准。
         </p>
       </section>
           </details>
@@ -3448,26 +3780,31 @@ export default function ExoConsolePage() {
 
 <article className="exo-card exo-motion-plan">
   <div className="exo-card-heading"><div><p className="exo-kicker">左右独立调节</p><h2>助力等级</h2></div>
-    <span className={`exo-state-chip ${assistFlags?.realOutputEnabled ? "warn" : "muted"}`}>{!assistConfig ? "助力状态未读取" : assistFlags?.realOutputEnabled ? "助力输出中" : "附加助力关闭"}</span></div>
-  <p className="exo-operation-note">在待机时设置，保存并读回后单独启动。人体先主动运动，主控按所选策略提供助力。</p>
+    <span className={`exo-state-chip ${assistFlags?.realOutputEnabled ? "warn" : "muted"}`}>{afoStatus?.label ?? (!assistConfig ? "助力状态未读取" : assistFlags?.realOutputEnabled ? "助力输出中" : "附加助力关闭")}</span></div>
+  <p className="exo-operation-note">选择助力模式，调节左右等级和最大力矩，保存后点击启动。</p>
   <div className="exo-motion-controls"><label><span>助力策略</span>
     <select aria-label="助力策略" value={assistConfigDraft.strategyId}
       disabled={Boolean(operation) || (connected && system?.state !== 0x01)}
       onChange={(event) => {
         const strategy = Number(event.target.value);
         setAssistConfigDraft((draft) => ({...draft, strategyId: String(strategy),
-          selectedMode: strategy === 4 ? AssistMode.ANGLE_THRESHOLD : strategy === 2 ? AssistMode.ACTIVE_PHASE : AssistMode.TRANSPARENT,
-          profileId: strategy === 2 ? "1" : "0", executionState: AssistExecutionState.SHADOW}));
-        // 切回相位曲线时收回草稿范围，不隐式修改设备已保存配置。
-        if (strategy !== AssistStrategy.ANGLE_THRESHOLD && Number(maximumAssistDraft) > 0.5)
-          setMaximumAssistDraft("0.500");
+          selectedMode: strategy === 5 ? AssistMode.ADAPTIVE_GAUSSIAN : strategy === 4 ? AssistMode.ANGLE_THRESHOLD : strategy === 2 ? AssistMode.ACTIVE_PHASE : AssistMode.TRANSPARENT,
+          profileId: strategy === 2 ? "1" : "0", executionState: strategy === 5 ? AssistExecutionState.ACTIVE : AssistExecutionState.SHADOW}));
+        // 按目标策略限制草稿；常规AFO保留合法的0–5 N·m设置。
+        setMaximumAssistDraft((draft) => assistMaximumDraftForStrategy(draft, strategy,
+          info ? adaptiveBenchIdentity() : undefined, assistTorqueLimit?.hardMaximumNm ?? null));
       }}>
       <option value="1">透明观察 · 不施加附加助力</option>
       <option value="2">步态相位曲线助力</option>
       <option value="4" disabled={connected && !hasPulseAssist}>摆腿事件脉冲助力 · 单向前抬</option>
+      <option value="5" disabled={connected && !hasAdaptive}>AFO双高斯助力</option>
       {Number(assistConfigDraft.strategyId) === 3 && <option value="3">按需辅助 · 尚未实现</option>}
     </select></label></div>
   <p className="exo-motion-note">设备已保存策略：{assistConfig?.strategyName ?? "尚未读取"}。切换选项只修改草稿。</p>
+  {afoStatus && <p className="exo-motion-note" role="status">{afoStatus.description}</p>}
+  {adaptiveStrategyDraft && <p className="exo-motion-note">左右髋分别跟随步态相位输出助力，沿用下方等级、力矩上限和启动/停止。
+    {connected && !supportsAdaptiveAssistMode(info ?? undefined) && " 当前设备为旧版AFO固件；升级0.11.8后可直接使用此助力模式。"}
+  </p>}
   {angleStrategyDraft && <div className="exo-assist-maximum">
     <label><span>前抬角度阈值（°）</span><div>
       <input aria-label="前抬角度阈值（°）" type="number" min="1" max="60" step="0.01"
@@ -3529,10 +3866,10 @@ export default function ExoConsolePage() {
         onChange={(event) => setMaximumAssistDraft(event.target.value)} /><b>N·m</b></div></label>
     <p>设备已保存：<strong>{savedMaximumNm !== null ? `${savedMaximumNm.toFixed(3)} N·m` : "尚未读取"}</strong>
       {assistTorqueLimit?.activeValid && ` · 本轮锁存 ${assistTorqueLimit.activeMaximumNm?.toFixed(3)} N·m`}</p>
-    <small>{angleStrategyDraft ? "锁存上限约束下一脉冲申请峰值；实际力矩按单次sin²曲线升降" : "最大值 × 单侧等级 = 该侧峰值附加力矩；相位曲线决定正负方向"}，不含基础阻尼。当前工程上限 {maximumHardNm.toFixed(3)} N·m。</small>
+    <small>{adaptiveStrategyDraft ? "最大力矩 × 单侧等级为该侧助力上限，双高斯曲线随步态相位输出；不含基础阻尼。" : angleStrategyDraft ? "锁存上限约束下一脉冲申请峰值；实际力矩按单次sin²曲线升降，不含基础阻尼。" : "最大值 × 单侧等级 = 该侧峰值附加力矩；相位曲线决定正负方向，不含基础阻尼。"}当前工程上限 {maximumHardNm.toFixed(3)} N·m。</small>
     {angleStrategyDraft && (!info || !hasPulseAssist) && <small role="status">事件脉冲需要0.10.10起的固件；15 N·m/3秒范围需要0.10.12起，20 N·m/s需要0.10.13。当前仅为草稿，尚未写入设备。</small>}
     {!maximumDraftAllowed && <small role="status">草稿超出当前设备或策略范围，尚未写入，保存已锁定。</small>}
-    {!hasAssistTorqueLimit && <small>{angleStrategyDraft ? "当前力矩仅为草稿，尚未写入设备。" : info ? "当前固件的曲线峰值固定；0.10.3固件支持写入力矩上限。" : "连接0.10.3后可设置并读回，当前输入未生效。"}</small>}
+    {!hasAssistTorqueLimit && <small>{adaptiveStrategyDraft ? "连接0.11.8固件后可设置助力上限；当前输入未生效。" : angleStrategyDraft ? "当前力矩仅为草稿，尚未写入设备。" : info ? "当前固件的曲线峰值固定；0.10.3固件支持写入力矩上限。" : "连接0.10.3后可设置并读回，当前输入未生效。"}</small>}
   </div>
   <div className="exo-assist-level-grid">{([
     ["左髋助力等级", "leftLevelPercent", "LEFT"], ["右髋助力等级", "rightLevelPercent", "RIGHT"],
@@ -3550,15 +3887,16 @@ export default function ExoConsolePage() {
   <div className="exo-motion-controls"><label><span>运行方式</span><select aria-label="运行方式" value={assistConfigDraft.executionState}
     disabled={!canEditAssistConfiguration && !(angleStrategyDraft && !connected && !operation)} onChange={(event) => setAssistConfigDraft((draft) => ({...draft, executionState: Number(event.target.value)}))}>
     <option value={AssistExecutionState.DISABLED}>关闭附加助力</option><option value={AssistExecutionState.SHADOW}>观察模式 · 仅计算建议</option>
-    <option value={AssistExecutionState.ACTIVE} disabled={!hasTelemetryStream || !activePhaseBaseCompatible || (angleStrategyDraft && !hasPulseAssist) || ![2,4].includes(Number(assistConfigDraft.strategyId))}>真实助力 · ACTIVE</option></select></label>
-    <button className="exo-button primary" disabled={!canEditAssistConfiguration || !assistActiveDraftAllowed || !maximumDraftAllowed || (angleStrategyDraft && !hasPulseAssist)}
+    <option value={AssistExecutionState.ACTIVE} disabled={!hasTelemetryStream || !activePhaseBaseCompatible || (angleStrategyDraft && !hasPulseAssist) ||
+      (![2,4].includes(Number(assistConfigDraft.strategyId)) && !(adaptiveStrategyDraft && adaptiveBenchAvailable && adaptiveBenchBaseCompatible))}>真实助力 · ACTIVE</option></select></label>
+    <button className="exo-button primary" disabled={!canEditAssistConfiguration || !assistActiveDraftAllowed || !maximumDraftAllowed || (angleStrategyDraft && !hasPulseAssist) || (adaptiveStrategyDraft && !hasAdaptive)}
       onClick={() => void runOperation("保存产品助力等级", async () => {
         const pulse=angleStrategyDraft?requestedPulse():null;
         if(pulse && pulse.timing.peakNm>Number(maximumAssistDraft)) throw new Error("申请峰值不能超过START力矩上限");
         await writeAssistConfig(assistConfigDraft);
         if(pulse) await writePulseConfiguration(pulse);
       })}>保存助力设置并读回</button></div>
-  <p className="exo-motion-note">观察模式的实际附加助力为0。当前助力曲线仍在验收，真人调试从观察模式开始，再分级验证真实助力。</p>
+  <p className="exo-motion-note">真实助力在启动后生效；保存设置不会自动启动。观察模式仅用于调试。</p>
 </article>
 <article className="exo-card exo-motion-start">
   <div className="exo-card-heading"><div><p className="exo-kicker">穿戴校准后执行</p><h2>开始与停止</h2></div>
@@ -3567,6 +3905,10 @@ export default function ExoConsolePage() {
   <p className="exo-operation-note">{actionReadinessText}</p>
   <p className="exo-operation-note">启动与停止均等待主控确认最终状态。BLE断开不会自动停止外骨骼。</p>
 </article>
+<details className="exo-advanced"><summary>AFO工程调试与日志（可选）</summary>
+{assistConfig?.strategyVersion===5 && <button className="exo-button secondary" disabled={!connected || Boolean(operation)} onClick={()=>void runOperation("准备旧版试验参数",prepareAdaptiveTrialProfile)}>准备旧版试验参数</button>}
+<AdaptiveWorkbench onChartView={receiveAdaptiveChart} />
+</details>
 
           <details className="exo-advanced"><summary>高级助力参数与设备门禁</summary><article className="exo-card exo-assist-card">
           <div className="exo-card-heading">
@@ -3640,7 +3982,7 @@ export default function ExoConsolePage() {
                       ),
                     }))}
                   >
-                    {[AssistMode.TRANSPARENT, AssistMode.ACTIVE_PHASE, AssistMode.ASSIST_AS_NEEDED, AssistMode.ANGLE_THRESHOLD]
+                    {[AssistMode.TRANSPARENT, AssistMode.ACTIVE_PHASE, AssistMode.ASSIST_AS_NEEDED, AssistMode.ANGLE_THRESHOLD, AssistMode.ADAPTIVE_GAUSSIAN]
                       .map((mode) => <option key={mode} value={mode}>{assistModeNames[mode]}</option>)}
                   </select>
                 </label>
@@ -3662,7 +4004,8 @@ export default function ExoConsolePage() {
                           value={state}
                           disabled={state === AssistExecutionState.ACTIVE && (
                             !hasTelemetryStream || !activePhaseBaseCompatible ||
-                            (assistConfigDraft.selectedMode !== AssistMode.ACTIVE_PHASE && !(hasPulseAssist && angleStrategyDraft))
+                            (assistConfigDraft.selectedMode !== AssistMode.ACTIVE_PHASE && !(hasPulseAssist && angleStrategyDraft) &&
+                              !(adaptiveStrategyDraft && adaptiveBenchAvailable && adaptiveBenchBaseCompatible))
                           )}
                         >
                           {assistExecutionStateNames[state]}
@@ -3949,6 +4292,12 @@ export default function ExoConsolePage() {
       </section></details>
         </section>
         <section className="exo-panel" hidden={activePanel !== "live"} aria-labelledby="exo-nav-live">
+          <article className="exo-card">
+            <h2>AFO相位与助力方向</h2>
+            <p className="exo-operation-note">这里显示AFO记录的同时间轴对照。USB采集在“运动 → AFO工程调试与日志”中由人工开始，切换栏目后继续采集；也可导入已保存日志查看历史图。下面原有BLE示波器的步态相位来自HIP_EVENT_TBE。</p>
+            {adaptiveChartView ? <AdaptiveDirectionChart {...adaptiveChartView} /> : <p>尚无AFO对照数据。已有采集文件可以直接导入，无需重采。</p>}
+            <button className="exo-button secondary" onClick={() => setActivePanel("motion")}>前往AFO采集与日志导入</button>
+          </article>
           <section className="exo-card exo-telemetry-card">
         <div className="exo-card-heading">
           <div>
@@ -4076,7 +4425,7 @@ export default function ExoConsolePage() {
             <p className="exo-operation-note">
               {telemetryDisplayPaused
                 ? "图表已冻结，但内存采集、序号检查和设备推流仍在继续。"
-                : `横轴为主控时间，显示最近${scopeWindowSeconds}秒；缺帧处断线，完整记录最多保留10000个时刻。`}
+                : `横轴为主控时间，显示最近${scopeWindowSeconds}秒；缺帧处断线，临时图表缓存最多保留10000个时刻。需要保存整段试走请使用下方“开始记录”。`}
               遥测断开只停止数据流，不会向系统状态机发送 STOP。
             </p>
 
@@ -4087,6 +4436,28 @@ export default function ExoConsolePage() {
             </div>
           </>
         )}
+        <WalkRecordingPanel recording={recording}
+          canStart={connected&&hasTelemetryStream&&telemetryCharacteristicReady&&!operation}
+          start={()=>void runOperation("开始行走记录",startWalkRecording)}/>
+        <div className="exo-operation-note" role="status" aria-label="助力配置读回与波形说明">
+          <p>最近读回的设备配置：{assistConfig
+            ? `${assistConfig.strategyName}；请求 ${assistConfig.requestedExecutionStateName}；有效 ${assistConfig.executionStateName}；左 ${assistConfig.leftLevelPercent}% / 右 ${assistConfig.rightLevelPercent}%；最大附加力矩 ${savedMaximumNm === null ? "未读取" : `${savedMaximumNm.toFixed(3)} N·m`}`
+            : "尚未读取，请先连接设备。"}</p>
+          {!connected && <p>设备未连接；保留的波形和配置不能代表当前设备状态。</p>}
+          {assistConfig && !assistConfig.decodedAssistFlags.activeValid && <p>最近读回时助力未启动。关节运动可以产生相位曲线，保存或选择策略不会启动助力。</p>}
+          {assistConfig && (assistConfig.leftLevelPercent===0 || assistConfig.rightLevelPercent===0) &&
+            <p>{assistConfig.leftLevelPercent===0 && "左侧等级为0%，该侧附加助力关闭。"}{assistConfig.rightLevelPercent===0 && "右侧等级为0%，该侧附加助力关闭。"}</p>}
+          <p>下方相位和置信度来自髋角事件估计（HIP_EVENT_TBE）；即使显示正常，也不能证明AFO已经锁相或获准输出。</p>
+          {assistConfig&&<p>助力状态：{assistUnavailableReasonDescriptions[assistConfig.unavailableReason]??assistConfig.unavailableReasonName}</p>}
+          {afoStatuses.map((status,side)=>status&&<p key={side}>
+            {side===0?"左侧":"右侧"}AFO：{afoFaultDescription(status.faults)}。
+            {status.firstPresent&&`本轮首次故障：${afoFaultDescription(status.firstFaults)}；主控时间 ${(status.firstTimestampMs/1000).toFixed(3)} s，角度 ${status.firstPositionDeg??"未知"}°，速度 ${status.firstVelocityDegS??"未知"}°/s，源间隔 ${status.firstSourceIntervalMs} ms。`}
+          </p>)}
+          {adaptiveSelected && info?.firmware.join(".")==="0.11.7" &&
+            <p>当前0.11.7的AFO预设窗口为−20°～20°、角速度绝对值≤60°/s。获准输出后超出窗口会清零并要求重新授权；这两张步态图不显示该保护状态。</p>}
+          <button className="exo-button ghost" disabled={!connected || !hasAssistConfiguration || Boolean(operation)}
+            onClick={()=>void runOperation("读取助力状态",async()=>{await querySystem();await queryAssistConfig();})}>读取助力状态（不启动）</button>
+        </div>
         <TelemetryScope samples={telemetrySamples} windowSeconds={scopeWindowSeconds} rateHz={telemetryStatus?.rateHz ?? telemetryRateHz}
           channelMask={telemetryStatus?.streaming?telemetryStatus.channelMask:telemetryChannelMask} autoScale={scopeAutoScale}
           showLeft={scopeShowLeft} showRight={scopeShowRight} paused={telemetryDisplayPaused} reception={scopeReception}/>
@@ -4102,6 +4473,7 @@ export default function ExoConsolePage() {
             <div>
               <p className="exo-kicker">阶段 9 · 传感快照</p>
               <h2>步态估计</h2>
+              <p className="exo-motion-note">此处为原HIP_EVENT_TBE髋角代理相位，不是AFO相位。新AFO数据请在运动栏目导入日志查看。</p>
             </div>
             <span className={`exo-state-chip ${
               !hasGaitStatus
@@ -4194,6 +4566,11 @@ export default function ExoConsolePage() {
             </>
           )}
         </article>
+        </section>
+        <section className="exo-panel" hidden={activePanel !== "records"}>
+          <WalkRecordingPanel recording={recording}
+            canStart={connected&&hasTelemetryStream&&telemetryCharacteristicReady&&!operation}
+            start={()=>void runOperation("开始行走记录",startWalkRecording)}/>
         </section>
         <GaitHistory hidden={activePanel !== "records"} connected={connected} info={info} system={system}
           left={leftJoint} right={rightJoint} gait={gaitStatus} assist={assistConfig} reference={controlConfig?.selectedReference}

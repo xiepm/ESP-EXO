@@ -72,6 +72,12 @@ esp_err_t exo_controller_process_tick(int64_t now, const exo_assist_result_t *as
     if (stop_during_output) assert(exo_system_request_stop() == EXO_REQUEST_ACCEPTED);
     return fake_output_result;
 }
+esp_err_t exo_controller_process_sensor_tick(int64_t now,
+    const exo_sensor_snapshot_t *sensors, const exo_assist_result_t *assist,
+    uint32_t sensor_seq, uint32_t gait_seq, exo_controller_tick_result_t *result) {
+    assert(sensors != NULL);
+    return exo_controller_process_tick(now, assist, sensor_seq, gait_seq, result);
+}
 bool exo_control_loop_get_snapshot(exo_control_loop_snapshot_t *out) {
     memset(out, 0, sizeof(*out)); out->initialized = out->task_alive = true; return true;
 }

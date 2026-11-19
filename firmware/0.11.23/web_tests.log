@@ -1,0 +1,268 @@
+
+> esp-exo-ble-console@0.1.0 test
+> npm run build && node --test tests/rendered-html.test.mjs tests/exo-ble-protocol.test.mjs tests/exo-telemetry-stream.test.mjs tests/exo-ble-connect.test.mjs tests/exo-log-scroll.test.mjs tests/exo-device-compatibility.test.mjs tests/exo-gait-history.test.mjs tests/exo-angle-assist.test.mjs tests/exo-saved-zero.test.mjs tests/exo-swing-pulse.test.mjs tests/exo-scope.test.mjs tests/exo-zero-calibration.test.mjs tests/exo-extended-pulse.test.mjs tests/exo-adaptive.test.mjs tests/exo-adaptive-capture.test.mjs tests/exo-calibration-state.test.mjs tests/exo-board-sensor.test.mjs tests/exo-walk-recording.test.mjs tests/exo-usb-diagnostics.test.mjs
+
+
+> esp-exo-ble-console@0.1.0 build
+> cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build
+
+
+  vinext build  (Vite 8.0.13)
+
+▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.
+
+
+[1/5] analyze client references...
+[2K
+transforming...✓ 134 modules transformed.
+rendering chunks...
+✓ built in 280ms
+[2/5] analyze server references...
+[2K
+transforming...✓ 83 modules transformed.
+rendering chunks...
+✓ built in 77ms
+[3/5] build rsc environment...
+[2K
+transforming...✓ 140 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 281ms
+[4/5] build client environment...
+[2K
+transforming...✓ 90 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 133ms
+[5/5] build ssr environment...
+[2K
+transforming...✓ 89 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 195ms
+[0m
+  Route (app)
+  ┌ ? /   
+  └ ? /exo
+
+  ? Unknown
+
+  ? Some routes could not be classified. vinext currently uses static analysis
+    and cannot detect dynamic API usage (headers(), cookies(), etc.) at build time.
+    Automatic classification will be improved in a future release.
+  Build complete. Run `vinext start` to start the production server.
+
+✔ strict diagnostic command allowlist rejects multi-command injection and all motion/configuration (1.5107ms)
+✔ fresh paired boundary excludes old running/torque rows but preserves distinct exact loss events (2.651ms)
+✔ boot, current time, state, output, configuration and malformed diagnostics fail closed (2.1991ms)
+✔ snapshot/drain overlap is deduplicated; changed payload at same timestamp is rejected (0.7469ms)
+✔ explicit running observation retains commands while old IDLE collector still rejects them (1.6715ms)
+✔ real frozen 0.11.5 snapshot is accepted without treating phase/fault diagnostics as motor output (0.2473ms)
+✔ manual stop drains, reads final state, releases port and exports byte-identical raw evidence (523.3059ms)
+✔ changed boot and split brownout terminate without reconnect or motion writes; evidence remains exportable (1054.5181ms)
+✔ connection-time boot/brownout text is retained; only two fresh consistent readbacks establish the take (532.3242ms)
+✔ old detector tail cannot become a fresh reset when the readback guard is armed (0.4067ms)
+✔ new reset token split across receive chunks is caught after arming (0.2486ms)
+✔ startup evidence does not excuse a new boot, reset, stale time or non-IDLE during baseline confirmation (2115.4981ms)
+✔ startup log alone cannot authorize capture or cause diagnostic polling after manual cancellation (0.6214ms)
+✔ USB disappearance aborts and wrong VID is rejected before opening (424.2365ms)
+✔ zero-invalid and input-invalid snapshots cannot authorize motion data collection; valid unlocked input can (0.5589ms)
+✔ invalid startup waits on the same open USB; only manual recheck can begin after two usable snapshots (1749.9555ms)
+✔ manual stop during input preparation closes USB and preserves diagnostic bytes without a capture baseline (535.6202ms)
+✔ a reset while waiting remains fatal, and manual recheck cannot silently switch to another Boot (1071.441ms)
+✔ loss of valid input during capture terminates, and invalid records are retained without a successful outcome (540.2928ms)
+✔ ordinary AFO note shows saved zero levels and IDLE waiting for START, not an acquisition failure (2.4065ms)
+✔ AFO zero maximum and bilateral zero levels are explicit, while one disabled side is identified separately (0.596ms)
+✔ ordinary AFO note displays reasons 9..11 from real-format responses, including partial output (0.5206ms)
+✔ SHADOW and disabled execution never appear as live assistance or a curve zero crossing (0.2216ms)
+✔ an ACTIVE zero sample is distinguished from mode disabled without asserting a proven zero crossing (0.2491ms)
+✔ missing, non-AFO, transitional, unknown-reason and missing-limit readbacks cannot claim normal output (0.2849ms)
+✔ maximum draft readiness rejects saved zero versus nonzero draft and the reverse (0.2445ms)
+✔ maximum readiness rejects invalid numeric input, missing readback and invalid saved state (0.1866ms)
+✔ fresh START verification rejects a changed device limit even when cached readiness matched (0.5923ms)
+✔ START compares click-time intent even if earlier or current GET responses overwrite the form (0.3714ms)
+✔ fresh START verification accepts matching zero without enabling it and rejects invalid intent (0.7008ms)
+✔ switching to regular AFO preserves 3 and 5 Nm; phase switching alone caps those values at .5 (0.3489ms)
+✔ strategy switching preserves zero and invalid drafts and retains old AFO limits (0.1466ms)
+✔ 0.11.19 recognizes strategy 9 and preserves the 15 Nm ordinary workflow (0.1762ms)
+✔ 0.11.20 recognizes strategy 10 without admitting unknown future strategy versions (0.0849ms)
+✔ 0.11.21 recognizes walking strategy 11 with the existing 15 Nm workflow (0.0609ms)
+✔ AFO default configuration equals delivery JSON and independently verified Python/C 196-byte golden (41.3397ms)
+✔ AFO invalid or incomplete config cannot be imported or exported (0.9263ms)
+✔ SHADOW selection retains old IDs and rejects strategy5 ACTIVE before encoding (1.6582ms)
+✔ adaptive version guard requires actual known firmware and assist capability (0.1488ms)
+✔ regular AFO mode selects ACTIVE directly from transparent, with the usual levels and limit (0.2255ms)
+✔ walking 0.11.8 selects/saves the same payload, with version 7 readback and no START request (0.1122ms)
+✔ AFO bench ACTIVE requires current version, selected policy metadata and off-body mode; cannot encode 15Nm (0.3684ms)
+✔ 0.11.4 keeps candidate and manual-release gates distinct (0.0802ms)
+✔ 0.11.3 nominal candidate and manual release require distinct current strategy metadata (0.477ms)
+✔ exported command transitions stay valid for frequency intervals above or below initial defaults (4.9246ms)
+✔ periodic preview separates legs, respects disabled/zero and cancels overlapping peaks (0.3029ms)
+✔ UART and CSV logs retain zero/invalid flags and detect malformed values or timestamp resets (0.7412ms)
+✔ 0.11.5 trace candidate retains off-body policy and nominal cap (0.1055ms)
+✔ 0.11.6 bounded trial requires strategy5 and caps ACTIVE at 5 Nm (0.5416ms)
+✔ 0.11.17 RS01 regular AFO accepts15Nm and retains older firmware ceilings (0.3008ms)
+✔ 0.11.22 accepts continuity strategy 12 and rejects mismatched versions (0.0896ms)
+✔ angle atomic request matches firmware golden vector, explicit degrees and N m (2.036ms)
+✔ angle/torque finite, precision, bounds, mode/profile and legacy opcode guards (0.6617ms)
+✔ angle readback generation, active values and fixed hysteresis/ramp golden vector (0.7566ms)
+✔ 0.10.7 requires new capability and keeps 0.10.6 supported without sending new commands (1.5835ms)
+✔ 5 N m C/web atomic vector and phase strategy retains 0.5 N m (0.3153ms)
+✔ 5 N m readback must match INFO capability; legacy and per-strategy bounds (0.4646ms)
+✔ 0.10.8 needs angle and 5 N m capabilities without blocking 0.10.7 (0.1601ms)
+✔ 服务发现无响应时有限超时，迟到结果不会把拒绝变成成功 (23.9177ms)
+✔ 服务成功/原始失败保留结果并释放握手计时器 (0.8175ms)
+✔ GATT 第一次成功时不等待也不重试 (0.178ms)
+✔ GATT 瞬时失败后等待 800 ms，并使用同一回调只重试一次 (0.685ms)
+✔ GATT 连续失败两次后停止，绝不发起第三次连接 (0.498ms)
+✔ AFO current/retained first fault C wire vector, units, sentinels and malformed responses (3.4464ms)
+✔ ordinary AFO readback distinguishes acquisition, rearm and input faults without claiming output (0.7753ms)
+✔ AFO双高斯策略线码5可编码SHADOW，旧策略线码保持不变 (0.4341ms)
+✔ CAN诊断固定20字节，保留历史大计数、区分上报意图与在线 (0.4355ms)
+✔ 反馈恢复请求为空负载ACK；不与START混淆，拒绝错误长度 (0.5062ms)
+✔ 0.10.3 atomically writes maximum Nm with assist configuration and preserves legacy format (0.7831ms)
+✔ torque readback distinguishes selected and active, converts mNm at the boundary (0.3255ms)
+✔ direction teaching keeps side/action/session token distinct and correlates ACK (0.3619ms)
+✔ calibration reads actual mapping and uses absent markers instead of false zero (0.3991ms)
+✔ exports the product BLE v1 constants (0.3771ms)
+✔ encodes every published request as exactly one v1 frame (0.623ms)
+✔ encodes and validates the stage 10 telemetry start payload (0.1985ms)
+✔ parses the stage 10 telemetry status golden frame (0.2612ms)
+✔ parses typed stage 10 telemetry Notify without a command header (0.361ms)
+✔ keeps unknown telemetry packet types observable and detects sentinel mismatch (0.1591ms)
+✔ encodeRequest copies BufferSource payloads and enforces request schema (0.2571ms)
+✔ parses the Python INFO golden frame and all common fields (0.2055ms)
+✔ parses the current 0.7.1 INFO layout (0.1133ms)
+✔ preserves the high INFO bit, now assigned to SWING_EVENT_PULSE (0.0754ms)
+✔ parses the Python SYSTEM_STATUS golden frame as little-endian (0.1888ms)
+✔ parses RUN_CONTRACT_INVALID from SYSTEM_STATUS and START ACK (0.202ms)
+✔ parses signed JOINT_STATUS values and converts mrad to degrees (0.2908ms)
+✔ encodes and parses stage 8 control configuration without ACK ambiguity (0.2843ms)
+✔ encodes and parses one side five-element command with degree display units (0.2102ms)
+✔ parses the stage 9 gait status golden frame with fixed-point units (0.331ms)
+✔ accepts one valid side while preserving the overall-invalid distinction (0.1429ms)
+✔ maps every unavailable gait fixed-point field to null (0.1666ms)
+✔ rejects non-sentinel out-of-range gait scalar values (0.2073ms)
+✔ parses the stage 9 assist configuration golden frame without ACK ambiguity (0.1996ms)
+✔ parses the effective execution state from the packed high nibble (0.1324ms)
+✔ parses WAITING_NEW_GAIT_EVENTS and exposes its operator-facing meaning (0.0869ms)
+✔ stage 9 response enums and future flag bits remain observable (0.1885ms)
+✔ strictly validates stage 9 SET payloads and response relationships (0.5241ms)
+✔ recognizes a four-byte GET response payload as an ACK (0.0892ms)
+✔ parses protocol-error ACKs for unknown and zero-id raw requests (0.0995ms)
+✔ strictly rejects malformed frame envelopes and response shapes (0.4018ms)
+✔ strictly rejects reserved legacy flag bits (0.1953ms)
+✔ strictly enforces ACK and INFO encoder invariants (2.8866ms)
+✔ strictly rejects invalid sides, directions, and stable wire enums (0.4713ms)
+✔ assertCorrelated rejects opcode and request-id mismatches (0.6723ms)
+✔ decodes all published flag bits and rejects reserved bits (0.2111ms)
+✔ exports stable wire-code names (0.0805ms)
+✔ formats bytes and converts only finite mrad values (0.2061ms)
+✔ board sensor C/TS wire vector and bounded read-only pages (2.6624ms)
+✔ new firmware preserves AFO and requires existing capabilities (1.4973ms)
+✔ recalibration identifies both missing raw angles even though persistent directions exist (1.68ms)
+✔ a fresh raw encoder pair can be recalibrated without valid old zero flags (0.2364ms)
+✔ a single stale side blocks calibration at the same 50ms freshness boundary (0.2231ms)
+✔ missing or nonfinite raw samples, invalid age, swapped sides and invalid direction cannot pass (1.677ms)
+✔ repeated real-format calibration/offline-joint poll sequence does not toggle saved factory direction (0.4148ms)
+✔ joint feedback alone never establishes factory readback after a reset/disconnect (0.1449ms)
+✔ explicit mapping/direction invalidation immediately clears confirmation even if feedback is online (0.2865ms)
+✔ legacy manual mapping confirmation is still invalidated by feedback loss and is never auto-confirmed (0.1431ms)
+✔ loss of either live feedback flag revokes neutral posture while the stored direction stays intact (0.2106ms)
+✔ direction preview uses controller baseline even when user moves before the first read (0.4374ms)
+✔ direction preview wire roundtrip uses milliradians once and rejects malformed/old session data (0.4602ms)
+✔ 0.11.0开发固件保留既有协议能力，AFO不等于ACTIVE验收 (1.4088ms)
+✔ 0.10.6保持恢复能力门，完成后上电验证后不再提示待验候选 (0.9021ms)
+✔ 0.10.5 requires recovery diagnostics while 0.10.2 remains usable (0.2593ms)
+✔ 0.10.6 是首选固件且声明方向/零位/力矩/恢复能力 (0.122ms)
+✔ 0.10.2 缺少标定读回能力时拒绝身份 (8.7967ms)
+✔ 0.7.x 与 0.8.0 仍按各自能力门兼容，只给升级提示 (8.9689ms)
+✔ 未知固件、协议不匹配和能力缺失仍会阻止产品命令 (2.1691ms)
+✔ 0.8.0 缺少阶段 8 capability 时阻止配置 (0.2351ms)
+✔ 0.9.0 必须同时声明步态状态和助力配置 capability (6.9772ms)
+✔ 已知能力之外的新 capability 不会阻止 0.9.0 (0.3569ms)
+✔ 0.10.0 必须声明遥测流 capability (0.2093ms)
+✔ 0.10.0 保持兼容，0.10.1 的工程 capability 是可选能力而非产品身份门 (0.1143ms)
+✔ 0.10.3 requires torque-limit capability; 0.10.2 stays compatible (0.0908ms)
+✔ 0.10.4 requires direction teaching; older read-only calibration stays compatible (0.143ms)
+✔ 15 Nm/3000 ms C/TS golden request and readback fit20B; rejects one unit beyond bounds (2.4912ms)
+✔ extended range requires known0.10.12 and bits13/15; old5 Nm/2000ms request remains valid (0.3944ms)
+✔ 15 Nm limit readback must match new identity; phase remains0.5 and old devices5 (0.5315ms)
+✔ new fixed pulse status supports3000ms and actual9.549Nm; old20B format unchanged (0.2526ms)
+✔ 0.10.12 inherits pair-zero and pulse identities, does not bypass required capability bits (0.4695ms)
+✔ build version and actual BLE INFO version agree, guarding the previous unsynced patch number (12.7226ms)
+✔ 20 Nm/s is displayed only for known0.10.13; previous pulse firmwares retain10 (0.2923ms)
+✔ 0.10.13 keeps expanded range and pair zero; independent golden15Nm timing bytes remain unchanged (0.2284ms)
+✔ 日期按北京时间跨午夜分组 (28.3083ms)
+✔ 缺失数据不伪装成0角度、0步频或有效步态 (5.6638ms)
+✔ 有效步频统计忽略无效估计，保留左右真实角度跨度 (0.6271ms)
+✔ 记录拒绝错归属、重复序号与倒退的时间 (0.8061ms)
+✔ 掉线后按最后一个真实样本计算时长 (0.7527ms)
+✔ CSV保留度值、来源时间、无效空值与双引号转义 (1.1731ms)
+✔ 导入重新计算统计，不相信文件自称100%有效步态 (2.5491ms)
+✔ 导入拒绝不支持的来源、单位字段和跨日数据 (1.2745ms)
+✔ 日志位于底部或阈值范围内时继续跟随 (0.8658ms)
+✔ 用户向上滚动超过阈值后暂停跟随 (0.1545ms)
+✔ 空日志和小于视口的日志视为位于底部 (0.1074ms)
+✔ saved zero C/TS golden vector; explicitly milli-degrees and correlated side query (2.3821ms)
+✔ save/restore/forget/capture-pair require exact two bytes and explicit confirmation (0.555ms)
+✔ reject malformed saved status, flags, reserved bytes, invalid values and false ready claims (0.4142ms)
+✔ pair reuse requires both sides, distinct motors, positive readiness and bounded finite neutral preview (0.2617ms)
+✔ 0.10.9 saved zero capability required; existing 0.10.8 remains compatible (1.8198ms)
+✔ walking default includes both kinematics, phase, confidence and assist without 20Hz overload (1.9894ms)
+✔ scope uses MCU timestamps, not packet ordinal, and excludes old samples (1.0158ms)
+✔ 32bit time wrap remains continuous (0.1981ms)
+✔ stream restart never joins previous session, late same-stream frames do not move origin (2.4678ms)
+✔ reconnecting or rebooting with reused stream id cannot mix previous BLE session (0.3022ms)
+✔ partial-channel frame preserves latest received reading; explicit invalid clears it (0.2926ms)
+✔ constant and zero data have visible finite scale; percent axes stay 0..100 (0.317ms)
+✔ missing, invalid and unselected channel frames break the line rather than bridge (0.4215ms)
+✔ clock gap, activation epoch and dropped flag each break paths (0.2523ms)
+✔ cursor reads nearest real sample and never interpolates across a long gap (0.4309ms)
+✔ NaN and Infinity never enter an SVG path (0.3635ms)
+✔ empty, stopped, disconnected and stale streams cannot claim LIVE (0.1753ms)
+✔ automatic acquisition requires a verified ready session, respects stop, and tries only once (0.2788ms)
+✔ pulse timing matches actual C golden bytes and fits default ATT payload (2.6045ms)
+✔ pulse timing finite/precision/boundaries and mode invariants (0.6074ms)
+✔ window degrees, signed reset and C response agree (0.3701ms)
+✔ single-side pulse status is distinct from complete gait phase (1.2492ms)
+✔ schema2 threshold readback never advertises old plateau ramp (0.2768ms)
+✔ 0.10.10 requires pulse capability and older identity remains recognizable (0.357ms)
+✔ motion page exposes both duration modes, independent status and guarded writes (8.3488ms)
+✔ combines all channels that share one stream/sample sequence (2.2753ms)
+✔ counts forward sample gaps, tolerates stream restart, and detects duplicates (0.3317ms)
+✔ exports assembled samples as CSV and JSONL (0.8005ms)
+✔ production C golden decodes exact source timestamps, pre-fault sample and final command (2.1545ms)
+✔ damaged schema/length/integer/side rejected; nonfinite inputs stay absent, never zero (1.0128ms)
+✔ actual firmware config snapshot keeps CRC and configured limits, rather than inferred defaults (0.6097ms)
+✔ firmware 0.11.23 retains strategy12 and rejects a wrong strategy or unknown release (0.1511ms)
+✔ USB uses only bounded read commands; fragmented stream joins, boot matches, locks release (109.4155ms)
+✔ USB cannot mix a different BLE boot, and ring overflow / partial pairs are explicit (109.027ms)
+✔ USB rows share recording transaction, deduplicate sticky faults, survive retry and export (1.0841ms)
+✔ diagnostic capacity ends capture visibly without overwriting earlier evidence (243.9678ms)
+✔ CSV keeps as-of asynchronous AFO context and never backfills a future fault (2.0129ms)
+✔ multi-channel updates merge across saves, null channels remain absent, and metadata is immutable (2.5115ms)
+✔ packet arriving during pending write is saved next, failure preserves RAM and supports retry (1.0411ms)
+✔ recording outlives rolling 10000-sample chart; stream restart and reconnect cannot collide (56.5766ms)
+✔ segment limit never silently overwrites beginning or claims a continuing capture (54.0409ms)
+✔ persistent calibration is version gated and distinguishes saved configuration from feedback (1.1694ms)
+✔ persistent save readback verifies both actual offsets, mapping and periodic wrap (0.5094ms)
+✔ 0.10.11 pair capture requires known version plus calibration/saved-zero capabilities; old reuse remains compatible (0.2202ms)
+✔ both actual human angles and raw-minus-zero readback must be near zero; valid old right20.51 is rejected (1.0571ms)
+✔ zero check tolerates quantization/small still movement, keeps returned real values and never rewrites displayed angle (0.1736ms)
+✔ any stale/offline/invalid joint or calibration readback prevents success, even with numeric zero (0.6009ms)
+✔ missing/nonfinite positions, wrong side/sign/mapping and non-IDLE state do not pass (0.3255ms)
+✔ calibration workflow captures ONCE then reads both angles, both offsets and final state in BLE queue order (0.8092ms)
+✔ rejected/uncertain capture is not retried or treated as successful using already-valid old zeros (0.2948ms)
+✔ post-capture right20.51 refuses complete workflow; no auto repeat (0.2804ms)
+✔ partial readback/STOP preemption propagates failure and never sends another zero action (0.1773ms)
+✔ server-renders the five-section ESP-EXO console (117.5808ms)
+✔ keeps the product route on binary Product BLE v1 (4.0976ms)
+ℹ tests 206
+ℹ suites 0
+ℹ pass 206
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8677.7183

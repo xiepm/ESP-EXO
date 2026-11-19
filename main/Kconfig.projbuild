@@ -2,6 +2,20 @@
 # 生成为 sdkconfig.h 中的 CONFIG_EXAMPLE_* 宏，再由 exo_config.c 统一读取。
 menu "Example Configuration"
 
+    config EXO_BOARD_V21
+        bool "exo_v2.1 onboard QMI8658A, QMC5883P and SMBus"
+        default y if IDF_TARGET_ESP32S3
+        default n
+
+    config EXO_MOTOR_RS05
+        bool "RobStride 05 wire ranges (50 rad/s, 5.5 Nm)"
+        default n
+        help
+            Select only when the installed motors are RS05. The board revision
+            does not identify the motor. Default RS01 uses 44 rad/s and 17 Nm.
+            This is a wire encoding range,
+            not a request to increase the configured assistance torque limit.
+
     # TX 是 ESP32 输出到外部 CAN 收发器 TXD 的逻辑信号，不可直接接 CANH/CANL。
     config EXAMPLE_TX_GPIO_NUM
         int "TX GPIO number"
@@ -15,13 +29,40 @@ menu "Example Configuration"
     config EXAMPLE_RX_GPIO_NUM
         int "RX GPIO number"
         default 22 if IDF_TARGET_ESP32
-        # 2026-10-09 操作者确认：当前 ESP32-S3-N16R8 收发器 RXD 接 GPIO1。
+        # exo_v2.1 原理图（2026-11-16）：XL65HVD230 R 接 GPIO5；旧飞线板为 GPIO1。
         # 默认值只影响新配置；已有 sdkconfig 仍以其中保存的值为准。
-        default 1 if IDF_TARGET_ESP32S3
+        default 5 if IDF_TARGET_ESP32S3
         default 2
         help
             This option selects the GPIO pin used for the RX signal. Connect the
             RX signal to your transceiver.
+
+    config EXO_ADAPTIVE_ASSIST_MODE
+        bool "Enable AFO assistance through the regular assist mode controls"
+        default y
+        depends on !EXO_ADAPTIVE_BOUNDED_TRIAL && !EXO_ADAPTIVE_BENCH_ACTIVE && !EXO_BENCH_PEAK_TEST && !EXO_ENGINEERING_GAIT_STIMULUS
+        help
+            Uses the existing assist levels, torque limit and START/STOP.
+            START prepares the built-in profile; boot remains unarmed.
+
+    config EXO_ADAPTIVE_BOUNDED_TRIAL
+        bool "Enable explicit manual AFO trial with a 5 Nm ceiling"
+        default n
+        help
+            Separate experimental identity after phase-capture repair. Defaults
+            remain disabled/zero; full parameters and a manual START are needed.
+            Excludes bench peak commands and engineering trajectory stimulus.
+            All sensor, phase, range, power and rearm protections remain active.
+
+    config EXO_ADAPTIVE_BENCH_ACTIVE
+        bool "Enable bounded AFO ACTIVE for secured off-body bench testing"
+        default n
+        help
+            Candidate bench feature. Ceiling is 500 mNm unless the explicit
+            nominal-15-Nm option is enabled. Assistance defaults to disabled,
+            and internal amplitudes remain zero.
+            Requires zero base torque, stiffness and damping. It does not
+            by itself enable the post-verification manual release identity.
 
     config EXO_ENGINEERING_GAIT_STIMULUS
         bool "Enable isolated alternating-gait engineering stimulus"
@@ -32,5 +73,25 @@ menu "Example Configuration"
             and telemetry verification.  This is not a product assist mode.  A
             production build should leave it disabled; when disabled the firmware
             neither advertises the capability nor accepts that reference source.
+
+    config EXO_ADAPTIVE_NOMINAL_15NM
+        bool "Enable nominal 15 Nm AFO configuration ceiling"
+        depends on EXO_ADAPTIVE_BENCH_ACTIVE
+        default n
+        help
+            Explicit nominal ceiling candidate. Defaults remain disabled/zero.
+            Does not change phase, sensor, range, slew or rearm protections.
+
+    config EXO_ADAPTIVE_ACTIVE_RELEASE
+        bool "Expose manual ACTIVE after recorded nominal-peak verification"
+        depends on EXO_ADAPTIVE_NOMINAL_15NM
+        default n
+
+    config EXO_BENCH_PEAK_TEST
+        bool "Enable one-shot MCU-timed secured-fixture torque test"
+        default n
+        help
+            One side only, max 15 Nm, 20 Nm/s rise/fall and 100 ms plateau.
+            Always ends at zero without a host command. Not a human assist mode.
 
 endmenu

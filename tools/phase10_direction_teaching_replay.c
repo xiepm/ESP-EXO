@@ -73,6 +73,29 @@ void nvs_close(nvs_handle_t handle) {
 
 static int64_t clock_us;
 static rs01_feedback_snapshot_t motors[2];
+static unsigned window_motion, window_step;
+static bool freeze_feedback;
+void vTaskDelay(TickType_t ticks) {
+    clock_us += (int64_t)ticks * 1000;
+    ++window_step;
+    if (freeze_feedback) return;
+    for (unsigned i = 0; i < 2U; ++i) {
+        if (window_motion == 1 && i == EXO_ACTUATOR_B) {
+            const float t = (float)window_step * .01f;
+            const float prev = (float)(window_step - 1U) * .01f;
+            const float phase = 2.0f * 3.14159265f * 8.0f;
+            motors[i].continuous_position_rad += exo_degrees_to_radians(
+                .6f * (sinf(phase*t) - sinf(phase*prev)));
+            motors[i].sample.velocity_rad_s = exo_degrees_to_radians(.6f*phase*cosf(phase*t));
+        }
+        if (window_motion == 2 && i == EXO_ACTUATOR_B)
+            motors[i].continuous_position_rad += exo_degrees_to_radians(15.0f*(float)ticks*.001f);
+        motors[i].timestamp_us = (uint64_t)clock_us - 1000U;
+        ++motors[i].feedback_count;
+    }
+    if (window_motion == 3 && window_step == 10) motors[0].online = false;
+    if (window_motion == 4 && window_step == 10) ++motors[0].position_epoch;
+}
 int64_t esp_timer_get_time(void) { return clock_us; }
 bool rs01_get_feedback(exo_actuator_id_t actuator, rs01_feedback_snapshot_t *out) {
     if ((unsigned)actuator >= 2U || !out) return false;
@@ -95,6 +118,7 @@ static void pose(float left_deg, float right_deg) {
     }
 }
 static void reset(void) {
+    window_motion = window_step = 0; freeze_feedback = false;
     memset(flash_valid,0,sizeof(flash_valid));
     memset(pending_valid,0,sizeof(pending_valid));
     storage_init_error=storage_open_error=storage_commit_error=0;
@@ -118,6 +142,7 @@ static void reset(void) {
 static hip_direction_teach_result_t reason;
 static exo_direction_t learned;
 static esp_err_t teach(exo_hip_joint_id_t joint, hip_direction_teach_action_t action, uint8_t token) {
+    window_step = 0;
     return hip_joint_teach_direction(joint, action, token, &reason, &learned);
 }
 static void close_session(void) {
@@ -130,6 +155,31 @@ static void expect_failure(exo_hip_joint_id_t joint, hip_direction_teach_result_
 }
 
 int main(void) {
+    reset(); window_motion=1;
+    assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)==ESP_OK);
+    pose(-10,0);
+    const unsigned before_save=storage_save_calls;
+    assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_FINISH,7)==ESP_OK);
+    assert(learned==EXO_DIRECTION_NEGATIVE && storage_save_calls==before_save+1);
+    puts("PASS 8Hz +/-0.6deg suspended-leg tremor (~30deg/s peak) accepted using mean position");
+    for (unsigned bad=2;bad<=4;++bad) {
+        reset();
+        assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)==ESP_OK);
+        pose(10,0); window_motion=bad;
+        const unsigned saved=storage_save_calls;
+        expect_failure(EXO_HIP_JOINT_LEFT,bad==2 ? HIP_DIRECTION_TEACH_NOT_STILL :
+            bad==3 ? HIP_DIRECTION_TEACH_FEEDBACK_INVALID : HIP_DIRECTION_TEACH_EPOCH_CHANGED);
+        assert(storage_save_calls==saved);
+    }
+    puts("PASS sustained movement, feedback dropout and mid-window epoch changes do not save");
+    reset();
+    assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)==ESP_OK);
+    clock_us=(int64_t)s_direction_teach.started_us+59900000;
+    pose(10,0);
+    const unsigned expiry_saves=storage_save_calls;
+    expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_EXPIRED);
+    assert(storage_save_calls==expiry_saves && !s_direction_teach.active);
+    puts("PASS session expiring during pose window cannot write factory direction");
     reset();
     assert(hip_joint_set_zero_from_current(EXO_HIP_JOINT_LEFT) == ESP_OK);
     assert(teach(EXO_HIP_JOINT_LEFT, HIP_DIRECTION_TEACH_BEGIN, 7) == ESP_OK);
@@ -168,15 +218,64 @@ int main(void) {
     assert(hip_joint_get_snapshot(EXO_HIP_JOINT_RIGHT,&snap) && snap.actuator==EXO_ACTUATOR_A);
     puts("PASS right direction independent of left and CAN slot");
 
+    reset();pose(8,-30);
+    assert(teach(EXO_HIP_JOINT_RIGHT,HIP_DIRECTION_TEACH_BEGIN,9)==ESP_OK);
+    pose(15,-50); /* user lifts before the first browser preview arrives */
+    hip_direction_teach_preview_t preview;
+    const unsigned preview_saves=storage_save_calls;
+    assert(hip_joint_direction_preview(EXO_HIP_JOINT_RIGHT,&preview));
+    assert(preview.result==HIP_DIRECTION_TEACH_OK && preview.token==9 && preview.actuator==EXO_ACTUATOR_A);
+    assert(fabsf(preview.baseline_deg+30)<.001f && fabsf(preview.current_deg+50)<.001f);
+    assert(fabsf(preview.current_deg-preview.baseline_deg+20)<.001f);
+    pose(20,-60); assert(hip_joint_direction_preview(EXO_HIP_JOINT_RIGHT,&preview));
+    assert(fabsf(preview.baseline_deg+30)<.001f && fabsf(preview.current_deg+60)<.001f);
+    assert(storage_save_calls==preview_saves); /* reads cannot recapture or save */
+    assert(hip_joint_direction_preview(EXO_HIP_JOINT_LEFT,&preview) && preview.result==HIP_DIRECTION_TEACH_NO_SESSION);
+    motors[EXO_ACTUATOR_A].timestamp_us=(uint64_t)clock_us-50001;
+    assert(hip_joint_direction_preview(EXO_HIP_JOINT_RIGHT,&preview) && preview.result==HIP_DIRECTION_TEACH_FEEDBACK_INVALID && isnan(preview.current_deg));
+    pose(20,-60);++motors[EXO_ACTUATOR_A].position_epoch;
+    assert(hip_joint_direction_preview(EXO_HIP_JOINT_RIGHT,&preview) && preview.result==HIP_DIRECTION_TEACH_EPOCH_CHANGED);
+    clock_us=(int64_t)s_direction_teach.started_us+60000000;
+    assert(hip_joint_direction_preview(EXO_HIP_JOINT_RIGHT,&preview) && preview.result==HIP_DIRECTION_TEACH_EXPIRED);
+    puts("PASS actual BEGIN mean survives delayed first browser read; stale/epoch/expiry/wrong-side rejected without writes");
+
+    reset();
+    assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)==ESP_OK);
+    pose(12,-8); /* opposite mechanism follows; selected LEFT raw increases */
+    assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_FINISH,7)==ESP_OK);
+    pose(0,0);
+    assert(teach(EXO_HIP_JOINT_RIGHT,HIP_DIRECTION_TEACH_BEGIN,8)==ESP_OK);
+    pose(9,-12); /* selected RIGHT raw decreases during forward flexion */
+    assert(teach(EXO_HIP_JOINT_RIGHT,HIP_DIRECTION_TEACH_FINISH,8)==ESP_OK);
+    pose(0,0);
+    for(unsigned side=0;side<2;side++) assert(hip_joint_set_zero_from_current(side)==ESP_OK);
+    pose(12,-12);
+    for(unsigned side=0;side<2;side++) {
+        assert(hip_joint_get_snapshot(side,&snap) && snap.joint_valid);
+        assert(fabsf(snap.joint_sample.position_deg-12)<.001f);
+        exo_joint_command_t peak_cmd={.torque_ff_nm=15};
+        assert(hip_joint_to_actuator_command(side,&peak_cmd,&slot,&motor_cmd)==ESP_OK);
+        assert(motor_cmd.torque_nm==(side==0?15.f:-15.f));
+    }
+    pose(-8,8);
+    for(unsigned side=0;side<2;side++) {
+        assert(hip_joint_get_snapshot(side,&snap) && snap.joint_valid);
+        assert(fabsf(snap.joint_sample.position_deg+8)<.001f);
+    }
+    puts("PASS coupled teaching: both forward angles positive, backward negative, +/-15Nm wire direction follows calibration");
+
     reset();
     assert(teach(EXO_HIP_JOINT_LEFT, HIP_DIRECTION_TEACH_BEGIN, 7)==ESP_OK);
-    pose(2.99f, 0); expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_TOO_SMALL);
-    pose(30.01f, 0); expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_TOO_LARGE);
-    pose(10, 4); expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_OTHER_LEG_MOVED);
+    pose(.99f, 0); expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_TOO_SMALL);
     pose(0, 10); expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_TOO_SMALL);
-    pose(10, 0);
+    pose(1.5f, 4);
     assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_FINISH,7)==ESP_OK);
-    puts("PASS small/large/wrong/both-leg motion rejected; corrected pose can finish same session");
+    assert(learned==EXO_DIRECTION_POSITIVE);
+    reset(); assert(teach(EXO_HIP_JOINT_RIGHT,HIP_DIRECTION_TEACH_BEGIN,7)==ESP_OK);
+    pose(10,-40); window_motion=2; /* moving LEFT does not veto teaching RIGHT */
+    assert(teach(EXO_HIP_JOINT_RIGHT,HIP_DIRECTION_TEACH_FINISH,7)==ESP_OK);
+    assert(learned==EXO_DIRECTION_NEGATIVE);
+    puts("PASS selected-leg sign at1.5deg and40deg; coupled/moving opposite leg allowed; sub1deg/wrong-only motion rejected");
 
     reset();
     motors[0].timestamp_us=(uint64_t)clock_us-50000;
@@ -185,7 +284,9 @@ int main(void) {
     assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)!=ESP_OK);
     assert(reason==HIP_DIRECTION_TEACH_FEEDBACK_INVALID);
     reset(); assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)==ESP_OK);
+    freeze_feedback=true;
     expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_FEEDBACK_INVALID);
+    freeze_feedback=false;
     pose(10, 0); ++motors[0].position_epoch;
     expect_failure(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_EPOCH_CHANGED);
     puts("PASS 50ms boundary, unchanged sample and either-side epoch mismatch");
@@ -211,10 +312,10 @@ int main(void) {
     motors[0].mode=RS01_MODE_STATUS_RESET; motors[1].faults.present=true;
     assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)!=ESP_OK);
     assert(reason==HIP_DIRECTION_TEACH_MOTOR_FAULT);
-    motors[1].faults.present=false; motors[0].sample.velocity_rad_s=exo_degrees_to_radians(5.1f);
+    motors[1].faults.present=false; window_motion=2;
     assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)!=ESP_OK);
     assert(reason==HIP_DIRECTION_TEACH_NOT_STILL);
-    motors[0].sample.velocity_rad_s=0; motors[1].continuous_position_rad=NAN;
+    window_motion=0; motors[0].sample.velocity_rad_s=0; motors[1].continuous_position_rad=NAN;
     assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)!=ESP_OK);
     assert(reason==HIP_DIRECTION_TEACH_FEEDBACK_INVALID);
     motors[1].continuous_position_rad=FLT_MAX;
@@ -291,6 +392,6 @@ int main(void) {
     assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_BEGIN,7)==ESP_OK);
     pose(-20,0); assert(teach(EXO_HIP_JOINT_LEFT,HIP_DIRECTION_TEACH_FINISH,7)==ESP_OK);
     puts("PASS missing, wrong-version and mismatched mapping records fail closed; first teaching works");
-    puts("RESULT 11/11 PASS");
+    puts("RESULT 14/14 PASS");
     return 0;
 }

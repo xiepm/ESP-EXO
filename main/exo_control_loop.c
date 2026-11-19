@@ -13,10 +13,12 @@
 #include "exo_control_loop.h"
 
 #include <limits.h>
+#include <math.h>
 #include <string.h>
 
 #include "esp_timer.h"
 #include "exo_assist.h"
+#include "exo_adaptive_runtime.h"
 #include "exo_config.h"
 #include "exo_sensor_snapshot.h"
 #include "exo_system.h"
@@ -26,7 +28,7 @@
 #include "gait_estimator.h"
 #include "hip_joint.h"
 
-#define EXO_CONTROL_TASK_STACK_BYTES 4096U
+#define EXO_CONTROL_TASK_STACK_BYTES 6144U
 #define EXO_CONTROL_TASK_PRIORITY 9U
 #define EXO_CONTROL_TASK_CORE 1
 #define EXO_CONTROL_PERIOD_TOLERANCE_US 1000U
@@ -218,7 +220,7 @@ static void push_phase10_telemetry(
 			(uint8_t)((control_result->output_gate_open
 					   ? EXO_TELEMETRY_SAMPLE_FLAG_OUTPUT_ALLOWED
 					   : 0U) |
-				  (control_result->assist_applied
+				  (exo_telemetry_has_applied_assist(applied_left_nm,applied_right_nm)
 					   ? EXO_TELEMETRY_SAMPLE_FLAG_REAL_OUTPUT_ENABLED
 					   : 0U)),
 		.activation_epoch = assist_result->activation_epoch,
@@ -459,6 +461,10 @@ static void control_task(void *arg) {
 			hip_joint_get_snapshot(EXO_HIP_JOINT_LEFT, &left_snapshot);
 		const bool right_available =
 			hip_joint_get_snapshot(EXO_HIP_JOINT_RIGHT, &right_snapshot);
+		/* RX can publish between task wakeup and either snapshot copy. The
+		 * capture clock must follow both copies, otherwise a valid new frame
+		 * appears to come from the future and latches the AFO input fault. */
+		const int64_t sensor_capture_us = esp_timer_get_time();
 
 		/*
 		 * 阶段9算法链在系统输出门之前运行，所以即使整机仍在IDLE，也能观察站立、
@@ -476,7 +482,7 @@ static void control_task(void *arg) {
 
 		int64_t stage_start_us = esp_timer_get_time();
 		if (!exo_sensor_snapshot_build(
-				&s_sensor_builder, cycle_start_us, &left_sensor, &right_sensor,
+				&s_sensor_builder, sensor_capture_us, &left_sensor, &right_sensor,
 				&sensor_snapshot)) {
 			algorithm_result = ESP_FAIL;
 		}
@@ -493,6 +499,15 @@ static void control_task(void *arg) {
 			esp_timer_get_time() - stage_start_us);
 
 		stage_start_us = esp_timer_get_time();
+		/* AFO观察器沿用同一控制任务与快照；无第二运动任务，无NVS/BLE I/O。
+		 * 非新策略、未START或故障时permit=0，只估计/记录而不能产生建议。 */
+        exo_system_control_state_t adaptive_system={0};
+        static exo_assist_snapshot_t adaptive_contract;
+        (void)exo_system_get_control_state(&adaptive_system);
+        (void)exo_assist_get_snapshot(&adaptive_contract);
+        uint32_t adaptive_permit=exo_adaptive_runtime_permit(&adaptive_contract,adaptive_system.output_allowed);
+        exo_adaptive_runtime_update(&sensor_snapshot,adaptive_permit,(uint32_t)adaptive_system.state,
+            adaptive_system.state==EXO_SYSTEM_STATE_ERROR);
 		if (algorithm_result == ESP_OK) {
 			const esp_err_t assist_result =
 				exo_assist_process_tick(&sensor_snapshot, &gait_estimate,
@@ -509,14 +524,23 @@ static void control_task(void *arg) {
 		 * 再核对 epoch/sequence/timestamp，最终纯值结果供本周期诊断与遥测使用。
 		 */
 		const esp_err_t output_result = exo_system_process_control_tick(
-			cycle_start_us, &sensor_snapshot, &assist_tick_result, sensor_snapshot.sequence,
+			sensor_capture_us, &sensor_snapshot, &assist_tick_result, sensor_snapshot.sequence,
 			gait_estimate.sequence, &control_tick_result);
+
+        const bool adaptive_left_sent=g_exo_hardware_config.hip_joint[EXO_HIP_JOINT_LEFT].actuator==EXO_ACTUATOR_A
+            ? control_tick_result.actuator_a_send_succeeded : control_tick_result.actuator_b_send_succeeded;
+        const bool adaptive_right_sent=g_exo_hardware_config.hip_joint[EXO_HIP_JOINT_RIGHT].actuator==EXO_ACTUATOR_A
+            ? control_tick_result.actuator_a_send_succeeded : control_tick_result.actuator_b_send_succeeded;
+        exo_adaptive_runtime_finish(control_tick_result.final_command.left.torque_ff_nm,
+            control_tick_result.final_command.right.torque_ff_nm,adaptive_left_sent,adaptive_right_sent,
+            diagnostics.snapshot.last_execution_us);
+        exo_adaptive_runtime_trace_finish(&sensor_snapshot,&assist_tick_result,&control_tick_result,output_result);
 
 		/*
 		 * 控制输出结果确定后再采样，才能区分“策略建议”与“确实加入并发送的助力”。
 		 * 此调用不做 BLE I/O；未通过 START_TELEMETRY 开流时会立即返回。
 		 */
-		push_phase10_telemetry(cycle_start_us, &sensor_snapshot,
+		push_phase10_telemetry(sensor_capture_us, &sensor_snapshot,
 						   &gait_estimate, &assist_tick_result,
 						   &control_tick_result);
 		const bool sample_stack = stack_sample_countdown == 0U;

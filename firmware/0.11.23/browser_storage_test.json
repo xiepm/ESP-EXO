@@ -1,0 +1,23 @@
+{
+  "hardwareActions": [],
+  "initial": {
+    "old": 1,
+    "newDiagnostics": 10005
+  },
+  "reload": {
+    "sessions": 2,
+    "legacySamples": 1,
+    "legacyDiagnostics": 0,
+    "diagnostics": 10005,
+    "schema": 2,
+    "types": [
+      "session",
+      "usb_config",
+      "usb_trace",
+      "usb_first_fault",
+      "usb_gap"
+    ],
+    "previousSource": 4200000,
+    "csvHasRawLine": true
+  }
+}

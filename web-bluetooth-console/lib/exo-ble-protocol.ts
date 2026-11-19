@@ -73,6 +73,9 @@ export const Opcode = Object.freeze({
   SET_ANGLE_ASSIST_CONFIG: 0x1d,
   TEACH_DIRECTION: 0x1a,
   GET_CAN_STATUS: 0x1b,
+  GET_BOARD_SENSOR: 0x27,
+  GET_DIRECTION_PREVIEW: 0x28,
+  GET_AFO_STATUS: 0x29,
   RESTORE_FEEDBACK: 0x1c,
   GET_SAVED_ZERO: 0x1e,
   SAVED_ZERO_ACTION: 0x1f,
@@ -81,6 +84,8 @@ export const Opcode = Object.freeze({
   GET_PULSE_WINDOW: 0x22,
   SET_PULSE_WINDOW: 0x23,
   GET_PULSE_STATUS: 0x24,
+  PREPARE_ADAPTIVE_TRIAL: 0x25,
+  CHECK_ADAPTIVE_TRIAL: 0x26,
 });
 
 export const Side = Object.freeze({
@@ -107,6 +112,7 @@ export const ReferenceSource = Object.freeze({
    * capability 时，独立的工程验证卡片才可以写入这个值。
   */
   ALTERNATING_SINE_TEST: 0x02,
+  BENCH_PEAK: 0x03,
 });
 
 export const Capability = Object.freeze({
@@ -128,7 +134,7 @@ export const Capability = Object.freeze({
   SWING_EVENT_PULSE: 1 << 15,
 });
 
-export const SavedZeroAction = Object.freeze({ SAVE_CURRENT: 0, RESTORE: 1, FORGET: 2, CAPTURE_PAIR: 3 });
+export const SavedZeroAction = Object.freeze({ SAVE_CURRENT: 0, RESTORE: 1, FORGET: 2, CAPTURE_PAIR: 3, CAPTURE_SAVE_PAIR: 4 });
 export const savedZeroReasonDescriptions: Readonly<Record<number, string>> = Object.freeze({
   0: "上次零位可沿用；仍需确认本次穿戴中立静止",
   1: "尚未保存可沿用的零位，请先重新校准并保存",
@@ -152,10 +158,10 @@ export const directionTeachFailureDescriptions: Readonly<Record<number, string>>
   2: "基准已超过60秒，请重新记录",
   3: "双电机反馈缺失、过期或没有新样本",
   4: "电机连续坐标已重置，请重新记录基准",
-  5: "目标腿位移不足3°，请向前小幅抬腿并停稳",
+  5: "所选腿相对基准的位移不足，请先记录中立基准再前抬（0.11.16起最小1°）",
   6: "目标腿位移超过30°，请取消后减小幅度重试",
   7: "另一侧也明显移动，请只前抬指定的一条腿",
-  8: "双腿尚未停稳，请保持姿态后再确认",
+  8: "姿态仍在明显变化，请保持前抬位置后重试；允许轻微抖动（需固件0.11.15及以上）",
   9: "电机未处于REST，不能进行手动方向标定",
   10: "电机报告故障，请先排除故障",
   11: "已有未完成的方向标定，请取消后重试",
@@ -220,6 +226,7 @@ export const AssistMode = Object.freeze({
   ACTIVE_PHASE: 0x02,
   ASSIST_AS_NEEDED: 0x03,
   ANGLE_THRESHOLD: 0x04,
+  ADAPTIVE_GAUSSIAN: 0x05,
 });
 
 export const AssistExecutionState = Object.freeze({
@@ -234,6 +241,7 @@ export const AssistStrategy = Object.freeze({
   PHASE_PROFILE: 0x02,
   AAN_RESIDUAL: 0x03,
   ANGLE_THRESHOLD: 0x04,
+  ADAPTIVE_GAUSSIAN: 0x05,
 });
 
 export const AssistUnavailableReason = Object.freeze({
@@ -246,10 +254,16 @@ export const AssistUnavailableReason = Object.freeze({
   NOT_ARMED: 0x06,
   REQUIRED_GAIT_INVALID: 0x07,
   WAITING_NEW_GAIT_EVENTS: 0x08,
+  AFO_ACQUIRING: 0x09,
+  AFO_REARM_REQUIRED: 0x0a,
+  AFO_INPUT_FAULT: 0x0b,
 });
 
 export type ResponseKind =
   | "canStatus"
+  | "boardSensor"
+  | "directionPreview"
+  | "afoStatus"
   | "calibrationStatus"
   | "savedZeroStatus"
   | "ack"
@@ -364,6 +378,7 @@ export const referenceSourceNames: Readonly<Record<number, string>> = Object.fre
   [ReferenceSource.CONSTANT]: "CONSTANT",
   [ReferenceSource.SINE]: "SINE",
   [ReferenceSource.ALTERNATING_SINE_TEST]: "ALTERNATING_SINE_TEST",
+  [ReferenceSource.BENCH_PEAK]: "BENCH_PEAK",
 });
 
 export const gaitEstimatorNames: Readonly<Record<number, string>> = Object.freeze({
@@ -391,6 +406,7 @@ export const assistModeNames: Readonly<Record<number, string>> = Object.freeze({
   [AssistMode.ACTIVE_PHASE]: "ACTIVE_PHASE",
   [AssistMode.ASSIST_AS_NEEDED]: "ASSIST_AS_NEEDED",
   [AssistMode.ANGLE_THRESHOLD]: "ANGLE_THRESHOLD",
+  [AssistMode.ADAPTIVE_GAUSSIAN]: "ADAPTIVE_GAUSSIAN",
 });
 
 export const assistExecutionStateNames: Readonly<Record<number, string>> = Object.freeze({
@@ -405,6 +421,7 @@ export const assistStrategyNames: Readonly<Record<number, string>> = Object.free
   [AssistStrategy.PHASE_PROFILE]: "PHASE_PROFILE",
   [AssistStrategy.AAN_RESIDUAL]: "AAN_RESIDUAL",
   [AssistStrategy.ANGLE_THRESHOLD]: "ANGLE_THRESHOLD",
+  [AssistStrategy.ADAPTIVE_GAUSSIAN]: "ADAPTIVE_GAUSSIAN",
 });
 
 export const assistUnavailableReasonNames: Readonly<Record<number, string>> = Object.freeze({
@@ -417,6 +434,9 @@ export const assistUnavailableReasonNames: Readonly<Record<number, string>> = Ob
   [AssistUnavailableReason.NOT_ARMED]: "NOT_ARMED",
   [AssistUnavailableReason.REQUIRED_GAIT_INVALID]: "REQUIRED_GAIT_INVALID",
   [AssistUnavailableReason.WAITING_NEW_GAIT_EVENTS]: "WAITING_NEW_GAIT_EVENTS",
+  [AssistUnavailableReason.AFO_ACQUIRING]: "AFO_ACQUIRING",
+  [AssistUnavailableReason.AFO_REARM_REQUIRED]: "AFO_REARM_REQUIRED",
+  [AssistUnavailableReason.AFO_INPUT_FAULT]: "AFO_INPUT_FAULT",
 });
 
 /** 面向操作者的助力不可用原因；英文线码名仍作为协议和日志稳定标识。 */
@@ -425,6 +445,9 @@ export const assistUnavailableReasonDescriptions: Readonly<Record<number, string
     [AssistUnavailableReason.REQUIRED_GAIT_INVALID]: "所需步态无效",
     [AssistUnavailableReason.WAITING_NEW_GAIT_EVENTS]:
       "等待本次 START 后左右髋各自出现新的屈曲峰",
+    [AssistUnavailableReason.AFO_ACQUIRING]: "AFO正在捕获步态或等待回到助力工作窗口；满足条件后从零渐增",
+    [AssistUnavailableReason.AFO_REARM_REQUIRED]: "AFO故障保护已锁存，该侧助力清零；排除故障后需停止并重新启动",
+    [AssistUnavailableReason.AFO_INPUT_FAULT]: "AFO输入、时序或运动范围异常，受影响侧助力清零",
   });
 
 export type ProtocolErrorCode =
@@ -801,7 +824,41 @@ export type AssistConfigValues = {
   profileId: number;
   leftLevelPercent: number;
   rightLevelPercent: number;
+  adaptiveBenchIdentity?: AdaptiveBenchIdentity;
 };
+
+/** 本次连接读回的台架身份；不会编码进BLE帧，也不替代固件检查。 */
+export type AdaptiveBenchIdentity = {
+  firmware: readonly number[];
+  capabilities: number;
+  strategyId: number;
+  strategyVersion: number;
+  offBodyBench: boolean;
+};
+export function supportsAdaptiveBenchActive(identity?: AdaptiveBenchIdentity): boolean {
+  // Regular firmware can select AFO directly from another saved strategy.
+  if(supportsAdaptiveAssistMode(identity))return identity!.strategyId!==AssistStrategy.ADAPTIVE_GAUSSIAN || identity!.strategyVersion===(identity!.firmware[2]>=22?12:identity!.firmware[2]>=21?11:identity!.firmware[2]>=20?10:identity!.firmware[2]>=19?9:identity!.firmware[2]>=17?8:identity!.firmware[2]>=8?7:6);
+  if(!identity || (identity.capabilities & Capability.ASSIST_CONFIGURATION)===0 ||
+      identity.strategyId!==AssistStrategy.ADAPTIVE_GAUSSIAN)return false;
+  const version=identity.firmware.join(".");
+  if(version==="0.11.6")return identity.strategyVersion===5;
+  if(["0.11.3","0.11.4", "0.11.5"].includes(version))return identity.strategyVersion===4 ||
+    (identity.offBodyBench && [2,3].includes(identity.strategyVersion));
+  return ["0.11.1","0.11.2"].includes(version) && identity.strategyVersion===2 && identity.offBodyBench;
+}
+export function adaptiveNominalMaximumNm(identity?: AdaptiveBenchIdentity): number {
+  if(supportsAdaptiveAssistMode(identity))return identity!.firmware[2]>=17?15:5;
+  if(identity?.firmware.join(".")==="0.11.6" && identity.strategyVersion===5 &&
+      identity.strategyId===5 && (identity.capabilities & Capability.ASSIST_CONFIGURATION)!==0)return 5;
+  return identity && ["0.11.3","0.11.4", "0.11.5"].includes(identity.firmware.join(".")) &&
+    (identity.capabilities & Capability.ASSIST_CONFIGURATION)!==0 && identity.strategyId===5 &&
+    [3,4].includes(identity.strategyVersion) ? 15 : .5;
+}
+
+export function supportsAdaptiveAssistMode(identity?: Pick<AdaptiveBenchIdentity, "firmware" | "capabilities">): boolean {
+  return identity !== undefined && ["0.11.7", "0.11.8", "0.11.9", "0.11.10", "0.11.11", "0.11.12", "0.11.13", "0.11.14", "0.11.15", "0.11.16", "0.11.17", "0.11.18", "0.11.19", "0.11.20", "0.11.21", "0.11.22", "0.11.23"].includes(identity.firmware.join(".")) &&
+    (identity.capabilities & Capability.ASSIST_CONFIGURATION)!==0;
+}
 
 export type CanStatusResponse = CommonResponse & {
   kind: "canStatus";
@@ -817,7 +874,43 @@ export type CanStatusResponse = CommonResponse & {
   motorFlags: readonly [number, number];
 };
 
+export type AfoStatusResponse = CommonResponse & {
+  kind:"afoStatus"; side:number; faults:number; firstFaults:number; lockReasons:number;
+  locked:boolean; rearmRequired:boolean; firstPresent:boolean; firstTimestampMs:number;
+  firstPositionDeg:number|null; firstVelocityDegS:number|null; firstSourceIntervalMs:number; firstAgeMs:number;
+};
+export function afoFaultDescription(faults:number):string {
+  return [[1,"反馈失效"],[2,"控制时序异常"],[4,"超出助力工作窗口"],[8,"等待步态锁相"],
+    [16,"未授权或停止"],[32,"故障锁存"],[64,"配置异常"]]
+    .filter(([bit])=>(faults&Number(bit))!==0).map(([,text])=>text).join("、")||"输出条件正常";
+}
+export type DirectionPreviewResponse = CommonResponse & {
+  kind: "directionPreview"; side: number; token: number; result: number; actuator: number;
+  baselineDegrees: number | null; rawPositionDegrees: number | null;
+  remainingMs: number; feedbackAgeMs: number;
+};
+export function supportsDirectionPreview(identity?: {firmware: readonly number[]} | null): boolean {
+  return !!identity && ["0.11.18", "0.11.19", "0.11.20", "0.11.21", "0.11.22", "0.11.23"].includes(identity.firmware.join("."));
+}
+export type BoardSensorResponse = CommonResponse & {
+  kind: "boardSensor";
+  page: number;
+  valid: boolean;
+  configured: boolean;
+  gyroCalibrated: boolean;
+  magFused: boolean;
+  ageMs: number;
+  values: readonly [number, number, number];
+};
+
+export function supportsBoardSensors(identity?: {firmware: readonly number[]} | null): boolean {
+  return !!identity && ["0.11.13", "0.11.14", "0.11.15", "0.11.16", "0.11.17", "0.11.18", "0.11.19", "0.11.20", "0.11.21", "0.11.22", "0.11.23"].includes(identity.firmware.join("."));
+}
+
 export type ExoBleResponse =
+  | DirectionPreviewResponse
+  | AfoStatusResponse
+  | BoardSensorResponse
   | SavedZeroStatusResponse
   | CanStatusResponse
   | AckResponse
@@ -837,7 +930,10 @@ export type ExoBleResponse =
   | TelemetryStatusResponse;
 
 const responseOpcodes = Object.freeze({
+  DIRECTION_PREVIEW: Opcode.GET_DIRECTION_PREVIEW | EXO_BLE.RESPONSE_BIT,
+  AFO_STATUS: Opcode.GET_AFO_STATUS | EXO_BLE.RESPONSE_BIT,
   CAN_STATUS: Opcode.GET_CAN_STATUS | EXO_BLE.RESPONSE_BIT,
+  BOARD_SENSOR: Opcode.GET_BOARD_SENSOR | EXO_BLE.RESPONSE_BIT,
   INFO: Opcode.GET_INFO | EXO_BLE.RESPONSE_BIT,
   SYSTEM_STATUS: Opcode.GET_SYSTEM_STATUS | EXO_BLE.RESPONSE_BIT,
   JOINT_STATUS: Opcode.GET_JOINT_STATUS | EXO_BLE.RESPONSE_BIT,
@@ -856,9 +952,14 @@ const responseOpcodes = Object.freeze({
 });
 
 const requestPayloadLengths: Readonly<Record<number, number>> = Object.freeze({
+  [Opcode.GET_DIRECTION_PREVIEW]: 1,
+  [Opcode.GET_AFO_STATUS]: 1,
   [Opcode.GET_CAN_STATUS]: 0,
+  [Opcode.GET_BOARD_SENSOR]: 1,
   [Opcode.RESTORE_FEEDBACK]: 0,
   [Opcode.GET_INFO]: 0,
+  [Opcode.PREPARE_ADAPTIVE_TRIAL]: 0,
+  [Opcode.CHECK_ADAPTIVE_TRIAL]: 0,
   [Opcode.GET_SYSTEM_STATUS]: 0,
   [Opcode.GET_JOINT_STATUS]: 1,
   [Opcode.GET_CALIBRATION_STATUS]: 1,
@@ -1128,6 +1229,8 @@ export function encodeControlConfigPayload(
   requireIntegerInRange(selectedMode, ControlMode.HOLD, ControlMode.IMPEDANCE, "selected mode");
   selectedControlModeName(selectedMode, "selected mode");
   requireNamedCode(selectedReference, referenceSourceNames, "selected reference");
+  if(selectedReference===ReferenceSource.BENCH_PEAK&&selectedMode!==ControlMode.TORQUE)
+    fail("INVALID_FIELD","bench peak reference requires TORQUE mode");
   // 动态参考只给 IMPEDANCE 定义。ALTERNATING_SINE_TEST 还需要调用方在发送前
   // capability；编码器只负责拒绝协议本身不允许的模式/参考组合。
   if ((selectedReference === ReferenceSource.SINE ||
@@ -1177,6 +1280,7 @@ function validateAssistConfigWire(values: AssistConfigWireValues): void {
     [AssistStrategy.PHASE_PROFILE]: AssistMode.ACTIVE_PHASE,
     [AssistStrategy.AAN_RESIDUAL]: AssistMode.ASSIST_AS_NEEDED,
     [AssistStrategy.ANGLE_THRESHOLD]: AssistMode.ANGLE_THRESHOLD,
+    [AssistStrategy.ADAPTIVE_GAUSSIAN]: AssistMode.ADAPTIVE_GAUSSIAN,
   };
   if (expectedModeByStrategy[values.strategyId] !== values.selectedMode) {
     fail("INVALID_FIELD", "assist mode and strategy do not match");
@@ -1229,6 +1333,12 @@ export function encodeAssistConfigPayload(
     reservedFlags: 0,
   };
   validateAssistConfigWire(wire);
+  // 仅限制发送；读回仍保留异常执行态，供界面显示和诊断。
+  if (wire.strategyId === AssistStrategy.ADAPTIVE_GAUSSIAN &&
+      ((wire.requestedExecutionState === AssistExecutionState.ACTIVE &&
+        !supportsAdaptiveBenchActive(values.adaptiveBenchIdentity)) || wire.profileId !== 0)) {
+    fail("INVALID_FIELD", "AFO ACTIVE需要本次设备读回支持当前试验范围；profile须为0");
+  }
   return Uint8Array.of(
     wire.schemaVersion,
     wire.selectedMode,
@@ -1351,7 +1461,8 @@ export function encodeAssistConfigWithLimitPayload(
 ): Uint8Array<ArrayBuffer> {
   const hardNm = (values.strategyId === AssistStrategy.ANGLE_THRESHOLD
     ? EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM
-    : EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM) / 1000;
+    : values.strategyId===AssistStrategy.ADAPTIVE_GAUSSIAN
+      ? adaptiveNominalMaximumNm(values.adaptiveBenchIdentity)*1000 : EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM) / 1000;
   if (!Number.isFinite(maximumNm) || maximumNm < 0 || maximumNm > hardNm) {
     fail("INVALID_PAYLOAD", `最大附加助力须在 0–${hardNm.toFixed(3)} N·m 内`);
   }
@@ -1443,7 +1554,7 @@ function validatePulseTiming(t: PulseTimingValues): void {
 }
 /** bit13原义是至少支持5 N·m，新范围必须核对已知固件版本。 */
 export function hasExtendedPulseLimits(capabilities: number, firmware: readonly number[] = []): boolean {
-  return ["0.10.12", "0.10.13"].includes(firmware.join(".")) &&
+  return ["0.10.12", "0.10.13", "0.11.0", "0.11.1", "0.11.2", "0.11.3", "0.11.4", "0.11.5", "0.11.6", "0.11.7", "0.11.8", "0.11.9", "0.11.10", "0.11.11", "0.11.12", "0.11.13", "0.11.14", "0.11.15", "0.11.16", "0.11.17", "0.11.18", "0.11.19", "0.11.20", "0.11.21", "0.11.22", "0.11.23"].includes(firmware.join(".")) &&
     (capabilities & (Capability.ANGLE_ASSIST_5NM | Capability.SWING_EVENT_PULSE)) ===
       (Capability.ANGLE_ASSIST_5NM | Capability.SWING_EVENT_PULSE);
 }
@@ -1458,7 +1569,7 @@ export function assertPulseTimingCapability(t: PulseTimingValues, capabilities: 
 export function pulseRiseLimitNmPerSecond(capabilities: number, firmware: readonly number[] = []): number | null {
   if ((capabilities & Capability.SWING_EVENT_PULSE) === 0) return null;
   const version=firmware.join(".");
-  if (version==="0.10.13") return 20;
+  if (["0.10.13", "0.11.0", "0.11.1", "0.11.2", "0.11.3", "0.11.4", "0.11.5", "0.11.6", "0.11.7", "0.11.8", "0.11.9", "0.11.10", "0.11.11", "0.11.12", "0.11.13", "0.11.14", "0.11.15", "0.11.16", "0.11.17", "0.11.18", "0.11.19", "0.11.20", "0.11.21", "0.11.22", "0.11.23"].includes(version)) return 20;
   return ["0.10.10", "0.10.11", "0.10.12"].includes(version) ? 10 : null;
 }
 export function encodePulseTimingPayload(t: PulseTimingValues): Uint8Array<ArrayBuffer> {
@@ -1514,6 +1625,10 @@ export function encodeRequest(
       payloadBytes[0] !== Side.LEFT && payloadBytes[0] !== Side.RIGHT) {
     fail("INVALID_PAYLOAD", `invalid side value ${payloadBytes[0]}`);
   }
+  if (opcode === Opcode.GET_BOARD_SENSOR && payloadBytes[0] > 3)
+    fail("INVALID_PAYLOAD", "board sensor page must be 0..3");
+  if ((opcode === Opcode.GET_DIRECTION_PREVIEW || opcode === Opcode.GET_AFO_STATUS) && payloadBytes[0] > 1)
+    fail("INVALID_PAYLOAD", "direction preview side must be 0..1");
   if (opcode===Opcode.SET_PULSE_TIMING) readPulseTiming(new DataView(payloadBytes.buffer,payloadBytes.byteOffset,payloadBytes.byteLength),0);
   if (opcode===Opcode.SET_PULSE_WINDOW) {
     const v=new DataView(payloadBytes.buffer,payloadBytes.byteOffset,payloadBytes.byteLength);
@@ -1537,7 +1652,7 @@ export function encodeRequest(
        payloadBytes[1] > DirectionTeachAction.CANCEL || payloadBytes[2] === 0)) {
     fail("INVALID_PAYLOAD", "方向示教需要有效side、action和非零会话token");
   }
-  if (opcode === Opcode.SAVED_ZERO_ACTION && (payloadBytes[0] > SavedZeroAction.CAPTURE_PAIR || payloadBytes[1] !== 1))
+  if (opcode === Opcode.SAVED_ZERO_ACTION && (payloadBytes[0] > SavedZeroAction.CAPTURE_SAVE_PAIR || payloadBytes[1] !== 1))
     fail("INVALID_PAYLOAD", "零位候选操作需要有效action和明确确认标志");
   if (opcode === Opcode.SET_JOINT_COMMAND) {
     try {
@@ -1565,7 +1680,7 @@ export function encodeRequest(
   }
   if ((opcode === Opcode.SET_ASSIST_CONFIG_WITH_LIMIT || opcode === Opcode.SET_ANGLE_ASSIST_CONFIG) &&
       new DataView(payloadBytes.buffer, payloadBytes.byteOffset, payloadBytes.byteLength)
-        .getUint16(8, true) > (opcode === Opcode.SET_ANGLE_ASSIST_CONFIG
+        .getUint16(8, true) > (opcode === Opcode.SET_ANGLE_ASSIST_CONFIG || payloadBytes[3]===AssistStrategy.ADAPTIVE_GAUSSIAN
           ? EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM : EXO_BLE.ASSIST_TORQUE_HARD_MAX_MNM)) {
     fail("INVALID_PAYLOAD", "maximum assistance exceeds firmware engineering limit");
   }
@@ -1991,6 +2106,8 @@ export function assertAssistTorqueLimitCapability(response: AssistTorqueLimitRes
 /** 返回当前设备与策略共同允许的峰值。相位工程曲线始终保持0.5 N·m。 */
 export function assistTorqueMaximumNm(strategyId: number, capabilities: number,
   reportedMaximumNm: number | null, firmware: readonly number[] = []): number {
+  if(strategyId===AssistStrategy.ADAPTIVE_GAUSSIAN && supportsAdaptiveAssistMode({firmware,capabilities}))
+    return Math.min(["0.11.17","0.11.18", "0.11.19", "0.11.20", "0.11.21", "0.11.22", "0.11.23"].includes(firmware.join("."))?15:5,reportedMaximumNm ?? .5);
   const declared = strategyId === AssistStrategy.ANGLE_THRESHOLD &&
     (capabilities & Capability.ANGLE_ASSIST_5NM) !== 0
     ? (hasExtendedPulseLimits(capabilities, firmware) ? EXO_BLE.ANGLE_ASSIST_TORQUE_HARD_MAX_MNM
@@ -2268,6 +2385,39 @@ export function parseResponse(source: BufferSource): ExoBleResponse {
   }
 
   switch (header.opcode) {
+    case responseOpcodes.AFO_STATUS: {
+      if(header.payloadLength!==16)fail("INVALID_FRAME_LENGTH","AFO_STATUS payload must be16 bytes");
+      const v=header.view,side=v.getUint8(4),faults=v.getUint8(5),firstFaults=v.getUint8(6),flags=v.getUint8(7);
+      const lockReasons=v.getUint16(8,true),q=v.getInt16(14,true),speed=v.getInt16(16,true);
+      if(side>1||faults>127||firstFaults>127||flags>7||lockReasons>511)fail("INVALID_FIELD","invalid AFO diagnostic flags");
+      return {...commonResponse(header,"afoStatus"),kind:"afoStatus",side,faults,firstFaults,lockReasons,
+        locked:!!(flags&1),rearmRequired:!!(flags&2),firstPresent:!!(flags&4),firstTimestampMs:v.getUint32(10,true),
+        firstPositionDeg:q===-32768?null:q/100,firstVelocityDegS:speed===-32768?null:speed/10,
+        firstSourceIntervalMs:v.getUint8(18),firstAgeMs:v.getUint8(19)};
+    }
+    case responseOpcodes.DIRECTION_PREVIEW: {
+      if (header.payloadLength !== 16) fail("INVALID_FRAME_LENGTH", "DIRECTION_PREVIEW payload must be16 bytes");
+      const v=header.view,side=v.getUint8(4),token=v.getUint8(5),result=v.getUint8(6),actuator=v.getUint8(7);
+      const baseline=v.getInt32(8,true),raw=v.getInt32(12,true),remainingMs=v.getUint16(16,true),feedbackAgeMs=v.getUint16(18,true);
+      if(side>1 || result>13 || ![0,1,255].includes(actuator) || remainingMs>60000 ||
+        (result===0 && (!token || actuator>1 || !remainingMs || feedbackAgeMs>50 || baseline===-2147483648 || raw===-2147483648)))
+        fail("INVALID_FIELD","invalid direction preview session");
+      return {...commonResponse(header,"directionPreview"),kind:"directionPreview",side,token,result,actuator,
+        baselineDegrees:baseline===-2147483648?null:mradToDegrees(baseline),
+        rawPositionDegrees:raw===-2147483648?null:mradToDegrees(raw),remainingMs,feedbackAgeMs};
+    }
+    case responseOpcodes.BOARD_SENSOR: {
+      if (header.payloadLength !== 16) fail("INVALID_FRAME_LENGTH", "BOARD_SENSOR payload must be 16 bytes");
+      const v = header.view, page = v.getUint8(4), flags = v.getUint8(5);
+      const ageMs = v.getUint16(6, true);
+      const values = [v.getFloat32(8, true), v.getFloat32(12, true), v.getFloat32(16, true)] as const;
+      if (page > 3 || (flags & ~15) !== 0 || values.some(n => !Number.isFinite(n)) ||
+          ((flags & 1) !== 0 && (ageMs >= 250 || (flags & 8) === 0)))
+        fail("INVALID_FIELD", "invalid board sensor snapshot");
+      return {...commonResponse(header, "boardSensor"), kind: "boardSensor", page,
+        valid: (flags & 1) !== 0, configured: (flags & 8) !== 0,
+        gyroCalibrated: (flags & 2) !== 0, magFused: (flags & 4) !== 0, ageMs, values};
+    }
     case responseOpcodes.SAVED_ZERO:
       if (header.payloadLength !== 16) fail("INVALID_FRAME_LENGTH", "SAVED_ZERO payload must be 16 bytes");
       return parseSavedZeroStatus(header);

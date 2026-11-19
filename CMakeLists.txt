@@ -9,5 +9,5 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # Git 标签之后；若完全依赖 git describe，ESP-IDF 启动日志会把 0.9.0 错报成旧阶段
 # 标签。这里显式固定本阶段版本，下一阶段升级时应与 exo_ble.c 一起修改。
 #
-set(PROJECT_VER "0.10.13")
+set(PROJECT_VER "0.11.23")
 project(twai_network_master)

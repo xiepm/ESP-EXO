@@ -82,6 +82,11 @@ typedef enum {
     EXO_BLE_OPCODE_GET_PULSE_WINDOW = 0x22,
     EXO_BLE_OPCODE_SET_PULSE_WINDOW = 0x23,
     EXO_BLE_OPCODE_GET_PULSE_STATUS = 0x24,
+    EXO_BLE_OPCODE_PREPARE_ADAPTIVE_TRIAL = 0x25, /* IDLE, profile 1; no START. */
+    EXO_BLE_OPCODE_CHECK_ADAPTIVE_TRIAL = 0x26, /* ACK OK/detail=1 iff all 49 words match. */
+    EXO_BLE_OPCODE_GET_BOARD_SENSOR = 0x27, /* one-byte page, 16-byte response */
+    EXO_BLE_OPCODE_GET_DIRECTION_PREVIEW = 0x28, /* actual BEGIN baseline, read only */
+    EXO_BLE_OPCODE_GET_AFO_STATUS = 0x29, /* current gate + retained first failure, read only */
 } exo_ble_opcode_t;
 
 /* 响应操作码 = 请求操作码按位或 0x80，手机据此识别响应类型。 */
@@ -244,6 +249,7 @@ typedef enum {
 	EXO_BLE_REFERENCE_CONSTANT = 0,
 	EXO_BLE_REFERENCE_SINE = 1,
 	EXO_BLE_REFERENCE_ALTERNATING_SINE_TEST = 2,
+    EXO_BLE_REFERENCE_BENCH_PEAK = 3, /* readback; prepared only through engineering UART */
 } exo_ble_wire_reference_t;
 
 /* GET_CONTROL_CONFIG 的第 5 字节用于区分正常结构化响应与 4-byte 通用 ACK。 */
@@ -372,6 +378,7 @@ typedef enum {
 	EXO_BLE_ASSIST_MODE_ACTIVE_PHASE = 2,
 	EXO_BLE_ASSIST_MODE_ASSIST_AS_NEEDED = 3,
 	EXO_BLE_ASSIST_MODE_ANGLE_THRESHOLD = 4,
+	EXO_BLE_ASSIST_MODE_ADAPTIVE_GAUSSIAN = 5,
 } exo_ble_wire_assist_mode_t;
 
 typedef enum {
@@ -386,6 +393,7 @@ typedef enum {
 	EXO_BLE_ASSIST_STRATEGY_PHASE_PROFILE = 2,
 	EXO_BLE_ASSIST_STRATEGY_AAN_RESIDUAL = 3,
 	EXO_BLE_ASSIST_STRATEGY_ANGLE_THRESHOLD = 4,
+	EXO_BLE_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN = 5,
 } exo_ble_wire_assist_strategy_t;
 
 typedef enum {
@@ -398,6 +406,9 @@ typedef enum {
 	EXO_BLE_ASSIST_UNAVAILABLE_NOT_ARMED = 6,
 	EXO_BLE_ASSIST_UNAVAILABLE_REQUIRED_GAIT_INVALID = 7,
 	EXO_BLE_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS = 8,
+	EXO_BLE_ASSIST_UNAVAILABLE_AFO_ACQUIRING = 9,
+	EXO_BLE_ASSIST_UNAVAILABLE_AFO_REARM_REQUIRED = 10,
+	EXO_BLE_ASSIST_UNAVAILABLE_AFO_INPUT_FAULT = 11,
 } exo_ble_wire_assist_unavailable_t;
 
 enum {
@@ -586,6 +597,7 @@ typedef struct {
 	uint8_t direction_teach_action;
 	uint8_t direction_teach_token;
     uint8_t saved_zero_action;
+    uint8_t board_sensor_page;
 	exo_ble_wire_joint_command_t joint_command;
 	exo_ble_wire_assist_request_t assist_config;
 	uint16_t maximum_assist_torque_mnm;
@@ -702,6 +714,22 @@ typedef struct {
 } exo_ble_can_status_t;
 bool exo_ble_protocol_encode_can_status(uint8_t request_id,
     const exo_ble_can_status_t *status, uint8_t *frame, size_t capacity, size_t *length);
+typedef struct {
+    uint8_t side, faults, first_faults, flags; /* locked/rearm/first_present */
+    uint16_t lock_reasons;
+    uint32_t first_timestamp_ms;
+    int16_t first_q_cdeg, first_v_ddeg_s;
+    uint8_t first_source_interval_ms, first_age_ms; /* 255=saturated/unknown */
+} exo_ble_afo_status_t;
+bool exo_ble_protocol_encode_afo_status(uint8_t request_id,const exo_ble_afo_status_t *status,
+    uint8_t *frame,size_t capacity,size_t *length);
+bool exo_ble_protocol_encode_direction_preview(uint8_t request_id, uint8_t side,
+    uint8_t token, uint8_t result, uint8_t actuator, int32_t baseline_mrad,
+    int32_t current_mrad, uint16_t remaining_ms, uint16_t age_ms,
+    uint8_t *frame, size_t capacity, size_t *length);
+bool exo_ble_protocol_encode_board_sensor(uint8_t request_id, uint8_t page,
+    uint8_t flags, uint16_t age_ms, const float values[3],
+    uint8_t *frame, size_t capacity, size_t *length);
 
 bool exo_ble_protocol_encode_calibration_status(
 	uint8_t request_id, const exo_ble_calibration_status_t *status,

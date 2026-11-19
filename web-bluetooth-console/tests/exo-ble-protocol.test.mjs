@@ -1,6 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+test("AFO current/retained first fault C wire vector, units, sentinels and malformed responses",()=>{
+  const wire=Uint8Array.of(1,0xa9,7,16,1,44,44,6,64,0,0x12,0x39,0,0,0xaf,0x0b,0xab,0xf3,40,10);
+  const r=parseResponse(wire);
+  assert.equal(r.kind,"afoStatus");assert.equal(r.side,1);
+  assert.equal(r.faults,44);assert.equal(r.rearmRequired,true);assert.equal(r.locked,false);
+  assert.equal(r.firstPresent,true);assert.equal(r.firstTimestampMs,14610);
+  assert.equal(r.firstPositionDeg,29.91);assert.equal(r.firstVelocityDegS,-315.7);
+  assert.equal(r.firstSourceIntervalMs,40);assert.equal(r.firstAgeMs,10);
+  assertCorrelated(r,Opcode.GET_AFO_STATUS,7);
+  assert.throws(()=>assertCorrelated(r,Opcode.GET_AFO_STATUS,8));
+  assert.deepEqual([...encodeRequest(Opcode.GET_AFO_STATUS,7,Uint8Array.of(1))],[1,0x29,7,1,1]);
+  assert.throws(()=>encodeRequest(Opcode.GET_AFO_STATUS,7,Uint8Array.of(2)));
+  for(const [index,value] of [[4,2],[5,128],[6,128],[7,8],[9,2]]){
+    const bad=wire.slice();bad[index]=value;assert.throws(()=>parseResponse(bad),/invalid AFO/);
+  }
+  const unknown=wire.slice();unknown.set([0,128,0,128],14);
+  assert.equal(parseResponse(unknown).firstPositionDeg,null);
+  assert.equal(parseResponse(unknown).firstVelocityDegS,null);
+});
+
+test("ordinary AFO readback distinguishes acquisition, rearm and input faults without claiming output", () => {
+  for (const [reason,name] of [[9,"AFO_ACQUIRING"],[10,"AFO_REARM_REQUIRED"],[11,"AFO_INPUT_FAULT"]]) {
+    const wire=Uint8Array.of(1,0x87,42,16,1,5,5,0x22,5,7,0,25,75,3,reason,2,0,0,15,0);
+    const result=parseResponse(wire);
+    assert.equal(result.kind,"assistConfig");
+    assert.equal(result.unavailableReasonName,name);
+    assert.equal(result.decodedAssistFlags.realOutputEnabled,false);
+    assert.match(assistUnavailableReasonDescriptions[reason],/AFO/);
+  }
+});
+
+test("AFO双高斯策略线码5可编码SHADOW，旧策略线码保持不变", () => {
+  assert.equal(AssistStrategy.ADAPTIVE_GAUSSIAN, 5);
+  assert.equal(AssistStrategy.ANGLE_THRESHOLD, 4);
+  assert.doesNotThrow(() => encodeAssistConfigPayload({
+    schemaVersion: 1, selectedMode: AssistMode.ADAPTIVE_GAUSSIAN,
+    requestedExecutionState: AssistExecutionState.SHADOW,
+    strategyId: AssistStrategy.ADAPTIVE_GAUSSIAN, profileId: 0,
+    leftLevelPercent: 0, rightLevelPercent: 0,
+  }));
+});
+
 test("CAN诊断固定20字节，保留历史大计数、区分上报意图与在线", () => {
   const frame = new Uint8Array(20);
   frame.set([1, 0x9b, 42, 16, 1, 3]);

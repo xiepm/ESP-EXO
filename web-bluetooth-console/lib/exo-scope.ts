@@ -14,8 +14,8 @@ export type ScopeChannel = { bit: number; title: string; unit: string; left: Val
 export const SCOPE_CHANNELS: readonly ScopeChannel[] = [
   {bit:1,title:"髋角度",unit:"°",left:"leftPositionDeg",right:"rightPositionDeg",range:[-30,60],minimumSpan:10,unavailable:"等待有效关节角度；检查反馈及穿戴零位"},
   {bit:2,title:"髋角速度",unit:"°/s",left:"leftVelocityDegS",right:"rightVelocityDegS",range:[-120,120],minimumSpan:20,unavailable:"等待有效关节角速度"},
-  {bit:8,title:"步态相位",unit:"%",left:"leftPhasePercent",right:"rightPhasePercent",range:[0,100],minimumSpan:100,unavailable:"步态尚未锁定；需要本侧有效周期运动"},
-  {bit:32,title:"步态置信度",unit:"%",left:"leftConfidencePercent",right:"rightConfidencePercent",range:[0,100],minimumSpan:100,unavailable:"等待有效步态估计"},
+  {bit:8,title:"步态相位（髋角事件估计）",unit:"%",left:"leftPhasePercent",right:"rightPhasePercent",range:[0,100],minimumSpan:100,unavailable:"等待本侧有效周期运动；此通道不是AFO锁相状态"},
+  {bit:32,title:"步态置信度（髋角事件估计）",unit:"%",left:"leftConfidencePercent",right:"rightConfidencePercent",range:[0,100],minimumSpan:100,unavailable:"等待有效髋角事件估计；此通道不是AFO置信度"},
   {bit:16,title:"建议助力",unit:"N·m",left:"leftAssistSuggestionNm",right:"rightAssistSuggestionNm",range:[-5,5],minimumSpan:0.5,unavailable:"策略未产生有效建议；检查运行方式与事件门禁"},
   {bit:64,title:"实际加入命令的助力增量",unit:"N·m",left:"leftAppliedTorqueNm",right:"rightAppliedTorqueNm",range:[-5,5],minimumSpan:0.5,unavailable:"等待有效命令增量；该值并非实测人体力矩"},
   {bit:4,title:"电机反馈力矩",unit:"N·m",left:"leftMotorTorqueNm",right:"rightMotorTorqueNm",range:[-5,5],minimumSpan:0.5,unavailable:"等待电机估算反馈力矩；非独立力矩传感器"},

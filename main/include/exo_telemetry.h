@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <math.h>
 
 #include "exo_types.h"
 
@@ -25,6 +26,13 @@ extern "C" {
 #define EXO_TELEMETRY_SOURCE_FREQUENCY_HZ 100U
 #define EXO_TELEMETRY_DEFAULT_RATE_HZ 20U
 #define EXO_TELEMETRY_RING_CAPACITY 32U
+
+/* Values must be the added torque of successfully sent commands, not the
+ * strategy request or the CAN-send success bit (zero frames are valid sends). */
+static inline bool exo_telemetry_has_applied_assist(float left_nm, float right_nm) {
+    return (isfinite(left_nm) && fabsf(left_nm)>0.000001f) ||
+           (isfinite(right_nm) && fabsf(right_nm)>0.000001f);
+}
 
 /* 一个 Notify 只携带一个单 bit 通道的左右值；同样本的多通道共用序号。 */
 typedef enum {

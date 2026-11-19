@@ -7,6 +7,7 @@
 #include "esp_err.h"
 #include "exo_assist.h"
 #include "exo_types.h"
+#include "exo_bench_peak.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,7 +44,23 @@ typedef enum {
 	EXO_REFERENCE_CONSTANT = 0,
 	EXO_REFERENCE_SINE = 1,
 	EXO_REFERENCE_ALTERNATING_SINE_TEST = 2,
+    EXO_REFERENCE_BENCH_PEAK = 3,
 } exo_reference_source_t;
+
+esp_err_t exo_controller_prepare_bench_peak(unsigned side,float signed_peak_nm);
+bool exo_controller_get_bench_peak(exo_bench_peak_t *status);
+#define EXO_BENCH_TRACE_CAPACITY 384U
+typedef struct {
+    int64_t timestamp_us;
+    uint32_t sequence, fault;
+    uint64_t source_us[2];
+    float q[2], v[2], estimate[2], command[2];
+    uint32_t age_us[2];
+    bool valid[2], sent[2];
+} exo_bench_trace_row_t;
+/* Reads are refused while armed/ticking. Trace freezes at completion/fault. */
+bool exo_controller_get_bench_trace(unsigned index,exo_bench_trace_row_t *row,
+    unsigned *count,unsigned *dropped);
 
 /* START 在新鲜反馈通过后锁存的左右人体髋关节起点，单位均为 deg。 */
 typedef struct {
@@ -116,6 +133,11 @@ typedef struct {
 	exo_joint_command_pair_t final_command;
 	esp_err_t send_result;
 } exo_controller_tick_result_t;
+
+esp_err_t exo_controller_process_sensor_tick(int64_t now_us,
+    const exo_sensor_snapshot_t *sensors,const exo_assist_result_t *assist_result,
+    uint32_t expected_sensor_sequence,uint32_t expected_gait_sequence,
+    exo_controller_tick_result_t *tick_result);
 
 /* UART/BLE 只读诊断快照；它不是连续遥测，也不是 BLE 线格式。 */
 typedef struct {

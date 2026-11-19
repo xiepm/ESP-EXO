@@ -1656,10 +1656,15 @@ footer { display: flex; justify-content: space-between; align-items: center; pad
 .exo-wear-angle strong { font-size: 32px; font-weight: 600; letter-spacing: -.04em; }
 .exo-wear-joint small { display: block; color: #617e8d; font-size: 11px; line-height: 1.8; }
 .exo-wear-joint .exo-confirm-row { padding: 10px; margin: 12px 0 0; font-size: 11px; }
+.exo-wear-joint .exo-direction-confirmation { min-block-size: calc(3.6em + 22px); }
 .exo-wear-confirm { margin: 18px 0 14px; font-size: 13px; }
 .exo-wear-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .exo-wear-actions .primary { flex: 1; min-width: 180px; }
 .exo-wear-readiness { color: #6b8390; font-size: 12px; line-height: 1.8; margin: 14px 0 0; }
+.exo-recalibration-status { margin: 12px 0 16px; padding: 14px 16px; border: 1px solid #e9d6aa; border-radius: 10px; background: #fffaf0; color: #705323; line-height: 1.7; }
+.exo-recalibration-status strong { display: block; font-size: 14px; }
+.exo-recalibration-status p { margin: 6px 0; font-size: 13px; }
+.exo-recalibration-status small { display: block; font-size: 12px; }
 .exo-wear-success { color: #23785d; border: 1px solid #c8e5d5; background: #f0faf4; border-radius: 10px; padding: 12px; font-size: 12px; line-height: 1.8; }
 .exo-wear-footnote { color: #81959f; font-size: 11px; line-height: 1.8; margin: 14px 0 0; }
 @media (max-width: 520px) {
@@ -1791,6 +1796,38 @@ footer { display: flex; justify-content: space-between; align-items: center; pad
 .exo-zero-choice legend { padding: 0 6px; font-weight: 600; }
 .exo-zero-choice label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .exo-zero-choice input { accent-color: #167eae; }
+.exo-adaptive-notice { margin: 16px 0; padding: 18px; border: 1px solid #ddc68b; border-radius: 12px; background: #fff9eb; color: #624d20; line-height: 1.65; }
+.exo-adaptive-workbench > p, .exo-adaptive-workbench details > p { font-size: 14px; line-height: 1.7; color: #395866; }
+.exo-adaptive-fields { margin: 20px 0; padding: 12px 18px; min-width: 0; border: 1px solid #d4e3e8; border-radius: 12px; }
+.exo-adaptive-fields legend { padding: 0 8px; font-weight: 650; }
+.exo-adaptive-file { display: flex; flex-direction: column; gap: 8px; font-size: 13px; margin: 12px 0; }
+.exo-adaptive-file input { max-width: 100%; }
+.exo-adaptive-overall { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 18px 0; }
+.exo-adaptive-overall input { padding: 10px; border: 1px solid #cbdde3; border-radius: 8px; width: 120px; }
+.exo-adaptive-preview { margin: 20px 0; padding: 16px; background: #f5fafc; border-radius: 12px; }
+.exo-adaptive-preview svg { width: 100%; height: auto; }
+.exo-adaptive-preview p, .exo-adaptive-preview figcaption { font-size: 12px; line-height: 1.6; color: #395866; }
+.exo-adaptive-errors { padding: 14px; background: #fff2ef; color: #923c2c; border-radius: 8px; }
+.exo-adaptive-scrubber { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+.exo-adaptive-readings { display: grid; grid-template-columns: repeat(auto-fit,minmax(210px,1fr)); gap: 12px; }
+.exo-adaptive-readings > div { padding: 14px; border: 1px solid #d4e3e8; border-radius: 10px; min-width: 0; }
+.exo-adaptive-readings span { display: block; color: #627f8e; font-size: 12px; margin-bottom: 8px; }
+.exo-adaptive-readings strong { font-size: 14px; overflow-wrap: anywhere; }
+.exo-adaptive-capture .exo-export-row { flex-wrap: wrap; }
+.exo-capture-take { margin: 12px 0; padding: 14px; border: 1px solid #d4e3e8; border-radius: 10px; }
+.exo-capture-markers { font-size: 13px; line-height: 1.7; color: #395866; }
+.exo-direction-chart { margin: 20px 0; padding: 16px; border: 1px solid #cedee7; border-radius: 12px; background: #f7fafc; }
+.exo-direction-chart > p { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.exo-direction-controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: end; }
+.exo-direction-controls label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.exo-direction-controls select, .exo-direction-controls input[type=number] { padding: 7px; border: 1px solid #cbdde3; border-radius: 6px; background: white; max-width: 100px; }
+.exo-direction-chart figure { margin: 12px 0; padding: 10px; border: 1px solid #e0e8ed; border-radius: 8px; background: white; }
+.exo-direction-chart figcaption { display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; line-height: 1.6; }
+.exo-direction-chart figcaption strong { margin-right: auto; }
+.exo-direction-chart figure svg { display: block; width: 100%; height: auto; min-height: 120px; touch-action: pan-y; }
+.exo-direction-chart svg text { font-size: 10px; fill: #617387; }
+.exo-direction-detail { min-height: 138px; padding: 12px; background: #eef3f7; border-radius: 8px; font-size: 12px; line-height: 1.8; }
+.exo-direction-detail p { margin: 6px 0 0; }
 /* 单次摆腿脉冲参数采用同一组表单样式，窄屏改为单列。 */
 .exo-pulse-parameters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
 .exo-pulse-parameters label { display: flex; flex-direction: column; gap: 8px; color: #395866; font-size: 13px; }

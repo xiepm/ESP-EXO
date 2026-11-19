@@ -12,8 +12,8 @@ $command = "set -eu; cd '$wslRoot'; " +
     'gcc -std=c11 -Wall -Wextra -Werror -pedantic ' +
     '-Itools/host_fakes -Imain/include ' +
     'tools/phase10_assist_integration_replay.c ' +
-    'main/exo_sensor_snapshot.c main/gait_estimator.c main/exo_assist.c main/exo_swing_pulse.c ' +
-    'main/exo_phase_profile.c main/exo_controller.c ' +
+    'main/exo_sensor_snapshot.c main/gait_estimator.c main/exo_assist.c tools/host_fakes/adaptive_preview.c main/exo_swing_pulse.c ' +
+    'main/exo_phase_profile.c main/exo_controller.c main/exo_bench_peak.c ' +
     'main/exo_command_composer.c main/sine_reference.c -lm ' +
     '-o build/phase10_host/phase10_assist_integration_replay; ' +
     './build/phase10_host/phase10_assist_integration_replay'

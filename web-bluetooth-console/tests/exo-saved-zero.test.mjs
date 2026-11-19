@@ -18,7 +18,7 @@ test('save/restore/forget/capture-pair require exact two bytes and explicit conf
     assert.deepEqual([...encodeRequest(Opcode.SAVED_ZERO_ACTION,0x43,Uint8Array.of(action,1))],[1,0x1f,0x43,2,action,1]);
     assert.throws(()=>encodeRequest(Opcode.SAVED_ZERO_ACTION,1,Uint8Array.of(action,0)));
   }
-  for(const payload of [Uint8Array.of(4,1),Uint8Array.of(1),Uint8Array.of(1,2),Uint8Array.of(1,1,1)])
+  for(const payload of [Uint8Array.of(5,1),Uint8Array.of(1),Uint8Array.of(1,2),Uint8Array.of(1,1,1)])
     assert.throws(()=>encodeRequest(Opcode.SAVED_ZERO_ACTION,1,payload));
   assert.throws(()=>encodeRequest(Opcode.GET_SAVED_ZERO,1,Uint8Array.of(2)));
   const ack=parseResponse(Uint8Array.of(1,0x9f,0x43,4,0,0,1,0));

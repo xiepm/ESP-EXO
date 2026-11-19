@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {assertCapturedZeroPair, captureAndVerifyBothZeros, supportsAtomicZeroCapture} from '../lib/exo-zero-calibration.ts';
+import {assertCapturedZeroPair, captureAndVerifyBothZeros, supportsAtomicZeroCapture,
+  supportsPersistentCalibration,persistentZeroReadiness,assertPersistedZeroPair} from '../lib/exo-zero-calibration.ts';
 import {assessDeviceCompatibility} from '../lib/exo-device-compatibility.ts';
 const flags={mappingValid:true,directionValid:true,zeroValid:true,jointValid:true,feedbackValid:true,online:true};
 const joint=(side)=>({side,direction:side===0?2:1,positionDegrees:0,feedbackAgeMs:10,decodedJointFlags:{...flags}});
@@ -9,6 +10,27 @@ const calibration=(side)=>({side,actuator:side===0?1:0,direction:side===0?2:1,
   feedbackAgeMs:7,decodedJointFlags:{...flags}});
 const assertPair=(left=joint(0),right=joint(1),lc=calibration(0),rc=calibration(1),state=1)=>
   assertCapturedZeroPair(left,right,lc,rc,state);
+const saved=(side)=>({side,actuator:side===0?1:0,direction:side===0?2:1,
+  stored:true,bindingMatches:true,savedZeroDegrees:calibration(side).softwareZeroDegrees});
+test('persistent calibration is version gated and distinguishes saved configuration from feedback',()=>{
+  const info={firmware:[0,11,9],capabilities:0xff7f};
+  assert.equal(supportsPersistentCalibration(info),true);
+  assert.equal(assessDeviceCompatibility({...info,protocolMinVersion:1,protocolMaxVersion:1,maxFrameSize:20}).accepted,true);
+  for(const firmware of [[0,11,8],[0,11,24]])assert.equal(supportsPersistentCalibration({...info,firmware}),false);
+  assert.equal(supportsPersistentCalibration({...info,capabilities:0}),false);
+  assert.equal(persistentZeroReadiness(saved(0),saved(1),false,false),'零位已保存，等待电机反馈');
+  assert.equal(persistentZeroReadiness(saved(0),saved(1),true,true),'零位已生效，无需重复校准');
+  assert.match(persistentZeroReadiness(saved(0),{...saved(1),stored:false},true,false),/首次校准/);
+  assert.match(persistentZeroReadiness(saved(0),{...saved(1),bindingMatches:false},true,false),/映射已改变/);
+});
+test('persistent save readback verifies both actual offsets, mapping and periodic wrap',()=>{
+  assert.doesNotThrow(()=>assertPersistedZeroPair(saved(0),saved(1),calibration(0),calibration(1)));
+  assert.doesNotThrow(()=>assertPersistedZeroPair(saved(0),saved(1),{...calibration(0),softwareZeroDegrees:1438.51},calibration(1)));
+  for(const patch of [{stored:false},{bindingMatches:false},{side:1},{direction:1},{actuator:0},
+    {savedZeroDegrees:null},{savedZeroDegrees:NaN},{savedZeroDegrees:12}])
+    assert.throws(()=>assertPersistedZeroPair({...saved(0),...patch},saved(1),calibration(0),calibration(1)));
+  assert.throws(()=>assertPersistedZeroPair(saved(0),saved(1),{...calibration(0),decodedJointFlags:{...flags,zeroValid:false}},calibration(1)));
+});
 function transport(patch={}) {
   const calls=[];
   return {calls,

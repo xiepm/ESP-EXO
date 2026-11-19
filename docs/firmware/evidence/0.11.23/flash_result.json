@@ -1,0 +1,28 @@
+{
+  "firmware": "0.11.23",
+  "strategy_version": 12,
+  "port": "COM7",
+  "serial": "84:C7:BB:4A:90:E8",
+  "app_sha256": "646290f22fd5f6c7cf53a46509e292ea8b0a3c587b0ce0f1fa61ca7c74e11646",
+  "app_verify": true,
+  "partition_nvs_phy_identical": true,
+  "partition_nvs_phy_sha256": "675136d5b07dafadc6f0bd5cb18751ab447be50c26eb33235279d7b34cc908ce",
+  "postboot_verified": true,
+  "start_sent": false,
+  "enable_sent": false,
+  "postboot_port": "COM7",
+  "state": "IDLE",
+  "run_requested": false,
+  "output_allowed": false,
+  "usb_trace_meta": [
+    "3628907843",
+    "0.11.23",
+    "927b04156f3832fae8372bcb3d756eec298ded5aa4bc004b2d9ef79f5aaccf0a",
+    "9702",
+    "9829",
+    "128"
+  ],
+  "usb_trace_rows": 48,
+  "completed_at": "2026-11-18T17:00:28.954699+08:00",
+  "validation_scope": "Application flash verification, preserved partition/NVS/PHY, idle boot and one read-only USB trace batch; no START, motor enable or gait test."
+}

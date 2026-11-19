@@ -15,6 +15,7 @@
 #define ZERO_PERIOD_DEG 1440.0f /* RS01线上位置为-4π..+4π rad，完整周期8π。 */
 static uint32_t s_record[5];
 static bool s_wear_initialized, s_stored, s_bad_record;
+static bool s_auto_restore_enabled;
 static portMUX_TYPE s_record_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static uint32_t binding(const hip_joint_snapshot_t *joint) {
@@ -61,8 +62,9 @@ esp_err_t exo_wear_zero_init(void) {
     s_stored = stored;
     s_bad_record = bad;
     s_wear_initialized = true;
+    s_auto_restore_enabled = stored;
     portEXIT_CRITICAL(&s_record_lock);
-    /* 候选加载到此结束，不能调用hip_joint恢复函数。 */
+    /* CAN尚未就绪；稍后仅在IDLE用新反馈建立本次连续坐标。 */
     return ESP_OK;
 }
 static bool copy_record(uint32_t record[5], bool *bad) {
@@ -185,13 +187,51 @@ static esp_err_t write_record(const uint32_t *record) {
     if (record) memcpy(s_record, record, sizeof(s_record));
     else memset(s_record, 0, sizeof(s_record));
     s_stored = record != NULL;
+    s_auto_restore_enabled = record != NULL;
     s_bad_record = false;
     portEXIT_CRITICAL(&s_record_lock);
     return ESP_OK;
 }
+bool exo_wear_zero_auto_restore_pending(void) {
+    portENTER_CRITICAL(&s_record_lock);
+    const bool pending=s_wear_initialized&&s_auto_restore_enabled;
+    portEXIT_CRITICAL(&s_record_lock);
+    if(!pending)return false;
+    hip_joint_snapshot_t joints[2];
+    return !hip_joint_get_snapshot(EXO_HIP_JOINT_LEFT,&joints[0]) ||
+        !hip_joint_get_snapshot(EXO_HIP_JOINT_RIGHT,&joints[1]) ||
+        !joints[0].zero_valid || !joints[1].zero_valid;
+}
+void exo_wear_zero_cancel_auto_restore(void) {
+    portENTER_CRITICAL(&s_record_lock);s_auto_restore_enabled=false;
+    portEXIT_CRITICAL(&s_record_lock);
+}
+void exo_wear_zero_restore_saved_if_needed(void) {
+    if(!exo_wear_zero_auto_restore_pending())return;
+    uint32_t record[5];bool bad;
+    if(!copy_record(record,&bad)) {exo_wear_zero_cancel_auto_restore();return;}
+    hip_joint_snapshot_t joints[2];rs01_feedback_snapshot_t motors[2];
+    for(unsigned i=0;i<2;i++) {
+        if(!hip_joint_get_snapshot((exo_hip_joint_id_t)i,&joints[i])||
+           !joints[i].mapping_valid||!joints[i].direction_valid||
+           binding(&joints[i])!=record[1U+i]) {
+            exo_wear_zero_cancel_auto_restore();return;
+        }
+    }
+    if(read_pair(joints,motors)!=EXO_WEAR_ZERO_OK)return;
+    const float zeros[2]={record_zero(record,0),record_zero(record,1)};
+    /* Also covers motor-only power cycles, but the caller's IDLE maintenance
+     * excludes RUNNING/ERROR. Rebinding cannot open the motion output gate. */
+    (void)hip_joint_restore_persistent_zero_pair(zeros,motors);
+}
+static void reject_persistent_capture(exo_wear_zero_action_t action) {
+    if(action!=EXO_WEAR_ZERO_CAPTURE_SAVE_PAIR)return;
+    (void)hip_joint_clear_zero(EXO_HIP_JOINT_LEFT);
+    (void)hip_joint_clear_zero(EXO_HIP_JOINT_RIGHT);
+}
 esp_err_t exo_wear_zero_execute(exo_wear_zero_action_t action, bool confirmed,
     exo_wear_zero_result_t *reason) {
-    if (!reason || (unsigned)action > EXO_WEAR_ZERO_CAPTURE_PAIR) return ESP_ERR_INVALID_ARG;
+    if (!reason || (unsigned)action > EXO_WEAR_ZERO_CAPTURE_SAVE_PAIR) return ESP_ERR_INVALID_ARG;
     *reason = EXO_WEAR_ZERO_NOT_CONFIRMED;
     if (!confirmed) return ESP_ERR_INVALID_STATE;
     if (!s_wear_initialized) return ESP_ERR_INVALID_STATE;
@@ -203,7 +243,7 @@ esp_err_t exo_wear_zero_execute(exo_wear_zero_action_t action, bool confirmed,
     bool bad;
     hip_joint_snapshot_t joints[2];
     rs01_feedback_snapshot_t motors[2];
-    if (action == EXO_WEAR_ZERO_CAPTURE_PAIR) {
+    if (action == EXO_WEAR_ZERO_CAPTURE_PAIR || action == EXO_WEAR_ZERO_CAPTURE_SAVE_PAIR) {
         *reason = read_pair(joints, motors);
         if (*reason != EXO_WEAR_ZERO_OK) return ESP_ERR_INVALID_STATE;
         /* 成对采集与沿用是不同动作：这里不读取NVS、不受旧零位偏差限制。
@@ -212,7 +252,8 @@ esp_err_t exo_wear_zero_execute(exo_wear_zero_action_t action, bool confirmed,
             *reason = EXO_WEAR_ZERO_EPOCH_CHANGED;
             return ESP_ERR_INVALID_STATE;
         }
-        return ESP_OK;
+        exo_wear_zero_cancel_auto_restore();
+        if(action==EXO_WEAR_ZERO_CAPTURE_PAIR)return ESP_OK;
     }
     if (action == EXO_WEAR_ZERO_RESTORE) {
         if (!copy_record(record, &bad)) {
@@ -227,10 +268,14 @@ esp_err_t exo_wear_zero_execute(exo_wear_zero_action_t action, bool confirmed,
             *reason = EXO_WEAR_ZERO_EPOCH_CHANGED;
             return ESP_ERR_INVALID_STATE;
         }
+        portENTER_CRITICAL(&s_record_lock);s_auto_restore_enabled=true;
+        portEXIT_CRITICAL(&s_record_lock);
         return ESP_OK;
     }
     *reason = read_pair(joints, motors);
-    if (*reason != EXO_WEAR_ZERO_OK) return ESP_ERR_INVALID_STATE;
+    if (*reason != EXO_WEAR_ZERO_OK) {
+        reject_persistent_capture(action);return ESP_ERR_INVALID_STATE;
+    }
     record[0] = ZERO_MAGIC;
     for (unsigned i = 0; i < 2U; ++i) {
         if (!joints[i].zero_valid || !joints[i].joint_valid ||
@@ -239,12 +284,15 @@ esp_err_t exo_wear_zero_execute(exo_wear_zero_action_t action, bool confirmed,
             fabsf(exo_radians_to_degrees(motors[i].continuous_position_rad) -
                 joints[i].software_zero_motor_deg) > EXO_WEAR_ZERO_REUSE_MAX_DEVIATION_DEG) {
             *reason = EXO_WEAR_ZERO_CURRENT_ZERO_INVALID;
+            reject_persistent_capture(action);
             return ESP_ERR_INVALID_STATE;
         }
         record[1U + i] = binding(&joints[i]);
         memcpy(&record[3U + i], &joints[i].software_zero_periodic_motor_deg, sizeof(float));
     }
     if (!record_valid(record) || write_record(record) != ESP_OK) {
+        /* Never enable START on coordinates that failed to persist. */
+        reject_persistent_capture(action);
         *reason = EXO_WEAR_ZERO_STORAGE_FAILED;
         return ESP_FAIL;
     }
@@ -255,10 +303,17 @@ esp_err_t exo_wear_zero_teach_direction(exo_hip_joint_id_t joint,
     hip_direction_teach_result_t *reason, exo_direction_t *direction) {
     if (!reason || !direction || (unsigned)joint >= 2U || !token ||
         (unsigned)action > HIP_DIRECTION_TEACH_CANCEL) return ESP_ERR_INVALID_ARG;
+    /* A rejected BEGIN (offline, moving, busy) must not erase a valid saved
+     * calibration. Invalidate only after the joint layer accepted the session. */
+    esp_err_t error=hip_joint_teach_direction(joint,action,token,reason,direction);
+    if(error!=ESP_OK)return error;
+    if(action==HIP_DIRECTION_TEACH_BEGIN)exo_wear_zero_cancel_auto_restore();
     if (action == HIP_DIRECTION_TEACH_BEGIN && write_record(NULL) != ESP_OK) {
+        hip_direction_teach_result_t ignored;exo_direction_t unused;
+        (void)hip_joint_teach_direction(joint,HIP_DIRECTION_TEACH_CANCEL,token,&ignored,&unused);
         *reason = HIP_DIRECTION_TEACH_STORAGE_FAILED;
         *direction = EXO_DIRECTION_UNKNOWN;
         return ESP_ERR_INVALID_STATE;
     }
-    return hip_joint_teach_direction(joint, action, token, reason, direction);
+    return ESP_OK;
 }

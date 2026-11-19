@@ -1,0 +1,38 @@
+[
+  {
+    "mode": "angle_only",
+    "scenario": "fresh",
+    "leg_samples": 27188,
+    "changed_outputs": 0
+  },
+  {
+    "mode": "angle_only",
+    "scenario": "async",
+    "leg_samples": 27188,
+    "changed_outputs": 0
+  },
+  {
+    "mode": "angle_only",
+    "scenario": "quantized",
+    "leg_samples": 27188,
+    "changed_outputs": 0
+  },
+  {
+    "mode": "recorded_velocity",
+    "scenario": "fresh",
+    "leg_samples": 27188,
+    "changed_outputs": 0
+  },
+  {
+    "mode": "recorded_velocity",
+    "scenario": "async",
+    "leg_samples": 27188,
+    "changed_outputs": 0
+  },
+  {
+    "mode": "recorded_velocity",
+    "scenario": "quantized",
+    "leg_samples": 27188,
+    "changed_outputs": 0
+  }
+]

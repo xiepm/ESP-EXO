@@ -20,10 +20,14 @@
  */
 
 #include "debug_console.h"
+#include "exo_board_status.h"
+#include "exo_board_power.h"
+#include "sdkconfig.h"
 #include "driver/twai.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "exo_assist.h"
+#include "exo_adaptive_runtime.h"
 #include "exo_ble.h"
 #include "exo_config.h"
 #include "exo_control_loop.h"
@@ -162,19 +166,21 @@ static void twai_init(void) {
  * 已初始化的状态机；调整顺序前应先确认依赖，不要仅为了“看起来整齐”而移动。
  */
 void app_main(void) {
+	ESP_ERROR_CHECK(exo_board_power_init());
+	exo_board_init(); /* No CAN/motor commands, no NVS erase or calibration overwrite. */
 	ESP_LOGI(TAG, "RobStride Motor Control - TWAI Master");
 	ESP_LOGI(
 		TAG, "TX: GPIO%d, RX: GPIO%d, Baud: %luMbps",
 		g_exo_hardware_config.twai.tx_gpio, g_exo_hardware_config.twai.rx_gpio,
 		(unsigned long)(g_exo_hardware_config.twai.bitrate_bps / 1000000U));
 
-	/* NVS先于关节/BLE初始化。出厂方向和候选零位断电保存，本次零位仍只在RAM。
+	/* NVS先于关节/BLE初始化。出厂方向和穿戴零位断电保存，零位在新鲜反馈就绪后自动恢复。
 	 * NVS异常不自动擦除；初始化失败时CAN尚未启动，不能带着未知方向进入运行。 */
 	ESP_ERROR_CHECK(exo_factory_direction_storage_init());
 	/* 先创建纯软件对象，此时还没有启动 CAN 外设，也不会让电机运动。 */
 	ESP_ERROR_CHECK(rs01_driver_init());
 	ESP_ERROR_CHECK(hip_joint_init());
-	ESP_ERROR_CHECK(exo_wear_zero_init()); /* 只读候选，不自动恢复本次RAM零位。 */
+	ESP_ERROR_CHECK(exo_wear_zero_init()); /* 加载持久化记录，IDLE维护稍后绑定本次反馈epoch。 */
 	/*
 	 * 通用控制器只初始化静态默认配置，不创建任务、不发送 CAN。产品默认是
 	 * DAMPING + CONSTANT；工程交替激励必须由上位机显式选择，并受编译开关隔离。
@@ -186,6 +192,7 @@ void app_main(void) {
 	 * 唯一100 Hz控制任务完成。
 	 */
 	ESP_ERROR_CHECK(exo_assist_init());
+	ESP_ERROR_CHECK(exo_adaptive_runtime_init());
 	/*
 	 * 遥测对象只有一个固定大小环形缓冲区；初始化不会创建任务、发送 BLE 或
 	 * 启动数据流。只有上位机订阅并显式请求 START_TELEMETRY 后，100 Hz 控制
@@ -223,5 +230,15 @@ void app_main(void) {
 	 * app_main 返回后，FreeRTOS 会继续调度上面创建的任务；返回不是“程序结束”。
 	 */
 	ESP_ERROR_CHECK(exo_control_loop_init());
+    /* The reference board needs GPIO42=1 even when motor enable is OFF.
+     * Only energize after NVS, CAN/RX, state machine and control are initialized.
+     * Stay INIT with output closed during motor electronics boot; no recovery
+     * requests consume their finite budget before this wait completes.
+     * Supply remains on in IDLE so STOP/calibration can still read encoders. */
+    ESP_ERROR_CHECK(exo_board_power_prepare_feedback());
+#ifdef CONFIG_EXO_BOARD_V21
+    ESP_LOGI(TAG, "GPIO42 motor electronics power ON; enable remains OFF; waiting 3s for feedback");
+    vTaskDelay(pdMS_TO_TICKS(3000));
+#endif
 	ESP_ERROR_CHECK(exo_system_finish_initialization());
 }

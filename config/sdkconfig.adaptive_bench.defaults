@@ -1,0 +1,2 @@
+# 首级非穿戴台架候选；实际代码硬上限500 mNm，不提供15 Nm目标板开关。
+CONFIG_EXO_ADAPTIVE_BENCH_ACTIVE=y

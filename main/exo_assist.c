@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "exo_phase_profile.h"
+#include "exo_adaptive_runtime.h"
 #include "freertos/FreeRTOS.h"
 
 /* 固定工作区用union提供至少8字节对齐；策略不得越过descriptor声明的大小。 */
@@ -271,7 +272,24 @@ static esp_err_t angle_step(void *workspace, size_t bytes,
 }
 static const exo_assist_policy_ops_t s_angle_ops={.reset=angle_reset,.step=angle_step};
 
+/* 同周期建议；ACTIVE由部署边界、START锁存和最终控制器合同共同约束。 */
+static esp_err_t adaptive_step(void *workspace, size_t size,
+    const exo_assist_config_t *config, const exo_sensor_snapshot_t *sensors,
+    const exo_gait_estimate_t *gait, exo_assist_result_t *result) {
+    (void)workspace; (void)size; (void)gait;
+    result->valid=exo_adaptive_runtime_preview(sensors->sequence,sensors->captured_us,&result->suggestion);
+    result->output_kind=EXO_ASSIST_OUTPUT_TORQUE_FF_DELTA;
+    float limit=(float)config->maximum_assist_torque_mnm/1000.0f;
+    result->suggestion.left.torque_ff_nm=fmaxf(-limit,fminf(limit,result->suggestion.left.torque_ff_nm))*(float)config->left_level_percent/100.0f;
+    result->suggestion.right.torque_ff_nm=fmaxf(-limit,fminf(limit,result->suggestion.right.torque_ff_nm))*(float)config->right_level_percent/100.0f;
+    return ESP_OK;
+}
+static const exo_assist_policy_ops_t s_adaptive_ops={.reset=transparent_reset,.step=adaptive_step};
 static const exo_assist_policy_entry_t s_policy_table[] = {
+    {.descriptor={.strategy_id=EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN,
+        .strategy_version=EXO_ADAPTIVE_ASSIST_MODE?12:EXO_ADAPTIVE_TRIAL_ALLOWED?5:EXO_ADAPTIVE_RELEASE_ALLOWED?4:EXO_ADAPTIVE_ACTIVE_ALLOWED?
+            (EXO_ADAPTIVE_CONFIG_MAX_MNM==15000U?3:2):1,.supported_mode=EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN,
+        .fixed_workspace_bytes=0,.implemented=true},.ops=&s_adaptive_ops},
     {
         .descriptor = {
             .strategy_id = EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD,
@@ -382,7 +400,7 @@ static bool config_shape_is_valid(const exo_assist_config_t *config) {
 	if (config == NULL ||
 		config->schema_version != EXO_ASSIST_CONFIG_SCHEMA_VERSION ||
 		(int)config->mode <= (int)EXO_ASSIST_MODE_NONE ||
-		(int)config->mode > (int)EXO_ASSIST_MODE_ANGLE_THRESHOLD ||
+		(int)config->mode > (int)EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN ||
 		(int)config->requested_execution_state <
 			(int)EXO_ASSIST_EXEC_DISABLED ||
 		(int)config->requested_execution_state > (int)EXO_ASSIST_EXEC_ACTIVE ||
@@ -391,7 +409,8 @@ static bool config_shape_is_valid(const exo_assist_config_t *config) {
 		config->maximum_assist_torque_mnm >
             (config->strategy_id == EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD
              ? EXO_ASSIST_ANGLE_TORQUE_HARD_MAX_MNM
-             : EXO_PHASE_PROFILE_TORQUE_HARD_MAX_MNM)) {
+             : config->strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN
+                 ? EXO_ADAPTIVE_CONFIG_MAX_MNM : EXO_PHASE_PROFILE_TORQUE_HARD_MAX_MNM)) {
 		return false;
 	}
 	const exo_assist_policy_entry_t *entry = find_policy(config->strategy_id);
@@ -511,7 +530,10 @@ esp_err_t exo_assist_set_config(const exo_assist_config_t *config) {
 		const bool threshold_allowed =
 			config->mode == EXO_ASSIST_MODE_ANGLE_THRESHOLD &&
 			config->strategy_id == EXO_ASSIST_STRATEGY_ANGLE_THRESHOLD;
-		if (!active_allowed && !threshold_allowed) {
+        const bool adaptive_allowed = EXO_ADAPTIVE_ACTIVE_ALLOWED &&
+            config->mode==EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN &&
+            config->strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN;
+		if (!active_allowed && !threshold_allowed && !adaptive_allowed) {
 			portENTER_CRITICAL(&s_lock);
 			if (s_initialized) {
 				++s_snapshot.rejected_config_count;
@@ -624,6 +646,7 @@ esp_err_t exo_assist_preview_run_contract(exo_assist_run_contract_t *contract) {
 	contract->requested_execution_state = selected.requested_execution_state;
 	contract->execution_state = effective_execution_state(&selected, entry);
 	contract->selected_generation = selected_generation;
+	contract->strategy_id = selected.strategy_id;
 	return ESP_OK;
 }
 
@@ -640,6 +663,23 @@ esp_err_t exo_assist_arm(void) {
 		portEXIT_CRITICAL(&s_lock);
 		return ESP_ERR_INVALID_STATE;
 	}
+#if EXO_ADAPTIVE_ACTIVE_ALLOWED
+    if(EXO_ADAPTIVE_ASSIST_MODE &&
+       s_snapshot.selected.strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN &&
+       s_snapshot.selected.requested_execution_state!=EXO_ASSIST_EXEC_DISABLED) {
+        /* Same selection/START contract as other modes. No separate USB setup.
+         * Amplitude follows the selected maximum, preserving Gaussian shape. */
+        const float peak=(float)s_snapshot.selected.maximum_assist_torque_mnm/1000.0f;
+        exo_adaptive_config_t profile=exo_adaptive_walking_preset_for_peak(peak);
+        const esp_err_t error=exo_adaptive_runtime_set(&profile);
+        if(error!=ESP_OK) { portEXIT_CRITICAL(&s_lock);return error; }
+    }
+    if(s_snapshot.selected.strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN &&
+       s_snapshot.selected.requested_execution_state==EXO_ASSIST_EXEC_ACTIVE) {
+        const esp_err_t error=exo_adaptive_runtime_lock_active_config();
+        if(error!=ESP_OK) { portEXIT_CRITICAL(&s_lock);return error; }
+    }
+#endif
 	s_snapshot.activation_epoch = next_nonzero(s_snapshot.activation_epoch);
 	s_snapshot.active = s_snapshot.selected;
 	s_snapshot.active_valid = true;
@@ -677,6 +717,10 @@ esp_err_t exo_assist_disarm(void) {
 		return ESP_ERR_INVALID_STATE;
 	}
 	/* 即使沿用同一selected配置，每次STOP也必须让正在锁外计算的旧结果失效。 */
+#if EXO_ADAPTIVE_ACTIVE_ALLOWED
+    if(s_snapshot.active_valid && s_snapshot.active.strategy_id==EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN &&
+       s_snapshot.execution_state==EXO_ASSIST_EXEC_ACTIVE) exo_adaptive_runtime_unlock_config();
+#endif
 	s_snapshot.activation_epoch = next_nonzero(s_snapshot.activation_epoch);
 	s_snapshot.active_valid = false;
 	s_snapshot.config_locked = false;
@@ -815,6 +859,10 @@ esp_err_t exo_assist_process_tick(const exo_sensor_snapshot_t *sensors,
 						   EXO_ASSIST_STRATEGY_PHASE_PROFILE &&
 					   !local_result.valid) {
 				reason = EXO_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS;
+			} else if (active.strategy_id == EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN) {
+				reason = exo_adaptive_runtime_unavailable_reason(sensors->sequence,
+					sensors->captured_us, active.maximum_assist_torque_mnm>0 && active.left_level_percent>0,
+					active.maximum_assist_torque_mnm>0 && active.right_level_percent>0);
 			} else {
 				reason = EXO_ASSIST_UNAVAILABLE_NONE;
 			}
@@ -894,7 +942,13 @@ void exo_assist_report_output(const exo_assist_result_t *result, bool applied) {
 		result->source_gait_sequence ==
 			s_snapshot.last_result.source_gait_sequence &&
 		result->timestamp_us == s_snapshot.last_result.timestamp_us;
-	s_snapshot.real_output_enabled = applied && matches_latest;
+	/* AFO acquisition/fault/zero-level cycles may safely send a zero delta.
+	 * Report nonzero commands separately from successful zero-command delivery. */
+	const bool nonzero = matches_latest &&
+		(s_snapshot.active.strategy_id != EXO_ASSIST_STRATEGY_ADAPTIVE_GAUSSIAN ||
+		 fabsf(s_snapshot.last_result.suggestion.left.torque_ff_nm)>1e-6f ||
+		 fabsf(s_snapshot.last_result.suggestion.right.torque_ff_nm)>1e-6f);
+	s_snapshot.real_output_enabled = applied && matches_latest && nonzero;
 	if (s_snapshot.real_output_enabled) {
 		++s_snapshot.applied_output_count;
 		s_snapshot.last_applied_output_us = result->timestamp_us;
@@ -918,6 +972,7 @@ bool exo_assist_get_snapshot(exo_assist_snapshot_t *snapshot) {
 }
 
 const char *exo_assist_mode_name(exo_assist_mode_t mode) {
+	if(mode==EXO_ASSIST_MODE_ADAPTIVE_GAUSSIAN) return "ADAPTIVE_GAUSSIAN";
 	switch (mode) {
 	case EXO_ASSIST_MODE_TRANSPARENT:
 		return "TRANSPARENT";
@@ -968,6 +1023,12 @@ exo_assist_unavailable_reason_name(exo_assist_unavailable_reason_t reason) {
 		return "REQUIRED_GAIT_INVALID";
 	case EXO_ASSIST_UNAVAILABLE_WAITING_NEW_GAIT_EVENTS:
 		return "WAITING_NEW_GAIT_EVENTS";
+	case EXO_ASSIST_UNAVAILABLE_AFO_ACQUIRING:
+		return "AFO_ACQUIRING";
+	case EXO_ASSIST_UNAVAILABLE_AFO_REARM_REQUIRED:
+		return "AFO_REARM_REQUIRED";
+	case EXO_ASSIST_UNAVAILABLE_AFO_INPUT_FAULT:
+		return "AFO_INPUT_FAULT";
 	default:
 		return "UNKNOWN";
 	}

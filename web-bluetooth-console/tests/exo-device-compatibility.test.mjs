@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+test("0.11.0开发固件保留既有协议能力，AFO不等于ACTIVE验收", () => {
+  assert.equal(assessDeviceCompatibility(makeInfo([0, 11, 0], {capabilities: 0xff7f})).accepted, true);
+});
+
 test("0.10.6保持恢复能力门，完成后上电验证后不再提示待验候选", () => {
   const candidate = assessDeviceCompatibility(makeInfo([0, 10, 6], {capabilities: 0x0f7f}));
   assert.equal(candidate.accepted, true);
